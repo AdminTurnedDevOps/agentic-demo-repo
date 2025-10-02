@@ -6,10 +6,8 @@ export AGENTGATEWAY_LICENSE_KEY=
 
 ```
 export CLUSTER1=
-export CLUSTER2=
 
 export CLUSTER1_NAME=
-export CLUSTER2_NAME=
 ```
 
 ```
