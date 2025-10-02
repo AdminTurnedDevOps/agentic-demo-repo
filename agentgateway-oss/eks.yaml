@@ -1,0 +1,31 @@
+binds:
+- port: 3000
+  listeners:
+  - name: eks-mcp-listener
+    routes:
+    - backends:
+      - mcp:
+          targets:
+          - name: eksMCP
+            stdio:
+              cmd: uvx
+              args:
+              - awslabs.eks-mcp-server@latest
+              - --allow-write
+              - --allow-sensitive-data-access
+              env:
+                AWS_REGION: us-east-1
+                FASTMCP_LOG_LEVEL: INFO
+      policies:
+        cors:
+          allowOrigins:
+          - '*'
+          allowHeaders:
+          - mcp-protocol-version
+          - content-type
+          - cache-control
+          - accept
+          allowMethods:
+          - GET
+          - POST
+          - OPTIONS
