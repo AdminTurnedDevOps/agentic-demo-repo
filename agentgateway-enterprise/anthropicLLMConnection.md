@@ -1,5 +1,5 @@
 ```
-export CLAUDE_API_KEY=
+export ANTHROPIC_API_KEY=
 ```
 
 ```
