@@ -102,8 +102,7 @@ EOF
 ```
 
 ```
-curl "$INGRESS_GW_ADDRESS:8080/anthropic" -H content-type:application/json  -d '{
-  "model": "claude-3-5-haiku-latest",
+curl "$INGRESS_GW_ADDRESS:8080/anthropic" -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
   "messages": [
     {
       "role": "system",
