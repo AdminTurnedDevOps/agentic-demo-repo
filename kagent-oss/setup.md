@@ -16,9 +16,11 @@ export ANTHROPIC_API_KEY=your_api_key
 ```
 
 ```
-helm install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --namespace kagent
---set providers.default=anthropic \
---set providers.anthropic.apiKey=$ANTHROPIC_API_KEY
+helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+    --namespace kagent \
+    --set providers.default=anthropic \
+    --set providers.anthropic.apiKey=$ANTHROPIC_API_KEY
+
 ```
 
 ## With OpenAI
