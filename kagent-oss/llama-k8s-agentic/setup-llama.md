@@ -72,4 +72,4 @@ llama3-model-config    Ollama      llama3
 
 If you go into kagent, you'll now see Llama as an option.
 
-![](images/llama.png)
+![](../../images/llama.png)
