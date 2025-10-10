@@ -23,17 +23,6 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
 
 ```
 
-## With OpenAI
-```
-export OPENAI_API_KEY=your_api_key
-```
-
-```
-helm install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
-    --namespace kagent \
-    --set providers.openAI.apiKey=$OPENAI_API_KEY
-```
-
 ## Dashboard Setup
 
 ```
