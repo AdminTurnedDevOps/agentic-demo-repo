@@ -1,8 +1,14 @@
 
+## Llama Config
+
+1. Ensure that you configured kagent on your cluster. You can find the how-to here: https://github.com/AdminTurnedDevOps/agentic-demo-repo/blob/main/kagent-oss/setup.md
+
+2. Create a Namespace for a Llama Model config
 ```
 kubectl create ns ollama
 ```
 
+3. Deploy Ollama on your k8s cluster
 ```
 kubectl apply -f - <<EOF
 apiVersion: apps/v1
@@ -44,10 +50,12 @@ spec:
 EOF
 ```
 
+4. Ensure that everything was deployed as expected
 ```
 kubectl get all -n ollama
 ```
 
+5. Create a `ModelConfig` that will add the Llama Model to the list of Models in kagent
 ```
 kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
@@ -63,6 +71,7 @@ spec:
 EOF
 ```
 
+6. You should be able to see the Model connected
 ```
 kubectl get modelconfig -n kagent
 NAME                   PROVIDER    MODEL
@@ -70,6 +79,6 @@ default-model-config   Anthropic   claude-3-5-haiku-20241022
 llama3-model-config    Ollama      llama3
 ```
 
-If you go into kagent, you'll now see Llama as an option.
+7. If you go into kagent, you'll now see Llama as an option.
 
 ![](../../images/llama.png)
