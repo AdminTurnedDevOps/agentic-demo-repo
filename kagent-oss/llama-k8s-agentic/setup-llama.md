@@ -4,6 +4,7 @@ kubectl create ns ollama
 ```
 
 ```
+kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,6 +41,7 @@ spec:
     name: http
     targetPort: http
     protocol: TCP
+EOF
 ```
 
 ```
@@ -47,6 +49,7 @@ kubectl get all -n ollama
 ```
 
 ```
+kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
 kind: ModelConfig
 metadata:
@@ -57,5 +60,16 @@ spec:
   provider: Ollama
   ollama:
     host: http://ollama.ollama.svc.cluster.local
+EOF
+```
 
 ```
+kubectl get modelconfig -n kagent
+NAME                   PROVIDER    MODEL
+default-model-config   Anthropic   claude-3-5-haiku-20241022
+llama3-model-config    Ollama      llama3
+```
+
+If you go into kagent, you'll now see Llama as an option.
+
+![](images/llama.png)
