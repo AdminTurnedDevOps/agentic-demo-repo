@@ -20,7 +20,6 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --namespace kagent \
     --set providers.default=anthropic \
     --set providers.anthropic.apiKey=$ANTHROPIC_API_KEY
-
 ```
 
 ## Dashboard Setup
