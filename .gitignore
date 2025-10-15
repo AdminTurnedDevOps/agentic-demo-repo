@@ -6,3 +6,6 @@
 *terraform.tfstate.lock.info
 
 *values.env
+
+.venv
+*.venv

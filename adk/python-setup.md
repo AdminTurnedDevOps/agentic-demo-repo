@@ -1,4 +1,12 @@
 ```
+python3.11 -m venv .venv
+```
+
+```
+source .venv/bin/activate
+```
+
+```
 pip install google-adk
 ```
 
@@ -7,12 +15,12 @@ adk create pyagenttest
 ```
 
 ```
-pip install -r pyagenttest/requirements.txt
+pip install -r adk/pyagenttest/requirements.txt
 ```
 
 Run of the CLI
 ```
-adk run pyagenttest
+cd adk/pyagenttest && adk run pyagenttest
 ```
 
 Run on the UI
