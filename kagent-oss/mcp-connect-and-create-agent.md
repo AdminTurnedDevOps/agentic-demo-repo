@@ -12,6 +12,8 @@ kagent handles the "package resolution" and deployment automatically. You just d
 This is the power of the declarative approach. You specify what you want (the `kubernetes-mcp-server`), and kagent figures out how to get it running.
 
 Don't specify port configurations since stdio transport doesn't use HTTP
+
+1. Create a new MCP Server object in Kubernetes
 ```
 kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha1
@@ -29,6 +31,7 @@ spec:
 EOF
 ```
 
+2. Create a new Agent and use the MCP Server you created in step 1
 ```
 kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
@@ -76,10 +79,12 @@ spec:
 EOF
 ```
 
+3. Look at the Agent configuration and wait until both `READY` and `ACCEPTED` are in a `True` status
 ```
 kubectl get agents -n kagent
 ```
 
+4. Feel free to dive into how it looks "underneath the hood"
 ```
 kubectl describe agent kubernetes-mcp-agent -n kagent
 ```
