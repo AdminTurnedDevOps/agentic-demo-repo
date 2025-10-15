@@ -44,3 +44,5 @@ Without an LB
 ```
 kubectl port-forward svc/kagent-ui -n kagent 8080:8080
 ```
+
+3. Access the kagent setup and create your own agent via the UI
