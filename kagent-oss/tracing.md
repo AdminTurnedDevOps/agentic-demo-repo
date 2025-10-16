@@ -1,7 +1,9 @@
+1. Add the Jaeger repo
 ```
 helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
 ```
 
+2. Install Jaeger
 ```
 helm upgrade --install jaeger jaegertracing/jaeger \
   --namespace jaeger \
@@ -23,7 +25,7 @@ helm upgrade --install jaeger jaegertracing/jaeger \
 EOF
 ```
 
-3. Upgrade your existing kagent environment to use Jaeger
+3. Upgrade your existing kagent installation to use Jaeger
 ```
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --namespace kagent \
