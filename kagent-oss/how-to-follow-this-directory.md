@@ -2,3 +2,4 @@
 2. `kagent-pod-fix.md`
 3. `cli-ninja.md`
 4. `mcp-connect-and-create-agent.md`
+5. `tracing.md`
