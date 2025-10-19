@@ -10,6 +10,7 @@ helm install kube-prometheus -n monitoring prometheus-community/kube-prometheus-
 ```
 
 3. Deploy a Pod Monitor
+
 The `PodMonitor` selector matches `gateway.networking.k8s.io/gateway-class-name: agentgateway`, which will match any Gateway that uses the agentgateway GatewayClass
 ```
 kubectl apply -f - <<EOF
