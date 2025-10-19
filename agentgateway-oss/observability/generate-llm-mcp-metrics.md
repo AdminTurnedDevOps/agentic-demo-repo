@@ -243,3 +243,7 @@ curl "http://${GATEWAY_IP}:8080/" \
     "id": 1
   }'
 ```
+
+You should now be able to see the metrics in Prometheus
+
+![](../../images/metrics.png)
