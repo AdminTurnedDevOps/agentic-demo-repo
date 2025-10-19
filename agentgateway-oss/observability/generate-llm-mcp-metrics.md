@@ -246,4 +246,5 @@ curl "http://${GATEWAY_IP}:8080/" \
 
 You should now be able to see the metrics in Prometheus
 
+![](../../images/prom.png)
 ![](../../images/metrics.png)
