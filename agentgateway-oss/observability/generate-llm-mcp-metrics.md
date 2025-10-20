@@ -50,7 +50,7 @@ metadata:
     app: agentgateway
 type: Opaque
 stringData:
-  Authorization: $CLAUDE_API_KEY
+  Authorization: $ANTHROPIC_API_KEY
 EOF
 ```
 
