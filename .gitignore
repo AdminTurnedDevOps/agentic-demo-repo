@@ -7,8 +7,7 @@
 
 *values.env
 
-<<<<<<< HEAD
+*istio-*
+
 .venv
-=======
->>>>>>> b65c90f3f145da40807634084b9111d4dff3b050
 *.venv
