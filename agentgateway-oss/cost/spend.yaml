@@ -21,3 +21,5 @@ binds:
             - "*"
           allowHeaders:
             - "*"
+
+# https://agentgateway.dev/docs/configuration/resiliency/rate-limits/
