@@ -190,7 +190,7 @@ jq: parse error: Invalid numeric literal at line 1, column
 However, if you check the agentgateway Pod logs, you'll see the rate limit error.
 
 ```
-kubectl logs -n kgateway-system agentgateway-7b68d9b49-2mq8l --tail=50 | grep -i "request\|error\|anthropic"
+kubectl logs -n kgateway-system agentgateway-POD_NAME --tail=50 | grep -i "request\|error\|anthropic"
 ```
 
 ```
