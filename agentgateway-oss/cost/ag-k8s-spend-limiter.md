@@ -133,7 +133,7 @@ spec:
 EOF
 ```
 
-6. Create a rate limit rule
+6. Create a rate limit rule that targets the `HTTPRoute` you just created
 ```
 kubectl apply -f- <<EOF
 apiVersion: gateway.kgateway.dev/v1alpha1
