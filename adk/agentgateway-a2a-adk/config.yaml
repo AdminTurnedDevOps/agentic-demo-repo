@@ -1,0 +1,27 @@
+config:
+  logging:
+    #    filter: 'response.code != 500'
+    fields:
+      add:
+        backend: backend
+binds:
+- port: 3000
+  listeners:
+  - routes:
+    - policies:
+        cors:
+          allowOrigins:
+            - "*"
+          allowHeaders:
+            - "*"
+          allowMethods:
+          - "GET"
+          - "POST"
+          - "OPTIONS"
+          exposeHeaders:
+            - "*"
+          allowCredentials: false
+        # Mark this route as a2a traffic
+        a2a: {}
+      backends:
+      - host: localhost:9999
