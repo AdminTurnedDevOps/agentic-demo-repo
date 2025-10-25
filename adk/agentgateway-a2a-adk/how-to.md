@@ -2,6 +2,8 @@ The `agent.py` is the Agent itself along with its functionality. In this Agents 
 
 The `__main__.py` is the server that gets exposed for A2A and calls out to the `agent.py` root handler function for the Agents functionality. It's also creating the agent card to advertise tools within the Agent. Agent cards are how Agents running on servers advertise its capabilities/tools and connection information. They are what clients use for discovery and to establish a connection.
 
+The `config.yaml` is the agentgateway configuration that connects to the Agents server locally via the A2A protocol.
+
 1. Activate the virtual environment
 ```
 source .venv/bin/activate
