@@ -1,9 +1,11 @@
 1. Set env variables
 
+```
 export SOLO_LICENSE_KEY=<key>
 export GLOO_GATEWAY_LICENSE_KEY=<key>
 export AGENTGATEWAY_LICENSE_KEY=<key>
 export OPENAI_API_KEY=
+```
 
 2. create the `kagent` Namespace
 ```
