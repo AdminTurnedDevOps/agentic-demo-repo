@@ -162,7 +162,7 @@ echo $INGRESS_GW_ADDRESS
 
 8. Test the LLM connectivity
 ```
-curl "$INGRESS_GW_ADDRESS:8080/anthropic" \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
+curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
   "model": "claude-sonnet-4-5",
   "messages": [
     {
@@ -190,7 +190,7 @@ jq: parse error: Invalid numeric literal at line 1, column
 However, if you check the agentgateway Pod logs, you'll see the rate limit error.
 
 ```
-kubectl logs -n kgateway-system agentgateway-POD_NAME --tail=50 | grep -i "request\|error\|anthropic"
+kubectl logs -n kgateway-system agentgateway-6b5d688959-25nw9 --tail=50 | grep -i "request\|error\|anthropic"
 ```
 
 ```

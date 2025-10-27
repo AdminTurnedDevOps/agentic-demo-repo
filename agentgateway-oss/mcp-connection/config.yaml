@@ -1,0 +1,24 @@
+binds:
+- port: 3001
+  listeners:
+  - routes:
+    - backends:
+      - mcp:
+          targets:
+          - name: kubernetes
+            stdio:
+              cmd: uvx
+              args: ["kubernetes-mcp-server@latest"]
+      policies:
+        cors:
+          allowOrigins:
+          - '*'
+          allowHeaders:
+          - mcp-protocol-version
+          - content-type
+          - cache-control
+          - accept
+          allowMethods:
+          - GET
+          - POST
+          - OPTIONS
