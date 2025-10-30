@@ -25,138 +25,63 @@ kubectl get pods -n kgateway-system
 
 ## Gateway Setup
 
-1. Create env variable for Anthropic key
-
 ```
-export ANTHROPIC_API_KEY=
+git clone https://github.com/digitalocean/kubernetes-sample-apps.git
 ```
 
-2. Create a secret to store the Claude API key
 ```
-kubectl apply -f- <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: anthropic-secret
-  namespace: kgateway-system
-  labels:
-    app: agentgateway
-type: Opaque
-stringData:
-  Authorization: $ANTHROPIC_API_KEY
-EOF
+kubectl create ns emojivoto
 ```
 
-3. Create a Gateway for Anthropic
-
-A `Gateway` resource is used to trigger kgateway to deploy agentgateway data plane Pods
-
-The Agentgateway data plane Pod is the Pod that gets created when a Gateway object is created in a Kubernetes environment where Agentgateway is deployed as the Gateway API implementation.
 ```
-kubectl apply -f- <<EOF
-kind: Gateway
+kubectl -n emojivoto apply -k kubernetes-sample-apps/emojivoto-example/kustomize/
+```
+
+```
+kubectl get pods -n emojivoto
+```
+
+```
+kubectl apply --context=$CLUSTER1 -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
 metadata:
-  name: agentgateway
-  namespace: kgateway-system
-  labels:
-    app: agentgateway
+  name: websvc-gateway
+  namespace: emojivoto
 spec:
-  gatewayClassName: agentgateway
+  gatewayClassName: kgateway
   listeners:
-  - protocol: HTTP
-    port: 8080
-    name: http
-    allowedRoutes:
-      namespaces:
-        from: All
-EOF
-```
-
-4. Create a `Backend` object 
-
-A Backend resource to define a backing destination that you want kgateway to route to. In this case, it's Claude.
-```
-kubectl apply -f- <<EOF
-apiVersion: gateway.kgateway.dev/v1alpha1
-kind: Backend
-metadata:
-  labels:
-    app: agentgateway
-  name: anthropic
-  namespace: kgateway-system
-spec:
-  type: AI
-  ai:
-    llm:
-        anthropic:
-          authToken:
-            kind: SecretRef
-            secretRef:
-              name: anthropic-secret
-          model: "claude-3-5-haiku-latest"
-EOF
-```
-
-5. Ensure everything is running as expected
-```
-kubectl get backend -n kgateway-system
-```
-
-6. Apply the Route so you can reach the LLM
-```
-kubectl apply -f- <<EOF
+  - name: web-svc
+    port: 80
+    protocol: HTTP
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: claude
-  namespace: kgateway-system
-  labels:
-    app: agentgateway
+  name: websvc
+  namespace: emojivoto
 spec:
   parentRefs:
-    - name: agentgateway
-      namespace: kgateway-system
+  - name: websvc-gateway
   rules:
   - matches:
     - path:
         type: PathPrefix
-        value: /anthropic
-    filters:
-    - type: URLRewrite
-      urlRewrite:
-        path:
-          type: ReplaceFullPath
-          replaceFullPath: /v1/chat/completions
+        value: /
     backendRefs:
-    - name: anthropic
-      namespace: kgateway-system
-      group: gateway.kgateway.dev
-      kind: Backend
+      - name: web-svc
+        port: 80
 EOF
 ```
 
-7. Capture the LB IP of the service. This will be used to send a request to the LLM.
+Test with `curl`
 ```
-export INGRESS_GW_ADDRESS=$(kubectl get svc -n kgateway-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
+export INGRESS_GW_ADDRESS=$(kubectl get svc -n emojivoto websvc-gateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
-8. Test the LLM connectivity
 ```
-curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
-  "model": "claude-sonnet-4-5",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a skilled cloud-native network engineer."
-    },
-    {
-      "role": "user",
-      "content": "Write me a paragraph containing the best way to think about Istio Ambient Mesh"
-    }
-  ]
-}' | jq
+curl -I $INGRESS_GW_ADDRESS
 ```
 
 ## Global Policy Attachment
@@ -164,118 +89,66 @@ In a standard configuration, you must attach policies to resources that are in t
 
 1. Update the `HTTPRoute` with the global policy configuration
 ```
-kubectl apply -f- <<EOF
+kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: claude
-  namespace: default
+  name: websvc
+  namespace: emojivoto
   labels:
-    global-policy: rateLimit
-  labels:
-    app: agentgateway
+    global-policy: testing
 spec:
   parentRefs:
-    - name: agentgateway
-      namespace: kgateway-system
+  - name: websvc-gateway
   rules:
   - matches:
     - path:
         type: PathPrefix
-        value: /anthropic
-    filters:
-    - type: URLRewrite
-      urlRewrite:
-        path:
-          type: ReplaceFullPath
-          replaceFullPath: /v1/chat/completions
+        value: /
     backendRefs:
-    - name: anthropic
-      namespace: kgateway-system
-      group: gateway.kgateway.dev
-      kind: Backend
+      - name: web-svc
+        port: 80
 EOF
 ```
 
-2. Update the traffic policy to use the targetSelectors block to specify the `global-policy` label, which will match the `global-policy` label in your `HTTPRoute`, which means your `HTTPRoute` will use this global policy.
+2. Create a traffic policy to use the targetSelectors block to specify the `global-policy` label, which will match the `global-policy` label in your `HTTPRoute`, which means your `HTTPRoute` will use this global policy.
+
 ```
-kubectl apply -f- <<EOF
+kubectl apply -f- <<EOF  
 apiVersion: gateway.kgateway.dev/v1alpha1
 kind: TrafficPolicy
 metadata:
-  name: anthropic-ratelimitglobal
+  name: emojitesting
   namespace: kgateway-system
 spec:
   targetSelectors:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute
     matchLabels:
-      global-policy: rateLimit
-  rateLimit:
-    local:
-      tokenBucket:
-        maxTokens: 1
-        tokensPerFill: 1
-        fillInterval: 100s
+      global-policy: testing
+  transformation:
+    response:
+      set:
+      - name: "x-emojivoto-test"
+        value: "global-policy-applied"
+      - name: "x-kgateway-version"
+        value: "2.1"
 EOF
 ```
 
-2. Capture the LB IP of the service. This will be used later to send a request to the LLM.
+3. Test with `curl`
 ```
-export INGRESS_GW_ADDRESS=$(kubectl get svc -n kgateway-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
+export INGRESS_GW_ADDRESS=$(kubectl get svc -n emojivoto websvc-gateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
-3. Test the LLM connectivity
 ```
-curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
-  "model": "claude-sonnet-4-5",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a skilled cloud-native network engineer."
-    },
-    {
-      "role": "user",
-      "content": "Write me a paragraph containing the best way to think about Istio Ambient Mesh"
-    }
-  ]
-}' | jq
+curl -I $INGRESS_GW_ADDRESS
 ```
 
-4. Run the `curl` again and you'll see some Rate Limiting errors
-
-5. If you check the agentgateway Pod logs, you'll see the rate limit error there as well.
-
+4. Delete the traffic policy for cleanup
 ```
-kubectl logs -n kgateway-system agentgateway-pod-name --tail=50 | grep -i "request\|error\|anthropic"
-```
-
-```
-2025-10-20T16:08:59.886579Z     info    request gateway=kgateway-system/agentgateway listener=http route=kgateway-system/claude src.addr=10.142.0.25:42187 http.method=POST http.host=34.148.15.158 http.path=/anthropic http.version=HTTP/1.1 http.status=429 error="rate limit exceeded" duration=0ms
-```
-
-6. Delete the traffic policy for cleanup
-```
-kubectl delete -f- <<EOF
-apiVersion: gateway.kgateway.dev/v1alpha1
-kind: TrafficPolicy
-metadata:
-  name: anthropic-ratelimit
-  namespace: kgateway-system
-spec:
-  targetSelectors:
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      matchLabels:
-        global-policy: transformation
-  rateLimit:
-    local:
-      tokenBucket:
-        maxTokens: 1
-        tokensPerFill: 1
-        fillInterval: 100s
-EOF
+kubectl delete trafficpolicy emojitesting -n kgateway-system
 ```
 
 ## HPA
@@ -295,12 +168,12 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: hpa
-  namespace: kgateway-system
+  namespace: emojivoto
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: agentgateway
+    name: websvc-gateway
   minReplicas: 1
   maxReplicas: 10
   metrics:
@@ -311,6 +184,13 @@ spec:
           type: AverageValue
           averageValue: 10Mi
 EOF
+```
+
+3. You should now see able to see the HPA
+```
+kubectl get hpa -n emojivoto
+NAME   REFERENCE                   TARGETS                  MINPODS   MAXPODS   REPLICAS   AGE
+hpa    Deployment/websvc-gateway   memory: <unknown>/10Mi   1         10        0          7s
 ```
 
 ## Monitoring & Observability
@@ -744,7 +624,7 @@ EOF
 
 6. To build a dashboard with the metrics
 ```
-kubectl --namespace monitoring port-forward svc/kube-prometheus-grafana 3000:80
+kubectl --namespace telemetry port-forward svc/kube-prometheus-stack-grafana 3000:80
 ```
 
 To log into the Grafana UI:
