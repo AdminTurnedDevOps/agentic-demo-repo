@@ -45,7 +45,7 @@ This implementation collects metrics from all three agentgateway instances and a
 
 ## How It works
 
-The metric agentgateway_gen_ai_client_token_usage_sum with the label gateway shows which gateway it came from.
+The metric `agentgateway_gen_ai_client_token_usage_sum` with the label gateway shows which gateway it came from.
 
 When you use `sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[24h]))` without any by clause, it will:
 
@@ -184,3 +184,6 @@ If Claude pricing changes, update the recording rules in `monitoring.yaml`:
       sum by (gateway_instance) (increase(agentgateway_ai_tokens_output_total[1h])) * 5.00 / 1000000
     )
 ```
+
+## What If You Want More Gateways?
+If you added a 4th Gateway, you'll need a 4th `PodMonitor` within the `monitoring.yaml`. The cost calculations would automatically include the 4th gateway's metrics without any other changes needed. This is because the `PrometheusRule` cost expressions (monitoring.yaml:131-164) use `sum()` queries that aggregate all metrics matching `agentgateway_gen_ai_client_token_usage_sum`, regardless of how many gateway instances exist. They don't hardcode specific gateway names or counts.
