@@ -15,30 +15,30 @@ This implementation collects metrics from all three agentgateway instances and a
 <div align="center">
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  AgentGateway1  │     │  AgentGateway2  │     │  AgentGateway3  │
-│   :15020/metrics│     │   :15020/metrics│     │   :15020/metrics│
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                       │
-         │    ServiceMonitors    │                       │
-         └───────────┬───────────┴───────────────────────┘
-                     │
-                     ▼
-         ┌───────────────────────┐
-         │   Prometheus Server   │
-         │  - Scrapes metrics    │
-         │  - Calculates costs   │
-         │  - Evaluates alerts   │
-         └───────────┬───────────┘
-                     │
-         ┌───────────┴───────────┐
-         │                       │
-         ▼                       ▼
-┌─────────────────┐     ┌─────────────────┐
-│  Alertmanager   │     │     Grafana     │
-│  - Slack alerts │     │  - Dashboards   │
-│  - PagerDuty    │     │  - Visualization│
-└─────────────────┘     └─────────────────┘
+                ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+                │  AgentGateway1  │     │  AgentGateway2  │     │  AgentGateway3  │
+                │   :15020/metrics│     │   :15020/metrics│     │   :15020/metrics│
+                └────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+                        │                       │                       │
+                        │    ServiceMonitors    │                       │
+                        └───────────┬───────────┴───────────────────────┘
+                                    │
+                                    ▼
+                        ┌───────────────────────┐
+                        │   Prometheus Server   │
+                        │  - Scrapes metrics    │
+                        │  - Calculates costs   │
+                        │  - Evaluates alerts   │
+                        └───────────┬───────────┘
+                                    │
+                        ┌───────────┴───────────┐
+                        │                       │
+                        ▼                       ▼
+                ┌─────────────────┐     ┌─────────────────┐
+                │  Alertmanager   │     │     Grafana     │
+                │  - Slack alerts │     │  - Dashboards   │
+                │  - PagerDuty    │     │  - Visualization│
+                └─────────────────┘     └─────────────────┘
 ```
 
 </div>
