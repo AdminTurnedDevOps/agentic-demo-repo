@@ -1,0 +1,216 @@
+# ServiceMonitor for agentgateway1
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: agentgateway1
+  namespace: monitoring
+  labels:
+    app: agentgateway1
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: agentgateway1
+  namespaceSelector:
+    matchNames:
+      - kgateway-system
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - targetLabel: gateway_instance
+          replacement: gateway1
+---
+# ServiceMonitor for agentgateway2
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: agentgateway2
+  namespace: monitoring
+  labels:
+    app: agentgateway2
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: agentgateway2
+  namespaceSelector:
+    matchNames:
+      - kgateway-system
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - targetLabel: gateway_instance
+          replacement: gateway2
+---
+# ServiceMonitor for agentgateway3
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: agentgateway3
+  namespace: monitoring
+  labels:
+    app: agentgateway3
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: agentgateway3
+  namespaceSelector:
+    matchNames:
+      - kgateway-system
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - targetLabel: gateway_instance
+          replacement: gateway3
+---
+# PrometheusRule for cost calculation and alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agentgateway-cost-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: agentgateway_cost_tracking
+      interval: 30s
+      rules:
+        # Record total input tokens across all gateways
+        - record: agentgateway:input_tokens:total
+          expr: |
+            sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[5m]))
+
+        # Record total output tokens across all gateways
+        - record: agentgateway:output_tokens:total
+          expr: |
+            sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[5m]))
+
+        # Record input tokens per gateway
+        - record: agentgateway:input_tokens:by_gateway
+          expr: |
+            sum by (gateway_instance) (increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[5m]))
+
+        # Record output tokens per gateway
+        - record: agentgateway:output_tokens:by_gateway
+          expr: |
+            sum by (gateway_instance) (increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[5m]))
+
+        # Calculate cost per gateway (Claude 3.5 Haiku pricing: $0.80/1M input, $4.00/1M output)
+        - record: agentgateway:cost_usd:by_gateway
+          expr: |
+            (
+              sum by (gateway_instance) (increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[1h])) * 0.80 / 1000000
+            ) + (
+              sum by (gateway_instance) (increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[1h])) * 4.00 / 1000000
+            )
+
+        # Calculate total cost across all gateways (hourly)
+        - record: agentgateway:cost_usd:total_hourly
+          expr: |
+            (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[1h])) * 0.80 / 1000000
+            ) + (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[1h])) * 4.00 / 1000000
+            )
+
+        # Calculate cumulative cost (daily)
+        - record: agentgateway:cost_usd:total_daily
+          expr: |
+            (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[24h])) * 0.80 / 1000000
+            ) + (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[24h])) * 4.00 / 1000000
+            )
+
+        # Calculate cumulative cost (weekly)
+        - record: agentgateway:cost_usd:total_weekly
+          expr: |
+            (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[7d])) * 0.80 / 1000000
+            ) + (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[7d])) * 4.00 / 1000000
+            )
+
+        # Calculate cumulative cost (monthly)
+        - record: agentgateway:cost_usd:total_monthly
+          expr: |
+            (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[30d])) * 0.80 / 1000000
+            ) + (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[30d])) * 4.00 / 1000000
+            )
+
+    - name: agentgateway_cost_alerts
+      interval: 1m
+      rules:
+        # Alert when daily cost exceeds $50 across all gateways
+        - alert: AgentGatewayDailyCostExceeded
+          expr: agentgateway:cost_usd:total_daily >= 50
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "AgentGateway collective daily cost exceeded $50"
+            description: |
+              All three agentgateway instances have collectively spent ${{ $value | humanize }} in the last 24 hours, exceeding the $50 threshold.
+
+              Gateway breakdown:
+              - Gateway 1: {{ with query "agentgateway:cost_usd:by_gateway{gateway_instance='gateway1'}" }}{{ . | first | value | humanize }}{{ end }}
+              - Gateway 2: {{ with query "agentgateway:cost_usd:by_gateway{gateway_instance='gateway2'}" }}{{ . | first | value | humanize }}{{ end }}
+              - Gateway 3: {{ with query "agentgateway:cost_usd:by_gateway{gateway_instance='gateway3'}" }}{{ . | first | value | humanize }}{{ end }}
+
+        # Alert when weekly cost exceeds $200
+        - alert: AgentGatewayWeeklyCostExceeded
+          expr: agentgateway:cost_usd:total_weekly >= 200
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "AgentGateway collective weekly cost exceeded $200"
+            description: "All three agentgateway instances have collectively spent ${{ $value | humanize }} in the last 7 days."
+
+        # Alert when monthly cost exceeds $500
+        - alert: AgentGatewayMonthlyCostExceeded
+          expr: agentgateway:cost_usd:total_monthly >= 500
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "AgentGateway collective monthly cost exceeded $500"
+            description: "All three agentgateway instances have collectively spent ${{ $value | humanize }} in the last 30 days."
+
+        # Alert on high cost rate (projected to exceed $50/day based on hourly rate)
+        - alert: AgentGatewayHighCostRate
+          expr: agentgateway:cost_usd:total_hourly * 24 >= 50
+          for: 15m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "AgentGateway cost rate is high"
+            description: |
+              Current hourly cost rate (${{ $value | humanize }}/hr) projects to exceed the $50 daily threshold.
+              Projected daily cost: ${{ with query "agentgateway:cost_usd:total_hourly * 24" }}{{ . | first | value | humanize }}{{ end }}/day

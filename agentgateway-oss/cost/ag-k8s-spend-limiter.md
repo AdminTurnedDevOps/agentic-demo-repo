@@ -12,6 +12,7 @@ kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
 
 ```
 helm upgrade -i --namespace kgateway-system --version v2.2.0-main kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+  --set gateway.aiExtension.enabled=true \
   --set agentgateway.enabled=true  \
   --set controller.image.pullPolicy=Always
 ```
