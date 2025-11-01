@@ -45,9 +45,9 @@ The metric agentgateway_gen_ai_client_token_usage_sum with the label gateway sho
 
 When you use `sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[24h]))` without any by clause, it will:
 
-✅ Sum across all three gateways (agentgateway1, agentgateway2, agentgateway3)
-✅ Give you the collective total input tokens from all gateways combined
-✅ The cost calculation will be for all gateways collectively
+1. Sum across all three gateways (agentgateway1, agentgateway2, agentgateway3)
+2. Give you the collective total input tokens from all gateways combined
+3. The cost calculation will be for all gateways collectively
 
 And when the alert triggers with agentgateway:cost_usd:total_daily >= 50, it will fire when all three gateways combined hit $50, not individually. The by (gateway_instance) queries are just for the breakdown to show you which gateway contributed how much, but the main alerts use the total without by clause.
 
