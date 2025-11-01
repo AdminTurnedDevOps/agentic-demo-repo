@@ -55,6 +55,8 @@ When you use `sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_tok
 
 And when the alert triggers with` agentgateway:cost_usd:total_daily >= 50`, it will fire when all three gateways combined hit $50, not individually. The by (gateway_instance) queries are just for the breakdown to show you which gateway contributed how much, but the main alerts use the total without by clause.
 
+You can see all of these rules in the `monitoring.yaml`
+
 ## Cost Calculation
 
 Prometheus recording rules calculate costs at different time intervals:
