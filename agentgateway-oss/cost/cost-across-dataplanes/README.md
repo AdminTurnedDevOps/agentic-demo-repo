@@ -12,6 +12,8 @@ This implementation collects metrics from all three agentgateway instances and a
 
 ## Architecture
 
+<div align="center">
+
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  AgentGateway1  │     │  AgentGateway2  │     │  AgentGateway3  │
@@ -38,6 +40,8 @@ This implementation collects metrics from all three agentgateway instances and a
 │  - PagerDuty    │     │  - Visualization│
 └─────────────────┘     └─────────────────┘
 ```
+
+</div>
 
 ## How It works
 
