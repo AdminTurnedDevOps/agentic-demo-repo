@@ -66,12 +66,6 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
-  - protocol: HTTP
-    port: 15020
-    name: metrics
-    allowedRoutes:
-      namespaces:
-        from: All
 ---
 apiVersion: gateway.kgateway.dev/v1alpha1
 kind: Backend
@@ -140,12 +134,6 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
-  - protocol: HTTP
-    port: 15020
-    name: metrics
-    allowedRoutes:
-      namespaces:
-        from: All
 ---
 apiVersion: gateway.kgateway.dev/v1alpha1
 kind: Backend
@@ -211,12 +199,6 @@ spec:
   - protocol: HTTP
     port: 8080
     name: http
-    allowedRoutes:
-      namespaces:
-        from: All
-  - protocol: HTTP
-    port: 15020
-    name: metrics
     allowedRoutes:
       namespaces:
         from: All

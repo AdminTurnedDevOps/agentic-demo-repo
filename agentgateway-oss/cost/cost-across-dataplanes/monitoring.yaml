@@ -1,6 +1,6 @@
-# ServiceMonitor for agentgateway1
+# PodMonitor for agentgateway1
 apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+kind: PodMonitor
 metadata:
   name: agentgateway1
   namespace: monitoring
@@ -14,21 +14,22 @@ spec:
   namespaceSelector:
     matchNames:
       - kgateway-system
-  endpoints:
-    - port: metrics
-      path: /metrics
-      interval: 30s
-      relabelings:
-        - sourceLabels: [__meta_kubernetes_service_name]
-          targetLabel: service
-        - sourceLabels: [__meta_kubernetes_namespace]
-          targetLabel: namespace
-        - targetLabel: gateway_instance
-          replacement: gateway1
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_pod_name]
+        targetLabel: pod
+      - sourceLabels: [__meta_kubernetes_namespace]
+        targetLabel: namespace
+      - targetLabel: gateway_instance
+        replacement: gateway1
 ---
-# ServiceMonitor for agentgateway2
+# PodMonitor for agentgateway2
 apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+kind: PodMonitor
 metadata:
   name: agentgateway2
   namespace: monitoring
@@ -42,21 +43,22 @@ spec:
   namespaceSelector:
     matchNames:
       - kgateway-system
-  endpoints:
-    - port: metrics
-      path: /metrics
-      interval: 30s
-      relabelings:
-        - sourceLabels: [__meta_kubernetes_service_name]
-          targetLabel: service
-        - sourceLabels: [__meta_kubernetes_namespace]
-          targetLabel: namespace
-        - targetLabel: gateway_instance
-          replacement: gateway2
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_pod_name]
+        targetLabel: pod
+      - sourceLabels: [__meta_kubernetes_namespace]
+        targetLabel: namespace
+      - targetLabel: gateway_instance
+        replacement: gateway2
 ---
-# ServiceMonitor for agentgateway3
+# PodMonitor for agentgateway3
 apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+kind: PodMonitor
 metadata:
   name: agentgateway3
   namespace: monitoring
@@ -70,17 +72,18 @@ spec:
   namespaceSelector:
     matchNames:
       - kgateway-system
-  endpoints:
-    - port: metrics
-      path: /metrics
-      interval: 30s
-      relabelings:
-        - sourceLabels: [__meta_kubernetes_service_name]
-          targetLabel: service
-        - sourceLabels: [__meta_kubernetes_namespace]
-          targetLabel: namespace
-        - targetLabel: gateway_instance
-          replacement: gateway3
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_pod_name]
+        targetLabel: pod
+      - sourceLabels: [__meta_kubernetes_namespace]
+        targetLabel: namespace
+      - targetLabel: gateway_instance
+        replacement: gateway3
 ---
 # PrometheusRule for cost calculation and alerting
 apiVersion: monitoring.coreos.com/v1
