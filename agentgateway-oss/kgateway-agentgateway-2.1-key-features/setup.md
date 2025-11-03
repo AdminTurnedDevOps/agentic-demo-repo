@@ -639,17 +639,4 @@ https://kgateway.dev/docs/latest/observability/kgateway.json
 
 6. Perform a `curl` to produce some observability data
 ```
-curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
-  "model": "claude-sonnet-4-5",
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a skilled cloud-native network engineer."
-    },
-    {
-      "role": "user",
-      "content": "Write me a paragraph containing the best way to think about Istio Ambient Mesh"
-    }
-  ]
-}' | jq
-```
+curl -I $INGRESS_GW_ADDRESS
