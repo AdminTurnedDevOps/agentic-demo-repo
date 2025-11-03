@@ -42,7 +42,7 @@ kubectl apply -f- <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: a2agateawy
+  name: a2agateway
 spec:
   gatewayClassName: agentgateway
   listeners:
