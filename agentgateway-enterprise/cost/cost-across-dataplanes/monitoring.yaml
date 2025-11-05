@@ -13,7 +13,7 @@ spec:
       gateway.networking.k8s.io/gateway-name: agentgateway1
   namespaceSelector:
     matchNames:
-      - kgateway-system
+      - gloo-system
   podMetricsEndpoints:
   - port: metrics
     path: /metrics
@@ -42,7 +42,7 @@ spec:
       gateway.networking.k8s.io/gateway-name: agentgateway2
   namespaceSelector:
     matchNames:
-      - kgateway-system
+      - gloo-system
   podMetricsEndpoints:
   - port: metrics
     path: /metrics
@@ -71,7 +71,7 @@ spec:
       gateway.networking.k8s.io/gateway-name: agentgateway3
   namespaceSelector:
     matchNames:
-      - kgateway-system
+      - gloo-system
   podMetricsEndpoints:
   - port: metrics
     path: /metrics

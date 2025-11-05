@@ -39,6 +39,7 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
         exporter:
           otlp:
             endpoint: http://jaeger-collector.jaeger.svc.cluster.local:4317
+
 EOF
 ```
 
@@ -50,6 +51,8 @@ kubectl port-forward svc/jaeger-query -n jaeger 16686:16686
 ```
 
 6. From the search bar, click on **Service** and then choose **kagent**
+
+7. In the **Operation** menu, choose a `kagent` Operation
 
 7. Click the green **Find Traces** button
 
