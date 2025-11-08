@@ -160,6 +160,7 @@ EOF
 ```
 export INGRESS_GW_ADDRESS=$(kubectl get svc -n kgateway-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
+```
 
 8. Test the LLM connectivity
 ```

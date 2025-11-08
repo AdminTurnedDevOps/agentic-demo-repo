@@ -3,13 +3,13 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 ```
 
 ```
-helm upgrade -i --create-namespace --namespace kgateway-system --version v2.1.1 \
+helm upgrade -i --create-namespace --namespace kgateway-system --version v2.2.0-main \
 kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
 --set controller.image.pullPolicy=Always
 ```
 
 ```
-helm upgrade -i --namespace kgateway-system --version v2.1.1 kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+helm upgrade -i --namespace kgateway-system --version v2.2.0-main kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
   --set gateway.aiExtension.enabled=true \
   --set agentgateway.enabled=true  \
   --set controller.image.pullPolicy=Always

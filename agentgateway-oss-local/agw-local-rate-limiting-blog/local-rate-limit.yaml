@@ -1,0 +1,27 @@
+binds:
+- port: 3000
+  listeners:
+  - routes:
+    - backends:
+      - ai:
+          name: anthropic
+          provider:
+            anthropic:
+              model: claude-haiku-4-5-20251001
+          routes:
+            /v1/messages: messages
+            /v1/chat/completions: completions
+            /v1/models: passthrough
+            "*": passthrough
+      policies:
+        cors:
+          allowOrigins:
+          - '*'
+          allowMethods:
+          - GET
+          - POST
+          - OPTIONS
+          allowHeaders:
+          - '*'
+        backendAuth:
+          key: "$ANTHROPIC_API_KEY"

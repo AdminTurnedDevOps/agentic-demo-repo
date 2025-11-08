@@ -1,6 +1,5 @@
 config:
   logging:
-    #    filter: 'response.code != 500'
     fields:
       add:
         backend: backend
@@ -8,20 +7,24 @@ binds:
 - port: 3000
   listeners:
   - routes:
-    - policies:
+    - backends:
+      - host: localhost:9999
+      policies:
         cors:
           allowOrigins:
-            - "*"
+          - '*'
           allowHeaders:
-            - "*"
+          - '*'
           allowMethods:
-          - "GET"
-          - "POST"
-          - "OPTIONS"
+          - GET
+          - POST
+          - OPTIONS
           exposeHeaders:
-            - "*"
+          - '*'
           allowCredentials: false
-        # Mark this route as a2a traffic
         a2a: {}
-      backends:
-      - host: localhost:9999
+        localRateLimit:
+        - maxTokens: 1
+          tokensPerFill: 1
+          fillInterval: 1000s
+          type: tokens

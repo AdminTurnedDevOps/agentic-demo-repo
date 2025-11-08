@@ -1,0 +1,131 @@
+global:
+  resolve_timeout: 5m
+  # Configure your SMTP settings for email notifications
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alertmanager@example.com'
+  smtp_auth_username: 'alertmanager@example.com'
+  smtp_auth_password: 'your-password'
+
+  # Slack webhook URL (optional)
+  slack_api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+
+# Configure routing tree
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default-receiver'
+
+  routes:
+    # Critical alerts go to PagerDuty and Slack
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      continue: true
+
+    # Warning alerts go to Slack
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      continue: true
+
+    # LLM-specific alerts
+    - match:
+        component: llm
+      receiver: 'llm-team'
+
+    # MCP-specific alerts
+    - match:
+        component: mcp
+      receiver: 'mcp-team'
+
+# Inhibition rules to prevent alert flooding
+inhibit_rules:
+  # If a critical alert fires, suppress warnings for the same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']
+
+  # If gateway is down, suppress all downstream alerts
+  - source_match:
+      alertname: 'AgentGatewayDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['cluster']
+
+# Receivers for different notification channels
+receivers:
+  - name: 'default-receiver'
+    email_configs:
+      - to: 'team@example.com'
+        headers:
+          Subject: 'AgentGateway Alert: {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>Alert: {{ .GroupLabels.alertname }}</h2>
+          <p><b>Severity:</b> {{ .CommonLabels.severity }}</p>
+          <p><b>Summary:</b> {{ .CommonAnnotations.summary }}</p>
+          <p><b>Description:</b> {{ .CommonAnnotations.description }}</p>
+          <p><b>Details:</b></p>
+          {{ range .Alerts }}
+          <ul>
+            <li><b>Instance:</b> {{ .Labels.instance }}</li>
+            <li><b>Status:</b> {{ .Status }}</li>
+          </ul>
+          {{ end }}
+
+  - name: 'critical-alerts'
+    pagerduty_configs:
+      - service_key: 'your-pagerduty-service-key'
+        description: '{{ .CommonAnnotations.summary }}'
+    slack_configs:
+      - channel: '#critical-alerts'
+        title: ':fire: Critical Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *Severity:* {{ .CommonLabels.severity }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          {{ range .Alerts }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+        send_resolved: true
+    email_configs:
+      - to: 'oncall@example.com'
+        headers:
+          Subject: '[CRITICAL] AgentGateway: {{ .GroupLabels.alertname }}'
+
+  - name: 'warning-alerts'
+    slack_configs:
+      - channel: '#alerts'
+        title: ':warning: Warning: {{ .GroupLabels.alertname }}'
+        text: |
+          *Severity:* {{ .CommonLabels.severity }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+        send_resolved: true
+
+  - name: 'llm-team'
+    slack_configs:
+      - channel: '#llm-alerts'
+        title: 'LLM Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *Component:* LLM
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+        send_resolved: true
+    email_configs:
+      - to: 'llm-team@example.com'
+
+  - name: 'mcp-team'
+    slack_configs:
+      - channel: '#mcp-alerts'
+        title: 'MCP Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *Component:* MCP
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+        send_resolved: true
+    email_configs:
+      - to: 'mcp-team@example.com'

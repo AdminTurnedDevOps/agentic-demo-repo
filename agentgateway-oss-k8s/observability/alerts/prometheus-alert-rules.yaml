@@ -1,0 +1,285 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agentgateway-alerts
+  namespace: kgateway-system
+  labels:
+    app: agentgateway
+    release: kube-prometheus
+spec:
+  groups:
+    - name: agentgateway-llm-alerts
+      interval: 30s
+      rules:
+        # High token usage alert
+        - alert: HighLLMTokenUsage
+          expr: rate(agentgateway_gen_ai_client_token_usage_sum[5m]) > 100000
+          for: 5m
+          labels:
+            severity: warning
+            component: llm
+          annotations:
+            summary: "High LLM token usage detected"
+            description: "Token usage rate is {{ $value }} tokens/sec on instance {{ $labels.instance }}"
+            runbook_url: "https://docs.agentgateway.dev/runbooks/high-token-usage"
+
+        # Excessive token usage (cost control)
+        - alert: ExcessiveLLMTokenUsage
+          expr: rate(agentgateway_gen_ai_client_token_usage_sum[15m]) > 500000
+          for: 10m
+          labels:
+            severity: critical
+            component: llm
+          annotations:
+            summary: "CRITICAL: Excessive LLM token usage"
+            description: "Token usage rate is {{ $value }} tokens/sec - potential cost impact on {{ $labels.instance }}"
+            runbook_url: "https://docs.agentgateway.dev/runbooks/excessive-token-usage"
+
+        # High request rate
+        - alert: HighLLMRequestRate
+          expr: rate(agentgateway_gen_ai_client_token_usage_count[5m]) > 100
+          for: 5m
+          labels:
+            severity: warning
+            component: llm
+          annotations:
+            summary: "High LLM request rate"
+            description: "Request rate is {{ $value }} req/sec on {{ $labels.instance }}"
+
+        # Low request rate (potential issue)
+        - alert: LowLLMRequestRate
+          expr: rate(agentgateway_gen_ai_client_token_usage_count[10m]) < 0.1 and rate(agentgateway_gen_ai_client_token_usage_count[1h] offset 1h) > 1
+          for: 15m
+          labels:
+            severity: warning
+            component: llm
+          annotations:
+            summary: "Unusually low LLM request rate"
+            description: "Request rate dropped to {{ $value }} req/sec on {{ $labels.instance }} - possible connectivity issue"
+
+        # No LLM requests
+        - alert: NoLLMRequests
+          expr: rate(agentgateway_gen_ai_client_token_usage_count[15m]) == 0
+          for: 30m
+          labels:
+            severity: critical
+            component: llm
+          annotations:
+            summary: "No LLM requests received"
+            description: "Zero LLM requests on {{ $labels.instance }} for 30 minutes"
+
+        # High request duration
+        - alert: HighLLMRequestDuration
+          expr: rate(agentgateway_gen_ai_server_request_duration_sum[5m]) / rate(agentgateway_gen_ai_server_request_duration_count[5m]) > 10
+          for: 5m
+          labels:
+            severity: warning
+            component: llm
+          annotations:
+            summary: "High LLM request duration"
+            description: "Average request duration is {{ $value }}s on {{ $labels.instance }}"
+
+        # Very high request duration
+        - alert: VeryHighLLMRequestDuration
+          expr: rate(agentgateway_gen_ai_server_request_duration_sum[5m]) / rate(agentgateway_gen_ai_server_request_duration_count[5m]) > 30
+          for: 3m
+          labels:
+            severity: critical
+            component: llm
+          annotations:
+            summary: "CRITICAL: Very high LLM request duration"
+            description: "Average request duration is {{ $value }}s on {{ $labels.instance }} - severe performance degradation"
+
+        # Token usage anomaly detection
+        - alert: TokenUsageAnomaly
+          expr: |
+            abs(
+              rate(agentgateway_gen_ai_client_token_usage_sum[5m]) -
+              avg_over_time(rate(agentgateway_gen_ai_client_token_usage_sum[5m])[1h:5m])
+            ) >
+            3 * stddev_over_time(rate(agentgateway_gen_ai_client_token_usage_sum[5m])[1h:5m])
+          for: 10m
+          labels:
+            severity: warning
+            component: llm
+          annotations:
+            summary: "Anomalous token usage pattern detected"
+            description: "Token usage deviates significantly from normal pattern on {{ $labels.instance }}"
+
+    - name: agentgateway-mcp-alerts
+      interval: 30s
+      rules:
+        # High MCP request rate
+        - alert: HighMCPRequestRate
+          expr: rate(agentgateway_mcp_requests_total[5m]) > 1000
+          for: 5m
+          labels:
+            severity: warning
+            component: mcp
+          annotations:
+            summary: "High MCP tool call rate"
+            description: "MCP request rate is {{ $value }} req/sec on {{ $labels.instance }}"
+
+        # MCP request spike
+        - alert: MCPRequestSpike
+          expr: |
+            rate(agentgateway_mcp_requests_total[1m]) >
+            2 * avg_over_time(rate(agentgateway_mcp_requests_total[1m])[30m:1m])
+          for: 2m
+          labels:
+            severity: critical
+            component: mcp
+          annotations:
+            summary: "MCP request spike detected"
+            description: "MCP requests increased by >100% on {{ $labels.instance }}"
+
+        # No MCP requests (when expected)
+        - alert: NoMCPRequests
+          expr: rate(agentgateway_mcp_requests_total[15m]) == 0 and rate(agentgateway_mcp_requests_total[1h] offset 1h) > 0.1
+          for: 30m
+          labels:
+            severity: warning
+            component: mcp
+          annotations:
+            summary: "No MCP requests received"
+            description: "Zero MCP tool calls on {{ $labels.instance }} for 30 minutes"
+
+    - name: agentgateway-connection-alerts
+      interval: 30s
+      rules:
+        # High connection rate
+        - alert: HighDownstreamConnectionRate
+          expr: rate(agentgateway_downstream_connections_total[5m]) > 1000
+          for: 5m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "High downstream connection rate"
+            description: "Connection rate is {{ $value }} conn/sec on {{ $labels.instance }}"
+
+        # Connection spike
+        - alert: DownstreamConnectionSpike
+          expr: |
+            rate(agentgateway_downstream_connections_total[1m]) >
+            3 * avg_over_time(rate(agentgateway_downstream_connections_total[1m])[30m:1m])
+          for: 2m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            summary: "Downstream connection spike"
+            description: "Connection rate increased by >200% on {{ $labels.instance }} - possible attack or misconfiguration"
+
+    - name: agentgateway-xds-alerts
+      interval: 30s
+      rules:
+        # High xDS message rate
+        - alert: HighXDSMessageRate
+          expr: rate(agentgateway_xds_message_total[5m]) > 100
+          for: 5m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "High xDS message rate"
+            description: "xDS message rate is {{ $value }} msg/sec on {{ $labels.instance }}"
+
+        # High xDS bandwidth
+        - alert: HighXDSBandwidth
+          expr: rate(agentgateway_xds_message_bytes_total[5m]) > 10485760
+          for: 5m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "High xDS bandwidth usage"
+            description: "xDS bandwidth is {{ $value }} bytes/sec (>10MB/s) on {{ $labels.instance }}"
+
+        # xDS message anomaly
+        - alert: XDSMessageAnomaly
+          expr: |
+            rate(agentgateway_xds_message_total[5m]) >
+            5 * avg_over_time(rate(agentgateway_xds_message_total[5m])[1h:5m])
+          for: 5m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            summary: "xDS message rate anomaly"
+            description: "xDS message rate is 5x higher than normal on {{ $labels.instance }}"
+
+    - name: agentgateway-availability-alerts
+      interval: 30s
+      rules:
+        # Agent Gateway is down
+        - alert: AgentGatewayDown
+          expr: up{job="agentgateway"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            summary: "Agent Gateway is down"
+            description: "Agent Gateway instance {{ $labels.instance }} is unreachable"
+            runbook_url: "https://docs.agentgateway.dev/runbooks/gateway-down"
+
+        # Multiple instances down
+        - alert: MultipleAgentGatewaysDown
+          expr: count(up{job="agentgateway"} == 0) > 1
+          for: 2m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            summary: "Multiple Agent Gateway instances down"
+            description: "{{ $value }} Agent Gateway instances are down"
+
+        # Metrics scrape failure
+        - alert: MetricsScrapeFailure
+          expr: up{job="agentgateway"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: monitoring
+          annotations:
+            summary: "Failed to scrape metrics"
+            description: "Prometheus cannot scrape metrics from {{ $labels.instance }}"
+
+    - name: agentgateway-cost-alerts
+      interval: 60s
+      rules:
+        # Daily token budget threshold
+        - alert: DailyTokenBudgetWarning
+          expr: sum(increase(agentgateway_gen_ai_client_token_usage_sum[24h])) > 50000000
+          for: 5m
+          labels:
+            severity: warning
+            component: llm
+          annotations:
+            summary: "Daily token budget warning"
+            description: "Daily token usage is {{ $value }} tokens - approaching budget limit"
+
+        # Daily token budget exceeded
+        - alert: DailyTokenBudgetExceeded
+          expr: sum(increase(agentgateway_gen_ai_client_token_usage_sum[24h])) > 100000000
+          for: 5m
+          labels:
+            severity: critical
+            component: llm
+          annotations:
+            summary: "CRITICAL: Daily token budget exceeded"
+            description: "Daily token usage is {{ $value }} tokens - BUDGET EXCEEDED"
+
+        # Hourly cost spike
+        - alert: HourlyTokenCostSpike
+          expr: |
+            sum(rate(agentgateway_gen_ai_client_token_usage_sum[1h])) >
+            2 * avg_over_time(sum(rate(agentgateway_gen_ai_client_token_usage_sum[1h]))[24h:1h])
+          for: 15m
+          labels:
+            severity: warning
+            component: llm
+          annotations:
+            summary: "Hourly token cost spike"
+            description: "Hourly token usage is 2x higher than 24h average"

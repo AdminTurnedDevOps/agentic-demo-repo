@@ -7,8 +7,9 @@ kagent mcp init python mlevan-oss
 ```
 
 ```
-kagent mcp build --project-dir mlevan-oss -t pythontesting1:latest
-docker push adminturneddevops/pythontesting1:latest
+kagent mcp build --project-dir mlevan-oss -t pythontesting:latest
+
+docker buildx build --platform linux/amd64,linux/arm64 -t adminturneddevops/pythontesting:latest --push .
 ```
 
 ```
@@ -22,7 +23,7 @@ kmcp install
 ```
 
 ```
-kubectl get pods -n kmcp-system
+kubectl get pods -n kagent
 ```
 
 ```
@@ -34,17 +35,12 @@ metadata:
   namespace: kagent
 spec:
   deployment:
-    image: "adminturneddevops/pythontesting1:latest"
+    image: "adminturneddevops/pythontesting@sha256:89f1a29500c170fc09de0607e96860473708a3e99ba309a75e4cbdec9d447f13"
     port: 3000
     cmd: "python"
     args: ["src/main.py"]
   transportType: "stdio"
 EOF
-```
-
-If you built your MCP Server container image on something like an M4 Mac (ARM-based architecture), you'll need to add in an ARM-based Worker Node and patch your deployment for to select the ARM-based node.
-```
-kubectl patch deployment mlevan-oss -n default -p '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/arch":"arm64"}}}}}'
 ```
 
 ```

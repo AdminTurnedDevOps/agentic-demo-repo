@@ -1,0 +1,18 @@
+# A2A Server Framework
+a2a-sdk
+
+# Google ADK (Agent Development Kit)
+google-adk
+
+# MCP (Model Context Protocol)
+mcp
+
+# LLM Provider
+litellm
+
+# Web Server
+uvicorn
+starlette
+
+# CLI
+click

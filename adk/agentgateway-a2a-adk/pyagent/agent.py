@@ -17,7 +17,7 @@ root_agent = LlmAgent(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
                     command='npx',
-                    args=["-y", "@modelcontextprotocol/server-kubernetes"]
+                    args=["-y", "kubernetes-mcp-server"]
                 )
             ),
             tool_filter=[
