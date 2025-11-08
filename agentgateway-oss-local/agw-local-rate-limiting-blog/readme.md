@@ -2,8 +2,10 @@
 
 Ensure to set your environment variables for API keys.
 
+```
 export ANTHROPIC_API_KEY=
 export OPENAI_API_KEY=
+```
 
 ## Local Rate Limiting
 
