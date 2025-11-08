@@ -1,27 +1,42 @@
+# curl http://localhost:3000/v1/chat/completions \
+#   -H "Content-Type: application/json" \
+#   -d '{
+#     "model": "gpt-3.5-turbo",
+#     "messages": [{"role": "user", "content": "Hello!"}]
+#   }'
+# {"model":"gpt-3.5-turbo-0125","usage":{"prompt_tokens":9,"completion_tokens":10,"total_tokens":19,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":0,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"choices":[{"message":{"content":"Hi there! How can I assist you today?","role":"assistant","refusal":null,"annotations":[]},"index":0,"logprobs":null,"finish_reason":"stop"}],"id":"chatcmpl-CZkANq2qJ7kCdlOjhIctxi7BwNcXJ","object":"chat.completion","created":1762634979,"service_tier":"default","system_fingerprint":null}%                                                                                                                                
+# ❯ curl http://localhost:3000/v1/chat/completions \
+#   -H "Content-Type: application/json" \
+#   -d '{
+#     "model": "gpt-3.5-turbo",
+#     "messages": [{"role": "user", "content": "Hello!"}]
+#   }'
+# rate limit exceeded% 
+
 binds:
 - port: 3000
   listeners:
   - routes:
     - backends:
       - ai:
-          name: anthropic
+          name: openai
           provider:
-            anthropic:
-              model: claude-haiku-4-5-20251001
+            openAI:
+              model: gpt-3.5-turbo
           routes:
-            /v1/messages: messages
             /v1/chat/completions: completions
             /v1/models: passthrough
-            "*": passthrough
+            '*': passthrough
       policies:
         cors:
           allowOrigins:
-          - '*'
-          allowMethods:
-          - GET
-          - POST
-          - OPTIONS
+          - "*"
           allowHeaders:
-          - '*'
+          - "*"
         backendAuth:
-          key: "$ANTHROPIC_API_KEY"
+          key: $OPENAI_API_KEY
+        localRateLimit:
+          - maxTokens: 1
+            tokensPerFill: 1
+            fillInterval: 100s
+            type: tokens

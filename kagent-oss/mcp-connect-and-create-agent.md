@@ -89,7 +89,7 @@ spec:
         name: github-mcp-remote
         kind: RemoteMCPServer
         toolNames:
-        - create_repository
+        - get_latest_release
         - get_commit
         - get_tag
         - list_branches

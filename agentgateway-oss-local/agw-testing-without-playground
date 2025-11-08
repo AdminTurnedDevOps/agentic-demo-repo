@@ -1,0 +1,15 @@
+The agentgateway Playground is primarily designed for testing MCP tools and A2A (agent-to-agent) connections, not directly for testing LLM chat completions. Because of that, if you want to test direct access to an LLM, you can `curl` the agentgateway endpoint.
+
+```
+curl http://localhost:3000/v1/models \
+  -H "Content-Type: application/json"
+```
+
+```
+curl http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
