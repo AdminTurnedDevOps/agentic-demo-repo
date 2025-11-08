@@ -1,0 +1,35 @@
+binds:
+- port: 3000
+  listeners:
+  - routes:
+    - name: failover-ai
+      matches:
+      - path:
+          pathPrefix: /failover/ai
+      policies:
+        retry:
+          attempts: 2        # Retry once (2 total attempts)
+          codes: [400, 401, 403, 404, 429, 500, 502, 503, 504]  # Retry on auth, rate limit, and server errors
+        urlRewrite:
+          path:
+            prefix: ""
+      backends:
+      - ai:
+          groups:
+          - providers:
+              - name: primary-model
+                provider:
+                  anthropic:
+                    model: "claude-3-5-haiku-latest"
+                routes:
+                  "/v1/chat/completions": completions
+                backendAuth:
+                  key: "$ANTHROPIC_API_KEY"
+              - name: second-model
+                provider:
+                  openAI:
+                    model: "gpt-5"
+                routes:
+                  "/v1/chat/completions": completions
+                backendAuth:
+                  key: "$OPENAI_API_KEY"
