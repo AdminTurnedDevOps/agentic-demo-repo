@@ -198,6 +198,7 @@ url -X POST http://localhost:3000/failover/ai/v1/chat/completions \
 
 ## Observability Dashboard (Traces and Metrics)
 
+### Deploy Jaeger
 1. Deploy Jaeger locally (no k8s needes)
 ```
 docker compose -f - up -d <<EOF
@@ -212,7 +213,6 @@ services:
     - "127.0.0.1:4317:4317"
     environment:
     - COLLECTOR_OTLP_ENABLED=true
-
 EOF
 ```
 
@@ -228,7 +228,8 @@ CONTAINER ID   IMAGE                              COMMAND                  CREAT
 ed45f5333d85   jaegertracing/all-in-one:latest    "/go/bin/all-in-one-…"   28 seconds ago   Up 28 seconds   127.0.0.1:4317->4317/tcp, 127.0.0.1:14268->14268/tcp, 127.0.0.1:16686->16686/tcp 
 ```
 
-3. Run the `metrics-testing.yaml` (you can find it in the same directory as this readme) with the `agentgateway` CLI
+### Run the agentgateway config
+1. Run the `metrics-testing.yaml` (you can find it in the same directory as this readme) with the `agentgateway` CLI
 ```
 config:
   tracing:
@@ -284,7 +285,8 @@ binds:
           key: "$ANTHROPIC_API_KEY"
 ```
 
-4. Run a `curl` to create some traces
+### Test Tracing
+1. Run a `curl` to create some traces
 ```
 curl "http://localhost:3000/v1/chat/completions" -v \
   -H "content-type: application/json" \
@@ -305,7 +307,7 @@ curl "http://localhost:3000/v1/chat/completions" -v \
 }' | jq
 ```
 
-5. Open the Jaeger UI
+2. Open the Jaeger UI
 ```
 http://localhost:16686/search
 ```
@@ -313,3 +315,120 @@ http://localhost:16686/search
 You should now see traces from agentgateway to Anthropic.
 ![](images/trace1.png)
 ![](images/trace2.png)
+
+### Metrics Dashboard with Prometheus and Grafana
+
+1. First, create a `prometheus.yml` configuration file in this directory (it already exists but here is the code if you want to do it on your own machine)
+```
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'agentgateway'
+    static_configs:
+      - targets: ['host.docker.internal:15020']
+    metrics_path: '/metrics'
+```
+
+2. Deploy Prometheus and Grafana locally with Docker (run from the same directory as `prometheus.yml`)
+```
+docker compose -f - up -d <<EOF
+services:
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    volumes:
+      - /Users/michaellevan/gitrepos/agentic-demo-repo/agentgateway-oss-local/agw-local-rate-limiting-blog/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3005:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  prometheus-data:
+  grafana-data:
+EOF
+```
+
+3. Ensure the containers are up and running
+```
+docker container ls
+```
+
+You should see an output similar to:
+```
+CONTAINER ID   IMAGE                     COMMAND                  CREATED          STATUS          PORTS                          NAMES
+abc123def456   grafana/grafana:latest    "/run.sh"               10 seconds ago   Up 9 seconds    127.0.0.1:3005->3000/tcp      grafana
+def456abc123   prom/prometheus:latest    "/bin/prometheus --c…"   10 seconds ago   Up 9 seconds    127.0.0.1:9090->9090/tcp      prometheus
+```
+
+4. Run agentgateway with your configuration (e.g., `metrics-testing.yaml`)
+
+5. Run some curl requests to generate metrics
+```
+curl "http://localhost:3000/v1/chat/completions" -v \
+  -H "content-type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -d '{
+  "model": "claude-sonnet-4-5",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a skilled cloud-native network engineer."
+    },
+    {
+      "role": "user",
+      "content": "Write me a paragraph containing the best way to think about Istio Ambient Mesh"
+    }
+  ]
+}' | jq
+```
+
+6. Open Prometheus UI to verify metrics are being scraped
+```
+http://localhost:9090
+```
+
+Go to Status > Targets to verify the agentgateway target is UP.
+
+7. Open Grafana UI
+```
+http://localhost:3005
+```
+
+Login with:
+- Username: `admin`
+- Password: `admin`
+
+8. Add Prometheus as a data source in Grafana
+   - Click "Add your first data source"
+   - Select "Prometheus"
+   - Set URL to: `http://prometheus:9090`
+   - Click "Save & Test"
+
+9. Go to **Explore** and choose Prometheus as the data source. You'll now be able to see agentgateway metrics.
+
+![](images/metrics.png)
+
+10. To stop the monitoring stack
+```
+docker compose down
+```
