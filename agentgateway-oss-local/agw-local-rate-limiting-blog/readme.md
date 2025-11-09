@@ -82,6 +82,11 @@ binds:
        policies:
          backendAuth:
            key: $ANTHROPIC_API_KEY
+        localRateLimit:
+          - maxTokens: 1
+            tokensPerFill: 1
+            fillInterval: 100s
+            type: tokens
 ```
 
 ## Metrics
@@ -190,3 +195,121 @@ url -X POST http://localhost:3000/failover/ai/v1/chat/completions \
   }'
 {"model":"gpt-5-2025-08-07","usage"
 ```
+
+## Observability Dashboard (Traces and Metrics)
+
+1. Deploy Jaeger locally (no k8s needes)
+```
+docker compose -f - up -d <<EOF
+services:
+  jaeger:
+    container_name: jaeger
+    restart: unless-stopped
+    image: jaegertracing/all-in-one:latest
+    ports:
+    - "127.0.0.1:16686:16686"
+    - "127.0.0.1:14268:14268"
+    - "127.0.0.1:4317:4317"
+    environment:
+    - COLLECTOR_OTLP_ENABLED=true
+
+EOF
+```
+
+2. Ensure that it is up and running
+```
+docker container ls
+```
+
+You should see an output similar to the below:
+
+```
+CONTAINER ID   IMAGE                              COMMAND                  CREATED          STATUS          PORTS                                                                                                                                  NAMES
+ed45f5333d85   jaegertracing/all-in-one:latest    "/go/bin/all-in-one-…"   28 seconds ago   Up 28 seconds   127.0.0.1:4317->4317/tcp, 127.0.0.1:14268->14268/tcp, 127.0.0.1:16686->16686/tcp 
+```
+
+3. Run the `metrics-testing.yaml` (you can find it in the same directory as this readme) with the `agentgateway` CLI
+```
+config:
+  tracing:
+    otlpEndpoint: "http://127.0.0.1:4317"
+    randomSampling: 'true'
+    fields:
+      add:
+        authenticated: 'jwt.sub != null'
+        gen_ai.system: 'llm.provider'
+        gen_ai.request.model: 'llm.request_model'
+        gen_ai.response.model: 'llm.response_model'
+        gen_ai.usage.input_tokens: 'llm.input_tokens'
+        gen_ai.usage.output_tokens: 'llm.output_tokens'
+        gen_ai.operation.name: '"chat"'        
+  metrics:
+    fields:
+      add:
+        user_id: "jwt.sub" 
+        user_name: 'jwt.preferred_username'
+  logging:
+    fields:
+      add:
+        user_id: "jwt.sub" 
+        user_name: 'jwt.name'
+        authenticated: 'jwt.sub != null'
+        jwt_act: "jwt.act"
+        token_issuer: 'jwt.iss'
+        token_audience: 'jwt.aud'       
+        model: 'llm.requestModel'
+        provider: 'llm.provider'        
+        prompt: 'llm.prompt' 
+binds:
+- port: 3000
+  listeners:
+  - routes:
+    - backends:
+      - ai:
+          name: anthropic
+          provider:
+            anthropic:
+              model: "claude-3-5-haiku-latest"
+          routes:
+            /v1/chat/completions: completions
+            /v1/models: passthrough
+            '*': passthrough
+      policies:
+        cors:
+          allowOrigins:
+          - "*"
+          allowHeaders:
+          - "*"
+        backendAuth:
+          key: "$ANTHROPIC_API_KEY"
+```
+
+4. Run a `curl` to create some traces
+```
+curl "http://localhost:3000/v1/chat/completions" -v \
+  -H "content-type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -d '{
+  "model": "claude-sonnet-4-5",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a skilled cloud-native network engineer."
+    },
+    {
+      "role": "user",
+      "content": "Write me a paragraph containing the best way to think about Istio Ambient Mesh"
+    }
+  ]
+}' | jq
+```
+
+5. Open the Jaeger UI
+```
+http://localhost:16686/search
+```
+
+You should now see traces from agentgateway to Anthropic.
+![](images/trace1.png)
+![](images/trace2.png)
