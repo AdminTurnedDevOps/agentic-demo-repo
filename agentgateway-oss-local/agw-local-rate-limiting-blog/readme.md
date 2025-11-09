@@ -428,7 +428,41 @@ Login with:
 
 ![](images/metrics.png)
 
-10. To stop the monitoring stack
+### Alerts
+
+1. Go to **Alerting > Alert rules**
+2. Create a new rule under the `agentgateway_gen_ai_client_token_usage_sum` metric and the alert will go off if more than 1 token is used
+
+![](images/alert1.png)
+
+3. Save the rule
+
+4. Run a `curl` a few times
+```
+curl "http://localhost:3000/v1/chat/completions" -v \
+  -H "content-type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -d '{
+  "model": "claude-sonnet-4-5",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a skilled cloud-native network engineer."
+    },
+    {
+      "role": "user",
+      "content": "Write me a paragraph containing the best way to think about Istio Ambient Mesh"
+    }
+  ]
+}' | jq
+```
+
+5. You should now see the alert triggering
+![](images/alert2.png)
+
+
+To stop the monitoring stack
 ```
 docker compose down
 ```
