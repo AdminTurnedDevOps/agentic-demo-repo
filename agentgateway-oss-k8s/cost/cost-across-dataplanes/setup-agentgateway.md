@@ -281,6 +281,7 @@ curl "$INGRESS_GW_ADDRESSONE:8080/anthropic" -v \ -H content-type:application/js
 }' | jq
 ```
 
+```
 curl "$INGRESS_GW_ADDRESSTWO:8080/anthropic" -v \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
   "model": "claude-sonnet-4-5",
   "messages": [
@@ -296,6 +297,7 @@ curl "$INGRESS_GW_ADDRESSTWO:8080/anthropic" -v \ -H content-type:application/js
 }' | jq
 ```
 
+```
 curl "$INGRESS_GW_ADDRESSTHREE:8080/anthropic" -v \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
   "model": "claude-sonnet-4-5",
   "messages": [

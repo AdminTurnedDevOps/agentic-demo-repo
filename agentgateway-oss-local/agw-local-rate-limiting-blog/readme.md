@@ -169,7 +169,7 @@ binds:
 
 2. Export your Anthropic API key and make it incorrect
 ```
-export ANTHROPIC_API_KEY+fdsfsdfsd
+export ANTHROPIC_API_KEY=fdsfdsfsd
 ```
 
 3. Run the `curl`
@@ -183,7 +183,7 @@ curl -X POST http://localhost:3000/failover/ai/v1/chat/completions \
 
 You should see the output fail over to ChatGPT.
 ```
-url -X POST http://localhost:3000/failover/ai/v1/chat/completions \
+curl -X POST http://localhost:3000/failover/ai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "Testing failover"}]
