@@ -4,7 +4,7 @@ Inference in AI consists of two pieces:
 
 1. Inference == Make a prediction on unseen/new data.
 
-Example: You ask a chatbot a question and it answers it based on what data it was trained on. It's really a prediction (guess) on what you want to know.
+Example: You can ask a chatbot a question and it answers it based on what data it was trained on. It's really a prediction (guess) on what you want to know.
 
 2. Inference Routing == the infrastructure layer.
 
