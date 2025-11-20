@@ -5,16 +5,17 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 ```
 
 ```
-helm upgrade -i --create-namespace --namespace kgateway-system --version v2.2.0-main \
-kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
---set controller.image.pullPolicy=Always
+helm upgrade -i --create-namespace \
+--namespace kgateway-system \
+--version v2.1.1 \
+kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds 
 ```
 
 ```
-helm upgrade -i --namespace kgateway-system --version v2.2.0-main kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
-  --set gateway.aiExtension.enabled=true \
-  --set agentgateway.enabled=true  \
-  --set controller.image.pullPolicy=Always
+helm upgrade -i -n kgateway-system kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+     --set gateway.aiExtension.enabled=true \
+     --set agentgateway.enabled=true \
+     --version v2.1.1
 ```
 
 ```
@@ -101,7 +102,29 @@ EOF
 kubectl get backend -n kgateway-system
 ```
 
-5. Apply the Route so you can reach the LLM
+6. Create a rate limit rule that targets the `HTTPRoute` you just created
+```
+kubectl apply -f- <<EOF
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: TrafficPolicy
+metadata:
+  name: anthropic-ratelimit
+  namespace: kgateway-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: claude
+  rateLimit:
+    local:
+      tokenBucket:
+        maxTokens: 1
+        tokensPerFill: 1
+        fillInterval: 100s
+EOF
+```
+
+7. Apply the Route so you can reach the LLM
 ```
 kubectl apply -f- <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -134,35 +157,13 @@ spec:
 EOF
 ```
 
-6. Create a rate limit rule that targets the `HTTPRoute` you just created
-```
-kubectl apply -f- <<EOF
-apiVersion: gateway.kgateway.dev/v1alpha1
-kind: TrafficPolicy
-metadata:
-  name: anthropic-ratelimit
-  namespace: kgateway-system
-spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      name: claude
-  rateLimit:
-    local:
-      tokenBucket:
-        maxTokens: 1
-        tokensPerFill: 1
-        fillInterval: 100s
-EOF
-```
-
-7. Capture the LB IP of the service. This will be used later to send a request to the LLM.
+8. Capture the LB IP of the service. This will be used later to send a request to the LLM.
 ```
 export INGRESS_GW_ADDRESS=$(kubectl get svc -n kgateway-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
-8. Test the LLM connectivity
+9. Test the LLM connectivity
 ```
 curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
   "model": "claude-sonnet-4-5",
@@ -179,17 +180,19 @@ curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v \ -H content-type:application/json 
 }' | jq
 ```
 
-9. Run the `curl` again
+10. Run the `curl` again
 
-You'll see a `curl` error that isn't very helpful. It'll look something like this:
+You'll see a `curl` error that looks something like this:
 
 ```
-curl: (3) URL rejected: Malformed input to a URL function
-curl: (3) URL rejected: Port number was not a decimal number between 0 and 65535
-jq: parse error: Invalid numeric literal at line 1, column 
+< x-ratelimit-limit: 1
+< x-ratelimit-remaining: 0
+< x-ratelimit-reset: 76
+< content-length: 19
+< date: Tue, 18 Nov 2025 15:35:45 GMT
 ```
 
-However, if you check the agentgateway Pod logs, you'll see the rate limit error.
+And if you check the agentgateway Pod logs, you'll see the rate limit error.
 
 ```
 kubectl logs -n kgateway-system agentgateway-6b5d688959-25nw9 --tail=50 | grep -i "request\|error\|anthropic"

@@ -1,5 +1,6 @@
 import click
 import uvicorn
+import logging
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
@@ -11,6 +12,13 @@ from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from .agent import root_agent
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 @click.command()
@@ -54,14 +62,21 @@ def main(host: str, port: int):
 
     # Create runner factory
     async def create_runner() -> Runner:
-        return Runner(
-            app_name='k8sassistant',
-            agent=root_agent,
-            artifact_service=InMemoryArtifactService(),
-            session_service=InMemorySessionService(),
-            memory_service=InMemoryMemoryService(),
-            credential_service=InMemoryCredentialService(),
-        )
+        try:
+            logger.info("Creating Runner instance...")
+            runner = Runner(
+                app_name='k8sassistant',
+                agent=root_agent,
+                artifact_service=InMemoryArtifactService(),
+                session_service=InMemorySessionService(),
+                memory_service=InMemoryMemoryService(),
+                credential_service=InMemoryCredentialService(),
+            )
+            logger.info("Runner instance created successfully")
+            return runner
+        except Exception as e:
+            logger.error(f"Error creating Runner: {e}", exc_info=True)
+            raise
 
     # Create agent executor
     agent_executor = A2aAgentExecutor(runner=create_runner)
@@ -79,8 +94,19 @@ def main(host: str, port: int):
     )
 
     # Run the server (CORS is handled by agentgateway config.yaml)
+    logger.info(f"Starting K8s Assistant A2A agent on {host}:{port}")
     print(f"Starting K8s Assistant A2A agent on {host}:{port}")
-    uvicorn.run(server.build(), host=host, port=port)
+
+    try:
+        uvicorn.run(
+            server.build(),
+            host=host,
+            port=port,
+            log_level="debug"
+        )
+    except Exception as e:
+        logger.error(f"Server error: {e}", exc_info=True)
+        raise
 
 
 if __name__ == '__main__':
