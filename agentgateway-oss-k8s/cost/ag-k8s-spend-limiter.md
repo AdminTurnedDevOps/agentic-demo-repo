@@ -195,7 +195,7 @@ You'll see a `curl` error that looks something like this:
 And if you check the agentgateway Pod logs, you'll see the rate limit error.
 
 ```
-kubectl logs -n kgateway-system agentgateway-6b5d688959-25nw9 --tail=50 | grep -i "request\|error\|anthropic"
+kubectl logs -n kgateway-system agentgateway-74f485d95c-nnzq4 --tail=50 | grep -i "request\|error\|anthropic"
 ```
 
 ```

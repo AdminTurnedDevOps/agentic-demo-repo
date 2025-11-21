@@ -10,7 +10,7 @@ def main():
 
     modelType = LLM(model="ollama/deepseek-r1:8b", temperature=0.1, base_url="http://localhost:11434")
 
-    serper = SerperDevTool(
+    rag = SerperDevTool(
         search_url="https://a2a-protocol.org/latest/"
     )
 
@@ -19,7 +19,7 @@ def main():
         role="A2A Expert",
         goal="Let us all know the EXACT definition of A2A",
         backstory="An expert in A2A",
-        tools=[serper],
+        tools=[rag],
         # if you don't specify a Model, it will default to gpt-4
         llm=modelType,
     )
