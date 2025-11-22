@@ -11,3 +11,5 @@
 
 .venv
 *.venv
+
+fine-tuning/deepseek/results

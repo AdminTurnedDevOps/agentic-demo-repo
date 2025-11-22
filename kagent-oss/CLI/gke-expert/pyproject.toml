@@ -1,0 +1,8 @@
+[project]
+name = "gke-expert"
+version = "0.1"
+description = "gke-expert agent"
+readme = "README.md"
+dependencies = [
+  "google-adk>=1.8.0",
+]

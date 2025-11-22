@@ -1,0 +1,7 @@
+agentName: gke-expert
+language: python
+framework: adk
+modelProvider: anthropic
+modelName: claude-sonnet-4-5
+description: ""
+updatedAt: 2025-11-21T09:23:33.084707-05:00

@@ -1,0 +1,52 @@
+[
+  {
+    "instruction": "How do I check if Istio Ambient Mesh is properly installed?",
+    "input": "",
+    "output": "To verify Istio Ambient Mesh installation:\n\n1. Check the ztunnel DaemonSet is running:\n   kubectl get daemonset -n istio-system ztunnel\n\n2. Verify CNI plugin installation:\n   kubectl get daemonset -n istio-system istio-cni-node\n\n3. Check waypoint proxy status:\n   kubectl get gateway -n istio-system\n\n4. Verify ambient mode is enabled:\n   kubectl get configmap istio -n istio-system -o yaml | grep AMBIENT\n\nAll components should show READY status."
+  },
+  {
+    "instruction": "My pods are not being enrolled in the ambient mesh. What should I check?",
+    "input": "",
+    "output": "If pods aren't enrolling in ambient mesh, check these common issues:\n\n1. Verify namespace has the ambient label:\n   kubectl get namespace <namespace> --show-labels\n   Look for: istio.io/dataplane-mode=ambient\n\n2. Add the label if missing:\n   kubectl label namespace <namespace> istio.io/dataplane-mode=ambient\n\n3. Check ztunnel logs for errors:\n   kubectl logs -n istio-system -l app=ztunnel\n\n4. Verify pod has ztunnel redirection:\n   kubectl get pod <pod-name> -o yaml | grep istio-proxy\n\n5. Restart pods after labeling namespace:\n   kubectl rollout restart deployment -n <namespace>"
+  },
+  {
+    "instruction": "What's the difference between ztunnel and waypoint proxy in Ambient Mesh?",
+    "input": "",
+    "output": "In Istio Ambient Mesh:\n\nztunnel (zero-trust tunnel):\n- Runs as a DaemonSet on each node\n- Handles L4 secure connectivity (mTLS)\n- Lightweight, always present\n- Provides identity, encryption, and telemetry\n- No application awareness\n\nWaypoint Proxy:\n- Optional L7 processing component\n- Deployed per namespace or service account\n- Handles advanced traffic management (routing, retries, timeouts)\n- Required for L7 policies and features\n- Can be scaled independently\n\nUse ztunnel for basic security, add waypoint for advanced traffic control."
+  },
+  {
+    "instruction": "How do I troubleshoot mTLS issues in Ambient Mesh?",
+    "input": "",
+    "output": "To troubleshoot mTLS issues in Istio Ambient Mesh:\n\n1. Verify ztunnel is capturing traffic:\n   kubectl logs -n istio-system -l app=ztunnel | grep -i mtls\n\n2. Check certificate status:\n   istioctl proxy-config secret -n istio-system <ztunnel-pod>\n\n3. Verify PeerAuthentication policy:\n   kubectl get peerauthentication -A\n\n4. Test connection with verbose logging:\n   kubectl exec <pod> -- curl -v https://<service>\n\n5. Check for certificate rotation issues:\n   kubectl get pod -n istio-system -l app=istiod -o yaml | grep cert\n\n6. Validate mesh config:\n   kubectl get configmap istio -n istio-system -o yaml\n\nCommon fix: Restart ztunnel pods if certificates are stale."
+  },
+  {
+    "instruction": "How do I deploy a waypoint proxy for a namespace?",
+    "input": "",
+    "output": "To deploy a waypoint proxy for a namespace in Ambient Mesh:\n\n1. Create waypoint proxy:\n   istioctl waypoint generate --for workload --namespace <namespace> | kubectl apply -f -\n\n2. Or using Gateway API:\n   kubectl apply -f - <<EOF\n   apiVersion: gateway.networking.k8s.io/v1beta1\n   kind: Gateway\n   metadata:\n     name: namespace-waypoint\n     namespace: <namespace>\n   spec:\n     gatewayClassName: istio-waypoint\n     listeners:\n     - name: mesh\n       port: 15008\n       protocol: HBONE\n   EOF\n\n3. Verify waypoint is running:\n   kubectl get gateway -n <namespace>\n\n4. Label namespace to use waypoint:\n   kubectl label namespace <namespace> istio.io/use-waypoint=namespace-waypoint\n\n5. Check waypoint status:\n   kubectl get pod -n <namespace> -l gateway.istio.io/managed=istio.io-mesh-controller"
+  },
+  {
+    "instruction": "Why is my traffic not going through the waypoint proxy?",
+    "input": "",
+    "output": "If traffic isn't routing through the waypoint proxy:\n\n1. Verify waypoint is deployed and ready:\n   kubectl get gateway <waypoint-name> -n <namespace>\n\n2. Check namespace or service has waypoint label:\n   kubectl get namespace <namespace> --show-labels\n   Look for: istio.io/use-waypoint=<waypoint-name>\n\n3. Add label if missing:\n   kubectl label namespace <namespace> istio.io/use-waypoint=<waypoint-name>\n\n4. Verify waypoint pods are running:\n   kubectl get pods -n <namespace> -l gateway.istio.io/managed\n\n5. Check VirtualService/DestinationRule references waypoint:\n   kubectl get virtualservice -n <namespace> -o yaml\n\n6. Review waypoint logs:\n   kubectl logs -n <namespace> -l gateway.istio.io/managed\n\n7. Restart application pods to pick up new routing."
+  },
+  {
+    "instruction": "How do I check ztunnel logs for connection issues?",
+    "input": "",
+    "output": "To check ztunnel logs for connection issues:\n\n1. List all ztunnel pods:\n   kubectl get pods -n istio-system -l app=ztunnel\n\n2. View logs from specific node's ztunnel:\n   kubectl logs -n istio-system <ztunnel-pod-name>\n\n3. Filter for errors:\n   kubectl logs -n istio-system -l app=ztunnel | grep -i error\n\n4. Check connection establishment:\n   kubectl logs -n istio-system -l app=ztunnel | grep -i \"connection\"\n\n5. Monitor real-time:\n   kubectl logs -n istio-system -l app=ztunnel -f\n\n6. Check for specific pod traffic:\n   kubectl logs -n istio-system <ztunnel-pod> | grep <pod-ip>\n\nCommon issues to look for: certificate errors, connection refused, timeout errors."
+  },
+  {
+    "instruction": "What are common performance issues with Ambient Mesh?",
+    "input": "",
+    "output": "Common Istio Ambient Mesh performance issues and solutions:\n\n1. High ztunnel CPU usage:\n   - Check for excessive connection churn\n   - Review mTLS cipher suite configuration\n   - Monitor pod-to-pod traffic patterns\n   - Consider node resource limits\n\n2. Waypoint proxy bottlenecks:\n   - Scale waypoint replicas:\n     kubectl scale deployment <waypoint> -n <namespace> --replicas=3\n   - Check for complex routing rules\n   - Review telemetry overhead\n\n3. CNI plugin issues:\n   - Verify CNI configuration\n   - Check for IP allocation conflicts\n   - Review network policy interactions\n\n4. Certificate rotation overhead:\n   - Adjust certificate TTL if rotating too frequently\n   - Check istiod resource usage\n\n5. Monitor with:\n   kubectl top pod -n istio-system\n   kubectl top node"
+  },
+  {
+    "instruction": "How do I migrate from sidecar to Ambient Mesh?",
+    "input": "",
+    "output": "To migrate from sidecar to Istio Ambient Mesh:\n\n1. Install Ambient components (keep existing sidecars):\n   istioctl install --set profile=ambient\n\n2. Verify ambient installation:\n   kubectl get daemonset -n istio-system ztunnel\n   kubectl get daemonset -n istio-system istio-cni-node\n\n3. For each namespace, test with canary approach:\n   a. Deploy waypoint if L7 features needed:\n      istioctl waypoint generate --for workload -n <namespace> | kubectl apply -f -\n   \n   b. Label namespace for ambient:\n      kubectl label namespace <namespace> istio.io/dataplane-mode=ambient\n   \n   c. Remove sidecar injection label:\n      kubectl label namespace <namespace> istio-injection-\n   \n   d. Restart pods:\n      kubectl rollout restart deployment -n <namespace>\n\n4. Verify traffic flow:\n   kubectl logs -n istio-system -l app=ztunnel | grep <namespace>\n\n5. Monitor for issues before proceeding to next namespace\n\n6. Remove old sidecar configurations once stable"
+  },
+  {
+    "instruction": "How do I enable L7 authorization policies in Ambient Mesh?",
+    "input": "",
+    "output": "To enable L7 authorization policies in Ambient Mesh:\n\n1. Deploy a waypoint proxy (required for L7):\n   istioctl waypoint generate --for workload -n <namespace> | kubectl apply -f -\n\n2. Label namespace to use waypoint:\n   kubectl label namespace <namespace> istio.io/use-waypoint=namespace-waypoint\n\n3. Create AuthorizationPolicy with L7 rules:\n   kubectl apply -f - <<EOF\n   apiVersion: security.istio.io/v1beta1\n   kind: AuthorizationPolicy\n   metadata:\n     name: l7-policy\n     namespace: <namespace>\n   spec:\n     action: ALLOW\n     rules:\n     - from:\n       - source:\n           namespaces: [\"frontend\"]\n       to:\n       - operation:\n           methods: [\"GET\", \"POST\"]\n           paths: [\"/api/*\"]\n   EOF\n\n4. Verify policy is applied:\n   kubectl get authorizationpolicy -n <namespace>\n\n5. Test with traffic:\n   kubectl exec <test-pod> -- curl -X GET http://<service>/api/test\n\nNote: L7 policies only work with waypoint proxy, not standalone ztunnel."
+  }
+]
