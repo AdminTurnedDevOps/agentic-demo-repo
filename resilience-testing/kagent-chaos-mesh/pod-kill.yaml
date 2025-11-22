@@ -1,0 +1,17 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kagent-pod-kill
+  namespace: chaos-mesh
+spec:
+  action: pod-kill
+  mode: fixed
+  value: '1'
+  duration: '10s'
+  selector:
+    namespaces:
+      - kagent
+    labelSelectors:
+      'app': 'kagent'
+  scheduler:
+    cron: '@every 10m'
