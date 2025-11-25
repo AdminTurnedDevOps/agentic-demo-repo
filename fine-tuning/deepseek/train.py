@@ -213,7 +213,6 @@ def train():
     )
 
     # Create Trainer
-    # The Trainer handles the training loop, checkpointing, logging, etc.
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -221,7 +220,6 @@ def train():
         data_collator=data_collator,
     )
 
-    # Start training!
     print("\n" + "="*60)
     print("Starting training...")
     print("="*60 + "\n")
