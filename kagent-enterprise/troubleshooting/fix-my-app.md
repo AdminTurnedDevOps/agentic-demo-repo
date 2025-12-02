@@ -16,14 +16,12 @@ You're running an e-commerce platform on Black Friday. Your shopping cart servic
 
 **The Problem**: The shopping cart service has insufficient resources and a memory leak that manifests under high load.
 
----
 
 ## Prerequisites
 - kagent Enterprise installed and running
 - kubectl access to your cluster
 - Prometheus installed (optional, but recommended for full observability)
 
----
 
 ## Deploy the "Broken" Shopping Cart App
 
