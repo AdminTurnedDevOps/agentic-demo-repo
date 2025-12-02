@@ -206,10 +206,10 @@ The K8s agent will:
 2. Identify inadequate resource requests/limits
 3. Analyze current usage patterns
 4. **Automatically patch the deployment** with appropriate resources:
-   - Memory request: 64Mi � 256Mi
-   - Memory limit: 128Mi � 512Mi
-   - CPU request: 100m � 500m
-   - CPU limit: 200m � 1000m
+   - Memory request: 64Mi > 256Mi
+   - Memory limit: 128Mi > 512Mi
+   - CPU request: 100m > 500m
+   - CPU limit: 200m > 1000m
 5. Monitor the rollout
 6. Verify pods are stable
 
