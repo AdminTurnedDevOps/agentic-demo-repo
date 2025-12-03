@@ -6,15 +6,15 @@ This demo showcases kagent out-of-the-box Agents working together to detect and 
 - **Observability Agent**: Detects performance issues using Prometheus metrics
 - **K8s Agent**: Diagnoses the root cause and applies the fix
 
-The Scenario: "Black Friday Meltdown"
+The Scenario: "Resource Constraint Crisis"
 
-You're running an e-commerce platform on Black Friday. Your shopping cart service is experiencing performance degradation:
+You're running an application experiencing performance degradation:
 - High CPU usage (90%+)
 - Memory pressure and OOMKills
-- Slow response times (5s+)
-- Customer complaints flooding in
+- Frequent pod restarts
+- Application instability
 
-**The Problem**: The shopping cart service has insufficient resources and a memory leak that manifests under high load.
+**The Problem**: The application has insufficient resources causing memory pressure and CPU throttling under load.
 
 
 ## Prerequisites
@@ -23,12 +23,12 @@ You're running an e-commerce platform on Black Friday. Your shopping cart servic
 - Prometheus installed (optional, but recommended for full observability)
 
 
-## Deploy the "Broken" Shopping Cart App
+## Deploy the "Broken" Demo App
 
 This deployment intentionally has resource constraints that will cause issues under load.
 
 ```
-kubectl create namespace shop
+kubectl create namespace demo
 ```
 
 ```
@@ -36,8 +36,8 @@ kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cart-config
-  namespace: shop
+  name: app-config
+  namespace: demo
 data:
   MEMORY_LEAK_ENABLED: "true"
   CACHE_SIZE: "10000"
@@ -45,38 +45,49 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: shopping-cart
-  namespace: shop
+  name: demo-app
+  namespace: demo
   labels:
-    app: shopping-cart
+    app: demo-app
     tier: backend
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: shopping-cart
+      app: demo-app
   template:
     metadata:
       labels:
-        app: shopping-cart
+        app: demo-app
         tier: backend
     spec:
       containers:
-      - name: cart-service
-        image: ghcr.io/solo-io/shopping-cart-demo:v1.0.0
-        ports:
-        - containerPort: 8080
-          name: http
+      - name: app
+        image: polinux/stress:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Demo App Starting - Stress Test Mode!"
+          echo "Memory Leak Enabled: $MEMORY_LEAK_ENABLED"
+          echo "Load Level: $LOAD_LEVEL"
+          # Simulate an app with memory pressure and high CPU usage
+          # This will cause OOMKills and CPU throttling with the low resource limits
+          while true; do
+            stress --vm 2 --vm-bytes 150M --vm-hang 0 --timeout 120s &
+            stress --cpu 2 --timeout 120s
+            sleep 10
+          done
         env:
         - name: MEMORY_LEAK_ENABLED
           valueFrom:
             configMapKeyRef:
-              name: cart-config
+              name: app-config
               key: MEMORY_LEAK_ENABLED
-        - name: CACHE_SIZE
+        - name: LOAD_LEVEL
           valueFrom:
             configMapKeyRef:
-              name: cart-config
+              name: app-config
               key: CACHE_SIZE
         resources:
           requests:
@@ -85,26 +96,14 @@ spec:
           limits:
             memory: "128Mi"     # TOO LOW! Will cause OOMKills
             cpu: "200m"         # TOO LOW! Will cause throttling
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 3
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: shopping-cart
-  namespace: shop
+  name: demo-app
+  namespace: demo
   labels:
-    app: shopping-cart
+    app: demo-app
 spec:
   type: ClusterIP
   ports:
@@ -112,55 +111,30 @@ spec:
     targetPort: 8080
     name: http
   selector:
-    app: shopping-cart
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: load-generator
-  namespace: shop
-spec:
-  parallelism: 3
-  completions: 3
-  template:
-    metadata:
-      labels:
-        app: load-generator
-    spec:
-      containers:
-      - name: hey
-        image: williamyeh/hey:latest
-        command:
-        - /bin/sh
-        - -c
-        - |
-          sleep 30
-          echo "Starting Black Friday load test..."
-          hey -z 10m -c 50 -q 10 http://shopping-cart.shop.svc.cluster.local/cart/add
-      restartPolicy: Never
-  backoffLimit: 0
+    app: demo-app
 EOF
 ```
 
 **What's happening?**
-- Shopping cart service with inadequate resources (64Mi/100m CPU)
-- Load generator simulates Black Friday traffic (50 concurrent users)
-- Memory leak enabled via config map (simulates real-world memory leak)
-- Within 2-3 minutes, you'll see OOMKills and performance degradation
+- Demo app with inadequate resources (64Mi memory / 100m CPU)
+- The stress command generates memory and CPU load
+- Memory pressure: allocating 150M with only 128M limit = guaranteed OOMKills
+- CPU stress with 200m limit = guaranteed throttling
+- Within 30-60 seconds, you'll see OOMKills and restarts
 
 ## Observe the Chaos
 
-Wait 2-3 minutes for the load generator to start causing issues.
+Wait 1-2 minutes for the pods to start crashing due to resource constraints.
 
 ```bash
 # Watch pods crash and restart
-kubectl get pods -n shop -w
+kubectl get pods -n demo -w
 
 # Check pod events for OOMKilled errors
-kubectl get events -n shop --sort-by='.lastTimestamp' | grep -i oom
+kubectl get events -n demo --sort-by='.lastTimestamp' | grep -i oom
 
 # Check resource usage
-kubectl top pods -n shop
+kubectl top pods -n demo
 ```
 
 You should see:
@@ -177,14 +151,14 @@ Use kagent's **observability agent** to detect what's wrong.
 
 2. Use the following prompt:
 ```
-I'm getting reports that our shopping cart service in the 'shop' namespace
+I'm getting reports that the demo-app in the 'demo' namespace
 is experiencing performance issues. Can you check the metrics and tell me
 what's happening?
 ```
 
 **Expected Agent Behavior:**
 The observability agent will:
-1. Query Prometheus for pod metrics in the shop namespace
+1. Query Prometheus for pod metrics in the demo namespace
 2. Identify high CPU usage (throttling at limits)
 3. Detect memory pressure and OOMKills
 4. Analyze restart patterns
@@ -196,7 +170,7 @@ Now switch to the **K8s Agent** to resolve the problem.
 
 **Prompt 1: Diagnose and Fix**
 ```
-The shopping-cart deployment in the shop namespace is experiencing OOMKills
+The demo-app deployment in the demo namespace is experiencing OOMKills
 and CPU throttling. Can you investigate and fix the resource constraints?
 ```
 
@@ -215,7 +189,7 @@ The K8s agent will:
 
 **Prompt 2: Verify the Fix**
 ```
-Can you verify that the shopping-cart pods are now stable and performing well?
+Can you verify that the demo-app pods are now stable and performing well?
 ```
 
 **Expected Agent Behavior:**
@@ -225,12 +199,18 @@ The agent will:
 3. Check readiness/liveness probe success
 4. Confirm no recent OOMKills in events
 
+## Cleanup
+
+```bash
+kubectl delete namespace demo
+```
+
 ## Why This Demo
 
-1. **Realistic Scenario**: Black Friday shopping cart issues are relatable and dramatic
+1. **Realistic Scenario**: Resource constraint issues are common in production environments
 2. **Clear Separation of Concerns**:
    - Observability agent focuses on *detection*
    - K8s agent focuses on *remediation*
 3. **Visible Impact**: You can actually watch the pods crash and recover
-4. **Multiple Problem Vectors**: Resource limits, memory leaks, and configuration issues
+4. **Multiple Problem Vectors**: Resource limits, memory pressure, and configuration issues
 5. **End-to-End Story**: From problem detection to resolution
