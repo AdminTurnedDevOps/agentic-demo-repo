@@ -63,6 +63,7 @@ kubectl get gatewayclass
 
 ## LLM Connectivity
 
+1. Create a secret with the Anthropic API key (or whatever provider you decided to go with)
 ```
 kubectl apply -f- <<EOF
 apiVersion: v1
@@ -78,6 +79,7 @@ stringData:
 EOF
 ```
 
+2. Create the agentgateway `Gateway` object
 ```
 kubectl apply -f- <<EOF
 kind: Gateway
@@ -99,11 +101,13 @@ spec:
 EOF
 ```
 
+3. Ensure that the data plane/proxy has a public IP. If you're not running on a cluster that can create a public LB, just `port-forward` the agentgateway service
 ```
 export INGRESS_GW_ADDRESS=$(kubectl get svc -n kgateway-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
+4. Create the `Backend` object routing to your LLM of choice. In this case, the provider is Anthropic
 ```
 kubectl apply -f- <<EOF
 apiVersion: gateway.kgateway.dev/v1alpha1
@@ -126,10 +130,12 @@ spec:
 EOF
 ```
 
+5. Ensure the backend is running
 ```
 kubectl get backend -n kgateway-system
 ```
 
+6. Create a route to the destination (in this case, its messages to your LLM)
 ```
 kubectl apply -f- <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -162,6 +168,7 @@ spec:
 EOF
 ```
 
+7. Create a Model Config that will be used by the new Agent. The Model Config is pointing to your agentgateway instance so traffic can flow securely through agentgateway
 ```
 kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
@@ -179,6 +186,7 @@ spec:
 EOF
 ```
 
+8. Create the Agent with the Model Config that you created in the previous step
 ```
 kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
@@ -207,7 +215,7 @@ spec:
 EOF
 ```
 
-Run `kubectl logs agentgateway-74f485d95c-hgnmn -n kgateway-system` and you should see an output similar to the below:
+9. Run `kubectl logs agentgateway-74f485d95c-hgnmn -n kgateway-system` and you should see an output similar to the below:
 
 ```
 2025-12-05T17:18:05.241265Z     info    request gateway=kgateway-system/agentgateway listener=http route=kgateway-system/claude endpoint=api.anthropic.com:443 src.addr=192.168.26.166:30892 http.method=POST http.host=xxxx3xxxxx-34xxxxx7.us-east-1.elb.amazonaws.com http.path=/anthropic/chat/completions http.version=HTTP/1.1 http.status=200 protocol=llm gen_ai.operation.name=chat gen_ai.provider.name=anthropic gen_ai.request.model=claude-3-5-haiku-latest gen_ai.response.model=claude-3-5-haiku-20241022 gen_ai.usage.input_tokens=182 gen_ai.usage.output_tokens=269 duration=5929ms
