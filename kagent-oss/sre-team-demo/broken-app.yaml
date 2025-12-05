@@ -1,0 +1,97 @@
+# Broken Application - SRE Demo
+# This application is intentionally misconfigured with resource limits
+# that are too restrictive, causing memory pressure and OOMKills
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    app: sre-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: demo
+  labels:
+    app: demo-app
+    scenario: memory-pressure
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+      - name: stress-app
+        # Using stress-ng to simulate a memory-hungry application
+        image: polinux/stress-ng:latest
+        command: ["stress-ng"]
+        args:
+          - "--vm"
+          - "1"
+          - "--vm-bytes"
+          - "150M"  # Tries to allocate 150MB but only has 64MB limit!
+          - "--vm-hang"
+          - "0"
+          - "--timeout"
+          - "0"
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"    # WAY too small for what the app needs
+            cpu: "100m"       # Also too restrictive
+        # Liveness probe that will fail when app is memory-starved
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - /proc/1/status
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  namespace: demo
+  labels:
+    app: demo-app
+spec:
+  selector:
+    app: demo-app
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+---
+# ServiceMonitor for Prometheus to scrape the demo namespace
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: demo-app-monitor
+  namespace: demo
+  labels:
+    app: demo-app
+    release: kube-prometheus  # Must match your kube-prometheus installation
+spec:
+  selector:
+    matchLabels:
+      app: demo-app
+  podMetricsEndpoints:
+  - port: "8080"
+    interval: 15s
