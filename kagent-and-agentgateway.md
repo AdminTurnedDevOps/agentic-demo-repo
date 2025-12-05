@@ -58,21 +58,6 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: anthropic-secret
-  namespace: kgateway-system
-  labels:
-    app: agentgateway
-type: Opaque
-stringData:
-  Authorization: $ANTHROPIC_API_KEY
-EOF
-```
-
-```
-kubectl apply -f- <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: anthropic-secret
   namespace: kagent
   labels:
     app: agentgateway
