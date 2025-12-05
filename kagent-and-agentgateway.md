@@ -1,16 +1,21 @@
 ## kagent install
 
+1. Install the kagent CRDs
 ```
 helm install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
     --namespace kagent \
     --create-namespace
 ```
 
+2. Export your default AI key. In this case, Anthropic is used for the default Model config, but you can change it to any supported provider
 ```
 export ANTHROPIC_API_KEY=your_api_key
 ```
 
+3. Install kagent
+
 The below contains the flag to give the kagent UI a public IP so you can reach it that way instead of doing a `port-forward`. However, if you're running kagent locally or don't want to create a load balancer, you can just remove the `--set ui.service.type=LoadBalancer` part of the installation below.
+
 ```
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --namespace kagent \
@@ -19,22 +24,26 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --set ui.service.type=LoadBalancer
 ```
 
+4. Ensure that kagent is running as expected
 ```
 kubectl get svc -n kagent
 ```
 
 ## kgateway + agentgateway install
 
+1. Install Kubernetes Gateway API CRDs (to be used with the `Gateway` and `HTTPRoute` objects later)
 ```
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
 ```
 
+2. Install the kgateway CRDs (kgateway is used for the gateway control plane)
 ```
 helm upgrade -i --create-namespace --namespace kgateway-system kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds  \
 --version v2.1.1 \
 --set controller.image.pullPolicy=Always
 ```
 
+3. Install kgateay with agentgateway (the agentic data plane/proxy)
 ```
 helm upgrade -i -n kgateway-system kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
     --version v2.1.1 \
@@ -42,10 +51,12 @@ helm upgrade -i -n kgateway-system kgateway oci://cr.kgateway.dev/kgateway-dev/c
     --set controller.image.pullPolicy=Always
 ```
 
+4. Ensure that kgateway is running as expected (you won't see any agentgateway Pods until a `Gateway` object is deployed)
 ```
 kubectl get pods -n kgateway-system
 ```
 
+5. Ensure that you can see the `agentgateway` Gateway Class
 ```
 kubectl get gatewayclass
 ```
@@ -194,6 +205,12 @@ spec:
       - ALWAYS format your response as Markdown
       - Your response will include a summary of actions you took and an explanation of the result
 EOF
+```
+
+Run `kubectl logs agentgateway-74f485d95c-hgnmn -n kgateway-system` and you should see an output similar to the below:
+
+```
+2025-12-05T17:18:05.241265Z     info    request gateway=kgateway-system/agentgateway listener=http route=kgateway-system/claude endpoint=api.anthropic.com:443 src.addr=192.168.26.166:30892 http.method=POST http.host=xxxx3xxxxx-34xxxxx7.us-east-1.elb.amazonaws.com http.path=/anthropic/chat/completions http.version=HTTP/1.1 http.status=200 protocol=llm gen_ai.operation.name=chat gen_ai.provider.name=anthropic gen_ai.request.model=claude-3-5-haiku-latest gen_ai.response.model=claude-3-5-haiku-20241022 gen_ai.usage.input_tokens=182 gen_ai.usage.output_tokens=269 duration=5929ms
 ```
 
 
