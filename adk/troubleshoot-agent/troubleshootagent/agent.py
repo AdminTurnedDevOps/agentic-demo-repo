@@ -212,7 +212,6 @@ tools=[
             'resources_get'
         ]
     ),
-    # Prometheus MCP Server (via npx - much faster than Docker!)
     MCPToolset(
         connection_params=StdioConnectionParams(
             server_params=StdioServerParameters(
@@ -234,7 +233,7 @@ tools=[
             'get_metric_metadata',
             'list_metrics',
             'get_targets'
-        ]
-    )
-]
+            ]
+        )
+    ]
 )
