@@ -22,4 +22,8 @@ It allows you to get real-time search results from trusted sources (instead of i
 
 To provide a few different tools for the SRE/Platform Engineering Agent to be as effective as possible, MCP Servers are incorporated in. The MCP Servers used within the Agent are `stdio`, which means you need a way to secure the traffic to said MCP Server (that is where agentgateway comes into play for Auth and Tool Selection security).
 
-The MCP Server used is `` and the tools used are:
+The MCP Server used for metrics is `prometheus-mcp@latest` and the tools used are:
+- 'query_promql',
+- 'get_metric_metadata',
+- 'list_metrics',
+- 'get_targets'
