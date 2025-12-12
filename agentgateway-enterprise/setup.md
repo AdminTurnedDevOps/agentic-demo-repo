@@ -25,6 +25,7 @@ helm upgrade -i gloo-gateway-crds oci://us-docker.pkg.dev/solo-public/gloo-gatew
 helm upgrade -i gloo-gateway oci://us-docker.pkg.dev/solo-public/gloo-gateway/charts/gloo-gateway --kube-context=$CLUSTER1 \
 -n gloo-system \
 --version 2.0.1 \
+--set gateway.aiExtension.enabled=true \
 --set agentgateway.enabled=true \
 --set licensing.glooGatewayLicenseKey=$GLOO_GATEWAY_LICENSE_KEY \
 --set licensing.agentgatewayLicenseKey=$AGENTGATEWAY_LICENSE_KEY
