@@ -1,1 +1,1 @@
-This repo contains codebases/demos for all things agentic at Solo and OSS.
+This repo contains codebases/demos for all things agentic at Solo.
