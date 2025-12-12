@@ -3,8 +3,8 @@
 This demo will use a backend object that has the type of `static` for MCP Servers so there is a fixed set of tools vs a dynamic configuration that could create tools on the fly based on introspecting data.
 
 There will be two MCP Servers:
-- One that lives in Kubernetes
-- One that is a `stdio` type, so its local
+- Both live in k8s
+- Both use the Streamable HTTP protocol
 
 
 ## Prereqs
