@@ -20,7 +20,7 @@ helm install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
 
 ### With Anthropic
 ```
-export ANTHROPIC_API_KEY=your_api_key
+export ANTHROPIC_API_KEY=
 ```
 
 The below contains the flag to give the kagent UI a public IP so you can reach it that way instead of doing a `port-forward`. However, if you're running kagent locally or don't want to create a load balancer, you can just remove the `--set ui.service.type=LoadBalancer` part of the installation below.

@@ -212,28 +212,28 @@ tools=[
             'resources_get'
         ]
     ),
-    MCPToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command='npx',
-                args=["-y", "prometheus-mcp@latest", "stdio"],  # 'stdio' subcommand is required!
-                env={
-                    **os.environ.copy(),
-                    # Required: export PROMETHEUS_URL="http://your-prom-server.com"
-                    # TODO: In the `Agent` object, pass in the `PROMETHEUS_URL` as an env var
-                    'PROMETHEUS_URL': os.environ['PROMETHEUS_URL'],
-                    # Optional authentication:
-                    # 'PROMETHEUS_USERNAME': os.getenv('PROMETHEUS_USERNAME', ''),
-                    # 'PROMETHEUS_PASSWORD': os.getenv('PROMETHEUS_PASSWORD', ''),
-                },
-            )
-        ),
-        tool_filter=[
-            'query_promql',
-            'get_metric_metadata',
-            'list_metrics',
-            'get_targets'
-            ]
-        )
+    # MCPToolset(
+    #     connection_params=StdioConnectionParams(
+    #         server_params=StdioServerParameters(
+    #             command='npx',
+    #             args=["-y", "prometheus-mcp@latest", "stdio"],  # 'stdio' subcommand is required!
+    #             env={
+    #                 **os.environ.copy(),
+    #                 # Required: export PROMETHEUS_URL="http://your-prom-server.com"
+    #                 # TODO: In the `Agent` object, pass in the `PROMETHEUS_URL` as an env var
+    #                 'PROMETHEUS_URL': os.environ['PROMETHEUS_URL'],
+    #                 # Optional authentication:
+    #                 # 'PROMETHEUS_USERNAME': os.getenv('PROMETHEUS_USERNAME', ''),
+    #                 # 'PROMETHEUS_PASSWORD': os.getenv('PROMETHEUS_PASSWORD', ''),
+    #             },
+    #         )
+    #     ),
+    #     tool_filter=[
+    #         'query_promql',
+    #         'get_metric_metadata',
+    #         'list_metrics',
+    #         'get_targets'
+    #         ]
+    #     )
     ]
 )
