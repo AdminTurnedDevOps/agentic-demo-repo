@@ -1,0 +1,19 @@
+{
+  "name": "troubleshoot-agent",
+  "description": "A Platform Engineering troubleshoot expert agent",
+  "url": "localhost:8080",
+  "version": "0.0.1",
+  "capabilities": {
+    "streaming": true
+  },
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "skills": [
+    {
+      "id": "troubleshoot-agent",
+      "name": "troubleshoot-agent",
+      "description": "Platform Engineering troubleshoot expert for SRE, observability, and Kubernetes",
+      "tags": ["sre", "platform-engineering", "kubernetes", "troubleshooting", "observability"]
+    }
+  ]
+}
