@@ -1,4 +1,4 @@
-# AgentGateway Multi-Data Plane Cost Tracking
+# Agentgateway Multi-Data Plane Cost Tracking
 
 This solution provides centralized cost monitoring and alerting across three agentgateway data planes using kube-prometheus-stack.
 
