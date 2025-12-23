@@ -13,5 +13,3 @@
 *.venv
 
 fine-tuning/deepseek/results
-
-*eks-terraform*
