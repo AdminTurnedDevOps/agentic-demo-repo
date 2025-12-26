@@ -74,8 +74,14 @@ cd ../../auth0
 
 ### 4. Deploy to Kubernetes
 
-```bash
-kubectl apply -k k8s/
+#### For Auth0
+```
+kubectl apply -k auth0/k8s/
+```
+
+#### For EntraID
+```
+kubectl apply -k entraid/k8s/
 ```
 
 ### 5. Test
