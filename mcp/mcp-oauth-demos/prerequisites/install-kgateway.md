@@ -1,6 +1,11 @@
 ## Enterprise
 
 ```
+export GLOO_GATEWAY_LICENSE_KEY=
+export AGENTGATEWAY_LICENSE_KEY=
+```
+
+```
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
 ```
 
@@ -13,6 +18,8 @@ helm upgrade -i -n gloo-system gloo-gateway oci://us-docker.pkg.dev/solo-public/
 --version v2.0.0-main \
 --set gateway.aiExtension.enabled=true \
 --set agentgateway.enabled=true \
+--set licensing.glooGatewayLicenseKey=$GLOO_GATEWAY_LICENSE_KEY \
+--set licensing.agentgatewayLicenseKey=$AGENTGATEWAY_LICENSE_KEY
 ```
 
 ## OSS
