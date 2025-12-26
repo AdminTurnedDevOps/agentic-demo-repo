@@ -63,7 +63,7 @@ There are scripts to get a test auth0 token and a test entraid token. Those are 
 3. You authenticate with your identity provider
 4. The script outputs the JWT token
 
-You'd then use that token as a Bearer token in the Authorization header when connecting to the MCP server through agentgateway
+You'd then use that token as a Bearer token in the Authorization header (`Authorization: Bearer <your_token>`) when connecting to the MCP server through agentgateway
 
 ```
 cd ../shared/scripts
