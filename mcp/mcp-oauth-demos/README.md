@@ -97,8 +97,5 @@ OR
 ```
 
 # Test tools
-```
-cd ../../entra-id/test-client  # or ../../auth0/test-client
-./test-mcp.sh --token $TOKEN --tool echo
-./test-mcp.sh --token $TOKEN --tool system_status  # Will fail without admin role
-```
+
+Testing with an MCP Client (WIP)
