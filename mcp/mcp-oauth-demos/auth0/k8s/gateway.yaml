@@ -1,8 +1,8 @@
-apiVersion: gateway.kgateway.dev/v1
+apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: mcp-gateway
-  namespace: mcp-demo-auth0
+  namespace: kgateway-system
   labels:
     app: mcp-gateway
 spec:
@@ -15,11 +15,25 @@ spec:
         namespaces:
           from: Same
 ---
-apiVersion: gateway.kgateway.dev/v1
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: demo-mcp-server
+  namespace: kgateway-system
+spec:
+  mcp:
+    targets:
+      - name: demo-mcp-server
+        selector:
+          services:
+            matchLabels:
+              app: mcp-server
+---
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: mcp-route
-  namespace: mcp-demo-auth0
+  namespace: kgateway-system
   labels:
     app: mcp-gateway
 spec:
@@ -27,6 +41,7 @@ spec:
     - name: mcp-gateway
   rules:
     - backendRefs:
-        - group: gateway.kgateway.dev
-          kind: MCPTarget
-          name: demo-mcp-server
+      - name: demo-mcp-server
+        namespace: kgateway-system
+        group: agentgatewaygateway.kgateway.dev
+        kind: AgentgatewayBackend

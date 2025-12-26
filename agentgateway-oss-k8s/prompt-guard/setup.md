@@ -59,7 +59,7 @@ EOF
 A Backend resource to define a backing destination that you want kgateway to route to. In this case, it's Claude.
 ```
 kubectl apply -f- <<EOF
-apiVersion: gateway.kgateway.dev/v1alpha1
+apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
   labels:
@@ -85,7 +85,7 @@ kubectl get agentgatewaybackend -n kgateway-system
 
 7. Apply the Route so you can reach the LLM
 ```
-kubectl apply -f- <<EOF
+kubectl delete -f- <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -111,7 +111,7 @@ spec:
     backendRefs:
     - name: anthropic
       namespace: kgateway-system
-      group: gateway.kgateway.dev
+      group: agentgatewaygateway.kgateway.dev
       kind: AgentgatewayBackend
 EOF
 ```

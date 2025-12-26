@@ -1,0 +1,53 @@
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: mcp-oauth-policy
+  namespace: kgateway-system
+  labels:
+    app: mcp-gateway
+spec:
+  targetRefs:
+    - group: gateway.kgateway.dev
+      kind: Gateway
+      name: mcp-gateway
+  traffic:
+    cors:
+      allowOrigins:
+        - "*"
+      allowMethods:
+        - GET
+        - POST
+        - OPTIONS
+      allowHeaders:
+        - "*"
+      exposeHeaders:
+        - "*"
+      maxAge: 86400
+    jwtAuthentication:
+      providers:
+        - issuer: "https://{AUTH0_DOMAIN}/"
+          audiences:
+            - "{API_IDENTIFIER}"
+          jwks:
+            remote:
+              jwksUri: "https://{AUTH0_DOMAIN}/.well-known/jwks.json"
+              cacheDuration: 5m
+  backend:
+    mcp:
+      authorization:
+        action: Allow
+        policy:
+          matchExpressions:
+            # Public tool - any authenticated user can call
+            - 'mcp.tool.name == "echo"'
+            # Any authenticated user can get their own info
+            - 'mcp.tool.name == "get_user_info"'
+            # Requires files:read scope
+            # Auth0 scopes are in the 'scope' claim as a space-separated string
+            - 'mcp.tool.name == "list_files" && jwt.scope.contains("files:read")'
+            # Requires files:delete scope AND admin role (custom claim)
+            # Auth0 custom claims must be namespaced (e.g., https://mcp-demo/roles)
+            # Access namespaced claims using bracket notation: jwt["claim-name"]
+            - 'mcp.tool.name == "delete_file" && jwt.scope.contains("files:delete") && jwt["https://mcp-demo/roles"].contains("admin")'
+            # Requires admin role only (custom claim)
+            - 'mcp.tool.name == "system_status" && jwt["https://mcp-demo/roles"].contains("admin")'
