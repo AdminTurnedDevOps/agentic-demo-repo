@@ -10,11 +10,9 @@ mcp-oauth-demos/
 ├── entra-id/              # Microsoft Entra ID demo
 │   ├── setup-entra.sh     # Setup wizard
 │   ├── k8s/               # Kubernetes manifests
-│   └── test-client/       # Test scripts
 ├── auth0/                 # Auth0 demo
 │   ├── setup-auth0.sh     # Setup wizard
 │   ├── k8s/               # Kubernetes manifests
-│   └── test-client/       # Test scripts
 └── shared/
     ├── mcp-server/        # Python MCP server (Streamable HTTP)
     └── scripts/           # Token helpers
