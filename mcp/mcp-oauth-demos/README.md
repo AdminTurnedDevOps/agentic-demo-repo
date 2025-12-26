@@ -2,6 +2,24 @@
 
 Demos for securing MCP servers with OAuth authentication using kgateway/agentgateway on Kubernetes. Includes examples for both **Microsoft Entra ID** and **Auth0**.
 
+## Project Structure
+
+```
+mcp-oauth-demos/
+├── prerequisites/         # kgateway installation scripts
+├── entra-id/              # Microsoft Entra ID demo
+│   ├── setup-entra.sh     # Setup wizard
+│   ├── k8s/               # Kubernetes manifests
+│   └── test-client/       # Test scripts
+├── auth0/                 # Auth0 demo
+│   ├── setup-auth0.sh     # Setup wizard
+│   ├── k8s/               # Kubernetes manifests
+│   └── test-client/       # Test scripts
+└── shared/
+    ├── mcp-server/        # Python MCP server (Streamable HTTP)
+    └── scripts/           # Token helpers
+```
+
 ## What This Does
 
 Shows how agentgateway can validate JWT tokens and enforce tool-level authorization for MCP servers:
@@ -83,22 +101,4 @@ OR
 cd ../../entra-id/test-client  # or ../../auth0/test-client
 ./test-mcp.sh --token $TOKEN --tool echo
 ./test-mcp.sh --token $TOKEN --tool system_status  # Will fail without admin role
-```
-
-## Project Structure
-
-```
-mcp-oauth-demos/
-├── prerequisites/          # kgateway installation scripts
-├── entra-id/              # Microsoft Entra ID demo
-│   ├── setup-entra.sh     # Setup wizard
-│   ├── k8s/               # Kubernetes manifests
-│   └── test-client/       # Test scripts
-├── auth0/                 # Auth0 demo
-│   ├── setup-auth0.sh     # Setup wizard
-│   ├── k8s/               # Kubernetes manifests
-│   └── test-client/       # Test scripts
-└── shared/
-    ├── mcp-server/        # Python MCP server (Streamable HTTP)
-    └── scripts/           # Token helpers
 ```
