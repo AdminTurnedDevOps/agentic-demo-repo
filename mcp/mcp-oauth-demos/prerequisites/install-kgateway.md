@@ -1,3 +1,22 @@
+## Enterprise
+
+```
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
+```
+
+```
+helm upgrade -i --create-namespace --namespace gloo-system --version v2.0.0-main gloo-gateway-crds oci://us-docker.pkg.dev/solo-public/gloo-gateway/charts/gloo-gateway-crds
+```
+
+```
+helm upgrade -i -n gloo-system gloo-gateway oci://us-docker.pkg.dev/solo-public/gloo-gateway/charts/gloo-gateway \
+--version v2.0.0-main \
+--set gateway.aiExtension.enabled=true \
+--set agentgateway.enabled=true \
+```
+
+## OSS
+
 ```
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
 ```

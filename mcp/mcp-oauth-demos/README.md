@@ -35,13 +35,9 @@ Shows how agentgateway can validate JWT tokens and enforce tool-level authorizat
 
 ## Quick Start
 
-### 1. Install kgateway
+### 1. Install kgateway/agentgateway
 
-```
-cd prerequisites
-
-./install-kgateway.md
-```
+1. Install OSS or Enterprise kgateway/agentgateway
 
 ### 2. Build the MCP Server
 
