@@ -12,7 +12,7 @@ Shows how agentgateway can validate JWT tokens and enforce tool-level authorizat
 
 ## Prerequisites
 
-- Kubernetes cluster (minikube, kind, EKS, etc.)
+- Kubernetes cluster
 - kubectl and helm installed
 - Docker
 - jq
@@ -74,7 +74,8 @@ cd ../shared/scripts
 ```
 OR
 
-```/get-test-token-auth0.sh
+```
+/get-test-token-auth0.sh
 ```
 
 # Test tools
