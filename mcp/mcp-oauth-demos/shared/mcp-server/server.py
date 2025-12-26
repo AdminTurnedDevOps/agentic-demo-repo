@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-MCP Server for OAuth Security Demo
-
 This server implements 5 tools with different authorization requirements:
 1. echo - Public tool, any authenticated user
 2. get_user_info - Returns info about the authenticated user from JWT
@@ -11,8 +9,6 @@ This server implements 5 tools with different authorization requirements:
 
 The server expects agentgateway to handle JWT validation and pass user info
 via headers or request context.
-
-Uses Streamable HTTP transport (not deprecated SSE).
 """
 
 import asyncio
@@ -35,7 +31,6 @@ from starlette.routing import Route, Mount
 from starlette.requests import Request
 from starlette.responses import Response
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -78,7 +73,6 @@ def extract_user_from_headers(headers: Dict[str, str]) -> Optional[Dict[str, Any
     if "authorization" in headers:
         user_info["has_token"] = True
 
-    # Log all headers for debugging
     logger.info(f"Request headers: {headers}")
 
     return user_info if user_info else None
@@ -168,8 +162,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         ]
 
     elif name == "get_user_info":
-        # In a real implementation, agentgateway would pass JWT claims as headers
-        # For this demo, we'll return a simulated response
         user_info = {
             "message": "User info would be extracted from JWT claims passed by agentgateway",
             "note": "agentgateway can be configured to pass JWT claims as X-JWT-Claim-* headers",
@@ -203,7 +195,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     elif name == "delete_file":
         filename = arguments.get("filename", "")
-        # This is a simulated delete - in reality, we'd delete the file
         result = {
             "status": "success",
             "message": f"File '{filename}' would be deleted (simulated)",
@@ -238,11 +229,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         raise ValueError(f"Unknown tool: {name}")
 
 
-# Create Streamable HTTP transport
 transport = StreamableHTTPServerTransport()
 
 
-# Health check endpoint
 async def health_check(request: Request):
     """Health check endpoint for Kubernetes probes."""
     return Response(
@@ -255,7 +244,6 @@ async def health_check(request: Request):
     )
 
 
-# Create Starlette app with Streamable HTTP transport
 app = Starlette(
     debug=True,
     routes=[
