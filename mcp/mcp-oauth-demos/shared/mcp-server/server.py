@@ -90,6 +90,8 @@ def system_status() -> str:
 
 
 if __name__ == "__main__":
+    import uvicorn
+
     port = int(os.getenv("PORT", "8080"))
     host = os.getenv("HOST", "0.0.0.0")
 
@@ -97,5 +99,6 @@ if __name__ == "__main__":
     print("Available endpoints:")
     print(f"  - MCP (Streamable HTTP): http://{host}:{port}/mcp")
 
-    # Run using streamable HTTP transport
-    mcp.run(transport="streamable-http", host=host, port=port)
+    # Get the Streamable HTTP ASGI app and run with uvicorn
+    app = mcp.streamable_http_app()
+    uvicorn.run(app, host=host, port=port)
