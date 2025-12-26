@@ -47,7 +47,7 @@ cd prerequisites
 
 ```
 cd ../shared/mcp-server
-docker build -t mcp-oauth-demo:latest .
+docker build -t mcp-oauth-demo:latest --platform=linux/amd64 .
 ```
 
 ### 3. Configure Identity Provider
@@ -97,3 +97,7 @@ OR
 # Test tools
 
 Testing with an MCP Client (WIP)
+
+```
+http://ALB_PUB_IP:8080/mcp
+```

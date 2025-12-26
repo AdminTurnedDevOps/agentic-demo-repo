@@ -14,3 +14,19 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+---
+apiVersion: gateway.kgateway.dev/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-route
+  namespace: mcp-demo-entra
+  labels:
+    app: mcp-gateway
+spec:
+  parentRefs:
+    - name: mcp-gateway
+  rules:
+    - backendRefs:
+        - group: gateway.kgateway.dev
+          kind: MCPTarget
+          name: demo-mcp-server

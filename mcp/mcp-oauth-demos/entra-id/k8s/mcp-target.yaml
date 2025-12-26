@@ -6,12 +6,9 @@ metadata:
   labels:
     app: mcp-server
 spec:
-  # Reference to the MCP server running in the cluster
   backend:
     service:
       name: mcp-server
       port: 8080
-  # Use Streamable HTTP transport (not deprecated SSE)
   transport: streamable-http
-  # Path to the MCP endpoint
   path: /mcp

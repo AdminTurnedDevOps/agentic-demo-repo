@@ -11,7 +11,6 @@ spec:
       kind: Gateway
       name: mcp-gateway
   policy:
-    # CORS configuration for browser-based clients
     cors:
       allowOrigins:
         - "*"
@@ -24,8 +23,6 @@ spec:
       exposeHeaders:
         - "*"
       maxAge: 86400
-
-    # JWT validation configuration for Microsoft Entra ID
     glooJWT:
       providers:
         entra:
@@ -38,17 +35,6 @@ spec:
             remote:
               url: "https://login.microsoftonline.com/{TENANT_ID}/discovery/v2.0/keys"
               cacheDuration: 5m
-          # Optional: Configure header forwarding to pass JWT claims to the MCP server
-          claimsToHeaders:
-            - claim: sub
-              header: X-JWT-Claim-Sub
-            - claim: email
-              header: X-JWT-Claim-Email
-            - claim: preferred_username
-              header: X-JWT-Claim-Preferred-Username
-
-    # MCP-specific authorization rules using CEL expressions
-    # These rules are evaluated AFTER JWT validation succeeds
     mcpAuthorization:
       rules:
         # Public tool - any authenticated user can call
@@ -72,21 +58,3 @@ spec:
         # Requires admin role only
         - name: allow-system-status
           expression: 'mcp.tool.name == "system_status" && jwt.roles.contains("admin")'
-
----
-# HTTPRoute to connect the Gateway to the MCPTarget
-apiVersion: gateway.kgateway.dev/v1
-kind: HTTPRoute
-metadata:
-  name: mcp-route
-  namespace: mcp-demo-entra
-  labels:
-    app: mcp-gateway
-spec:
-  parentRefs:
-    - name: mcp-gateway
-  rules:
-    - backendRefs:
-        - group: gateway.kgateway.dev
-          kind: MCPTarget
-          name: demo-mcp-server

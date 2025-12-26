@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: mcp-server
-        image: mcp-oauth-demo:latest
+        image: adminturneddevops/mcp-oauth-demo:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
