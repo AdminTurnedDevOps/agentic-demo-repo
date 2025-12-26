@@ -8,10 +8,10 @@ Demos for securing MCP servers with OAuth authentication using kgateway/agentgat
 mcp-oauth-demos/
 ├── prerequisites/         # kgateway installation scripts
 ├── entra-id/              # Microsoft Entra ID demo
-│   ├── setup-entra.sh     # Setup wizard
+│   ├── setup.md           # Setup instructions
 │   ├── k8s/               # Kubernetes manifests
 ├── auth0/                 # Auth0 demo
-│   ├── setup-auth0.sh     # Setup wizard
+│   ├── setup.md           # Setup instructions
 │   ├── k8s/               # Kubernetes manifests
 └── shared/
     ├── mcp-server/        # Python MCP server (Streamable HTTP)
@@ -60,17 +60,9 @@ docker push YOUR_REGISTRY/mcp-oauth-demo:latest
 
 ### 3. Configure Identity Provider
 
-**For Entra ID:**
-```bash
-cd ../../entra-id
-./setup-entra.sh
-```
+**For Entra ID:** Follow [entra-id/SETUP.md](entra-id/SETUP.md)
 
-**For Auth0:**
-```bash
-cd ../../auth0
-./setup-auth0.sh
-```
+**For Auth0:** Follow [auth0/SETUP.md](auth0/SETUP.md)
 
 ### 4. Deploy to Kubernetes
 
