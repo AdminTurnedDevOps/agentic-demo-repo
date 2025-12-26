@@ -23,11 +23,9 @@ from mcp.server.streamable_http import StreamableHTTPServerTransport
 from mcp.types import (
     Tool,
     TextContent,
-    CallToolRequest,
-    CallToolResult,
 )
 from starlette.applications import Starlette
-from starlette.routing import Route, Mount
+from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -229,9 +227,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         raise ValueError(f"Unknown tool: {name}")
 
 
-transport = StreamableHTTPServerTransport()
-
-
 async def health_check(request: Request):
     """Health check endpoint for Kubernetes probes."""
     return Response(
@@ -244,10 +239,21 @@ async def health_check(request: Request):
     )
 
 
+async def handle_mcp(request: Request):
+    """Handle MCP requests using Streamable HTTP transport."""
+    # Get or create session ID from header or generate new one
+    session_id = request.headers.get("x-mcp-session-id", str(id(request)))
+
+    transport = StreamableHTTPServerTransport(session_id)
+
+    # Handle the request
+    return await transport.handle_request(request, mcp_server)
+
+
 app = Starlette(
     debug=True,
     routes=[
-        Mount("/mcp", app=transport.get_asgi_app(mcp_server)),
+        Route("/mcp", endpoint=handle_mcp, methods=["GET", "POST", "DELETE"]),
         Route("/health", endpoint=health_check),
     ]
 )
