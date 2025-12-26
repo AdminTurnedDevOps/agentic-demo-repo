@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-demo-entra
+  labels:
+    app: mcp-oauth-demo
+    provider: entra-id

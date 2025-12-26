@@ -1,0 +1,16 @@
+apiVersion: gateway.kgateway.dev/v1
+kind: Gateway
+metadata:
+  name: mcp-gateway
+  namespace: mcp-demo-auth0
+  labels:
+    app: mcp-gateway
+spec:
+  gatewayClassName: kgateway
+  listeners:
+    - name: mcp
+      port: 3000
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same

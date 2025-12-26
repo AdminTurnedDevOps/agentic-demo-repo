@@ -1,0 +1,93 @@
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: GlooTrafficPolicy
+metadata:
+  name: mcp-oauth-policy
+  namespace: mcp-demo-auth0
+  labels:
+    app: mcp-gateway
+spec:
+  targetRefs:
+    - group: gateway.kgateway.dev
+      kind: Gateway
+      name: mcp-gateway
+  policy:
+    # CORS configuration for browser-based clients
+    cors:
+      allowOrigins:
+        - "*"
+      allowMethods:
+        - GET
+        - POST
+        - OPTIONS
+      allowHeaders:
+        - "*"
+      exposeHeaders:
+        - "*"
+      maxAge: 86400
+
+    # JWT validation configuration for Auth0
+    glooJWT:
+      providers:
+        auth0:
+          # IMPORTANT: Replace {AUTH0_DOMAIN} and {API_IDENTIFIER} with your actual values
+          # Run the setup-auth0.sh script to configure these automatically
+          issuer: "https://{AUTH0_DOMAIN}/"
+          audiences:
+            - "{API_IDENTIFIER}"
+          jwks:
+            remote:
+              url: "https://{AUTH0_DOMAIN}/.well-known/jwks.json"
+              cacheDuration: 5m
+          # Optional: Configure header forwarding to pass JWT claims to the MCP server
+          claimsToHeaders:
+            - claim: sub
+              header: X-JWT-Claim-Sub
+            - claim: email
+              header: X-JWT-Claim-Email
+            - claim: "https://mcp-demo/roles"
+              header: X-JWT-Claim-Roles
+
+    # MCP-specific authorization rules using CEL expressions
+    # These rules are evaluated AFTER JWT validation succeeds
+    mcpAuthorization:
+      rules:
+        # Public tool - any authenticated user can call
+        - name: allow-echo
+          expression: 'mcp.tool.name == "echo"'
+
+        # Any authenticated user can get their own info
+        - name: allow-get-user-info
+          expression: 'mcp.tool.name == "get_user_info"'
+
+        # Requires files:read scope
+        # Auth0 scopes are in the 'scope' claim as a space-separated string
+        - name: allow-list-files
+          expression: 'mcp.tool.name == "list_files" && jwt.scope.contains("files:read")'
+
+        # Requires files:delete scope AND admin role (custom claim)
+        # Auth0 custom claims must be namespaced (e.g., https://mcp-demo/roles)
+        # Access namespaced claims using bracket notation: jwt["claim-name"]
+        - name: allow-delete-file
+          expression: 'mcp.tool.name == "delete_file" && jwt.scope.contains("files:delete") && jwt["https://mcp-demo/roles"].contains("admin")'
+
+        # Requires admin role only (custom claim)
+        - name: allow-system-status
+          expression: 'mcp.tool.name == "system_status" && jwt["https://mcp-demo/roles"].contains("admin")'
+
+---
+# HTTPRoute to connect the Gateway to the MCPTarget
+apiVersion: gateway.kgateway.dev/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-route
+  namespace: mcp-demo-auth0
+  labels:
+    app: mcp-gateway
+spec:
+  parentRefs:
+    - name: mcp-gateway
+  rules:
+    - backendRefs:
+        - group: gateway.kgateway.dev
+          kind: MCPTarget
+          name: demo-mcp-server

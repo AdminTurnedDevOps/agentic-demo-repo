@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mcp-demo-entra
+
+resources:
+  - namespace.yaml
+  - mcp-server-deployment.yaml
+  - mcp-server-service.yaml
+  - gateway.yaml
+  - mcp-target.yaml
+  - gloo-traffic-policy.yaml
+  # Uncomment if you've created secrets.yaml (not the template)
+  # - secrets.yaml
+
+labels:
+  - pairs:
+      demo: mcp-oauth
+      provider: entra-id

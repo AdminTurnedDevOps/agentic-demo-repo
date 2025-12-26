@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-demo-auth0
+  labels:
+    app: mcp-oauth-demo
+    provider: auth0
