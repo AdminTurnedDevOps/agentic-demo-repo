@@ -5,8 +5,7 @@ namespace: mcp-demo-entra
 
 resources:
   - namespace.yaml
-  - mcp-server-deployment.yaml
-  - mcp-server-service.yaml
+  - mcp-server.yaml
   - gateway.yaml
   - mcp-target.yaml
   - gloo-traffic-policy.yaml
