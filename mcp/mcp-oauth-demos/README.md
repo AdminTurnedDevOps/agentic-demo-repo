@@ -2,6 +2,8 @@
 
 Demos for securing MCP servers with OAuth authentication using kgateway/agentgateway on Kubernetes. Includes examples for both **Microsoft Entra ID** and **Auth0**.
 
+**IGNORE ALL THINGS MICROSOFT ENTRA ID IN THIS README**. Entra ID is currently in WIP
+
 ## Project Structure
 
 ```
