@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: mcp-server
-        image: mcp-oauth-demo:latest
+        image: adminturneddevops/mcp-oauth-demo:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -47,3 +47,20 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-server
+  namespace: mcp-demo-auth0
+  labels:
+    app: mcp-server
+spec:
+  selector:
+    app: mcp-server
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP

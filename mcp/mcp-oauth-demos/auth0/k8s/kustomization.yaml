@@ -5,13 +5,10 @@ namespace: mcp-demo-auth0
 
 resources:
   - namespace.yaml
-  - mcp-server-deployment.yaml
-  - mcp-server-service.yaml
+  - mcp-server.yaml
   - gateway.yaml
   - mcp-target.yaml
   - gloo-traffic-policy.yaml
-  # Uncomment if you've created secrets.yaml (not the template)
-  # - secrets.yaml
 
 labels:
   - pairs:

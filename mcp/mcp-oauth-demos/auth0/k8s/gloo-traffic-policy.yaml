@@ -11,7 +11,6 @@ spec:
       kind: Gateway
       name: mcp-gateway
   policy:
-    # CORS configuration for browser-based clients
     cors:
       allowOrigins:
         - "*"
@@ -24,8 +23,6 @@ spec:
       exposeHeaders:
         - "*"
       maxAge: 86400
-
-    # JWT validation configuration for Auth0
     glooJWT:
       providers:
         auth0:
@@ -38,15 +35,6 @@ spec:
             remote:
               url: "https://{AUTH0_DOMAIN}/.well-known/jwks.json"
               cacheDuration: 5m
-          # Optional: Configure header forwarding to pass JWT claims to the MCP server
-          claimsToHeaders:
-            - claim: sub
-              header: X-JWT-Claim-Sub
-            - claim: email
-              header: X-JWT-Claim-Email
-            - claim: "https://mcp-demo/roles"
-              header: X-JWT-Claim-Roles
-
     # MCP-specific authorization rules using CEL expressions
     # These rules are evaluated AFTER JWT validation succeeds
     mcpAuthorization:
