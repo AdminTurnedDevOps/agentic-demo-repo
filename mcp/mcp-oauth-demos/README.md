@@ -50,6 +50,14 @@ cd ../shared/mcp-server
 docker build -t mcp-oauth-demo:latest --platform=linux/amd64 .
 ```
 
+```
+docker tag mcp-oauth-demo:latest YOUR_REGISTRY/mcp-oauth-demo:latest
+```
+
+```
+docker push YOUR_REGISTRY/mcp-oauth-demo:latest
+```
+
 ### 3. Configure Identity Provider
 
 **For Entra ID:**
