@@ -13,3 +13,5 @@
 *.venv
 
 fine-tuning/deepseek/results
+
+*entra-id*
