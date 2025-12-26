@@ -73,21 +73,3 @@ spec:
         # Requires admin role only (custom claim)
         - name: allow-system-status
           expression: 'mcp.tool.name == "system_status" && jwt["https://mcp-demo/roles"].contains("admin")'
-
----
-# HTTPRoute to connect the Gateway to the MCPTarget
-apiVersion: gateway.kgateway.dev/v1
-kind: HTTPRoute
-metadata:
-  name: mcp-route
-  namespace: mcp-demo-auth0
-  labels:
-    app: mcp-gateway
-spec:
-  parentRefs:
-    - name: mcp-gateway
-  rules:
-    - backendRefs:
-        - group: gateway.kgateway.dev
-          kind: MCPTarget
-          name: demo-mcp-server
