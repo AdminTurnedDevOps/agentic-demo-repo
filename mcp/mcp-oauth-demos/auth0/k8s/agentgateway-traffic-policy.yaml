@@ -30,8 +30,13 @@ spec:
             - "{API_IDENTIFIER}"
           jwks:
             remote:
-              jwksUri: "https://{AUTH0_DOMAIN}/.well-known/jwks.json"
+              jwksPath: ".well-known/jwks.json"
               cacheDuration: 5m
+              backendRef:
+                group: ""
+                kind: Service
+                name: auth0-jwks
+                namespace: kgateway-system
   backend:
     mcp:
       authorization:
