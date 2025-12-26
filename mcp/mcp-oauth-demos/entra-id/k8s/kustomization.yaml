@@ -9,8 +9,6 @@ resources:
   - gateway.yaml
   - mcp-target.yaml
   - gloo-traffic-policy.yaml
-  # Uncomment if you've created secrets.yaml (not the template)
-  # - secrets.yaml
 
 labels:
   - pairs:
