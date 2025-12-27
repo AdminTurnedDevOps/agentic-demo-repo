@@ -14,5 +14,5 @@ helm upgrade -i -n agentgateway-system agentgateway oci://ghcr.io/kgateway-dev/c
 ```
 
 ```
-kubectl get pods -n kgateway-system
+kubectl get pods -n agentgateway-system
 ```

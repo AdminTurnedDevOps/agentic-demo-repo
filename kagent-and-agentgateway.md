@@ -86,7 +86,7 @@ kind: Gateway
 apiVersion: gateway.networking.k8s.io/v1
 metadata:
   name: agentgateway
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 spec:

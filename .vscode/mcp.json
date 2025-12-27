@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "arctl": {
+      "type": "http",
+      "url": "http://172.184.152.222:3000/mcp"
+    }
+  }
+}
