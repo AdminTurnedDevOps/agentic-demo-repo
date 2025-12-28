@@ -103,7 +103,7 @@ EOF
 
 3. Ensure that the data plane/proxy has a public IP. If you're not running on a cluster that can create a public LB, just `port-forward` the agentgateway service
 ```
-export INGRESS_GW_ADDRESS=$(kubectl get svc -n kgateway-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
+export INGRESS_GW_ADDRESS=$(kubectl get svc -n agentgateway-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
