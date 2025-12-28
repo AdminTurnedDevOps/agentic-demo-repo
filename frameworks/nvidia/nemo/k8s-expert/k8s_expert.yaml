@@ -1,0 +1,20 @@
+function_groups:
+  mcp_tools:
+    _type: mcp_client
+    server:
+      transport: streamable-http
+      url: "http://172.184.152.222:3000/mcp"
+    include:
+      - echo
+
+llms:
+  my_llm:
+    _type: nat.llm/nim
+    model: meta/llama-3.1-70b-instruct
+    api_key: ${NVIDIA_API_KEY}  # Set via environment variable
+
+workflow:
+  _type: react_agent
+  llm_name: my_llm
+  tool_names:
+    - mcp_tools

@@ -37,8 +37,8 @@ spec:
     spec:
       containers:
       - name: mcp-server
-        image: adminturneddevops/mcp-oauth-demo:latest
-        imagePullPolicy: IfNotPresent
+        image: adminturneddevops/mcp-oauth-demo:v0.1
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
@@ -104,10 +104,11 @@ spec:
   mcp:
     targets:
       - name: demo-mcp-server
-        selector:
-          services:
-            matchLabels:
-              app: mcp-server
+        static:
+          host: mcp-server.default.svc.cluster.local
+          port: 8080
+          path: /mcp
+          protocol: StreamableHTTP
 EOF
 ```
 
@@ -127,7 +128,7 @@ spec:
     - backendRefs:
       - name: demo-mcp-server
         namespace: agentgateway-system
-        group: agentgateway.kgateway.dev
+        group: agentgateway.dev
         kind: AgentgatewayBackend
 EOF
 ```

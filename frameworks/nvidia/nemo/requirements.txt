@@ -1,0 +1,3 @@
+nvidia-nat
+nvidia-nat[langchain]
+nvidia-nat[mcp]

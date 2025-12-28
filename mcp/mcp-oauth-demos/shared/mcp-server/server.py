@@ -17,9 +17,21 @@ import os
 from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
-# Initialize FastMCP server
-mcp = FastMCP("mcp-oauth-demo")
+# Initialize FastMCP server with host and port configuration
+# Bind to all interfaces (0.0.0.0) but disable DNS rebinding protection
+# since security is handled by the agentgateway layer
+port = int(os.getenv("PORT", "8080"))
+host = os.getenv("HOST", "0.0.0.0")
+mcp = FastMCP(
+    "mcp-oauth-demo",
+    host=host,
+    port=port,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    )
+)
 
 # Simulated file system for demo
 DEMO_FILES = [
@@ -90,15 +102,11 @@ def system_status() -> str:
 
 
 if __name__ == "__main__":
-    import uvicorn
-
-    port = int(os.getenv("PORT", "8080"))
-    host = os.getenv("HOST", "0.0.0.0")
-
     print(f"Starting MCP OAuth Demo Server on {host}:{port}")
     print("Available endpoints:")
     print(f"  - MCP (Streamable HTTP): http://{host}:{port}/mcp")
+    print("DNS rebinding protection: DISABLED (security handled by agentgateway)")
 
-    # Get the Streamable HTTP ASGI app and run with uvicorn
-    app = mcp.streamable_http_app()
-    uvicorn.run(app, host=host, port=port)
+    # Run the MCP server with Streamable HTTP transport
+    # Note: host, port, and security settings configured in FastMCP constructor above
+    mcp.run(transport="streamable-http")
