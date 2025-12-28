@@ -7,6 +7,10 @@ helm install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
 ```
 
 ```
+export ANTHROPIC_API_KEY=your_api_key
+```
+
+```
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --namespace kagent \
     --set providers.default=anthropic \
