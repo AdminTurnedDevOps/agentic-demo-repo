@@ -60,8 +60,10 @@ kubectl port-forward svc/prometheus-grafana -n monitoring 3000:80
 
 2. Log in
 
+```
 Username: admin
 Password: prom-operator
+```
 
 ## 3. Apply the agent and CronJob
 
