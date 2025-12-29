@@ -1,0 +1,88 @@
+# PrometheusRule for httpbin demo application
+# These alerts trigger the self-healing agent to investigate and remediate issues
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: httpbin-alerts
+  namespace: monitoring
+  labels:
+    # Required label for Prometheus Operator to pick up this rule
+    release: prometheus
+spec:
+  groups:
+    - name: httpbin.rules
+      rules:
+        # Alert: Pod is crash looping (restarting repeatedly)
+        - alert: HttpbinPodCrashLooping
+          expr: rate(kube_pod_container_status_restarts_total{namespace="demo", pod=~"httpbin.*"}[5m]) > 0
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "httpbin pod is crash looping"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been restarting. Current restart rate: {{ $value }}/min"
+            runbook_url: "https://example.com/runbooks/crashloop"
+
+        # Alert: High error rate from httpbin service
+        - alert: HttpbinHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{namespace="demo", status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{namespace="demo"}[5m])) > 0.1
+          for: 1m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "High error rate on httpbin"
+            description: "Error rate is {{ $value | humanizePercentage }} for httpbin service"
+
+        # Alert: Pod is not ready
+        - alert: HttpbinPodNotReady
+          expr: kube_pod_status_ready{namespace="demo", pod=~"httpbin.*", condition="true"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "httpbin pod not ready"
+            description: "Pod {{ $labels.pod }} has been not ready for more than 1 minute"
+
+        # Alert: No running pods (all replicas down)
+        - alert: HttpbinNoRunningPods
+          expr: |
+            kube_deployment_status_replicas_available{namespace="demo", deployment="httpbin"} == 0
+          for: 30s
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "No httpbin pods are running"
+            description: "Deployment httpbin has 0 available replicas"
+
+        # Alert: Pod OOMKilled
+        - alert: HttpbinPodOOMKilled
+          expr: |
+            kube_pod_container_status_last_terminated_reason{namespace="demo", pod=~"httpbin.*", reason="OOMKilled"} == 1
+          for: 0m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "httpbin pod was OOMKilled"
+            description: "Container {{ $labels.container }} in pod {{ $labels.pod }} was terminated due to OOM"
+
+        # Alert: Deployment replicas mismatch
+        - alert: HttpbinReplicasMismatch
+          expr: |
+            kube_deployment_status_replicas{namespace="demo", deployment="httpbin"}
+            !=
+            kube_deployment_spec_replicas{namespace="demo", deployment="httpbin"}
+          for: 2m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "httpbin deployment replica count mismatch"
+            description: "Deployment httpbin has {{ $value }} replicas, expected {{ $labels.replicas }}"

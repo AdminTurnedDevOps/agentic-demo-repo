@@ -1,0 +1,77 @@
+# Helm values for kube-prometheus-stack
+# Customized for the self-healing demo
+
+# Prometheus configuration
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30090
+  prometheusSpec:
+    # Retain metrics for 7 days
+    retention: 7d
+    # Enable remote write for external storage (optional)
+    # remoteWrite: []
+
+    # Additional scrape configs for custom applications
+    additionalScrapeConfigs:
+      - job_name: 'httpbin'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - demo
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: httpbin
+            action: keep
+
+# Grafana configuration
+grafana:
+  service:
+    type: NodePort
+    nodePort: 30300
+  # Default admin credentials (change in production!)
+  adminPassword: prom-operator
+  # Enable persistence for dashboards
+  persistence:
+    enabled: false
+  # Pre-install our custom dashboard
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'self-healing'
+          orgId: 1
+          folder: 'Self-Healing Demo'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/self-healing
+
+# Alertmanager configuration
+alertmanager:
+  service:
+    type: ClusterIP
+  alertmanagerSpec:
+    # Route alerts to webhook for demo visibility
+    alertmanagerConfigSelector:
+      matchLabels:
+        alertmanagerConfig: self-healing-demo
+
+# Enable all default ServiceMonitors
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+# Disable components not needed for demo
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

@@ -1,0 +1,27 @@
+# Kind cluster configuration for self-healing demo
+# This creates a single-node cluster with port mappings for:
+# - 8080: Demo application (NodePort 30080)
+# - 9090: Prometheus (NodePort 30090)
+# - 3000: Grafana (NodePort 30300)
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: self-healing-demo
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Demo application access
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+      # Prometheus UI access
+      - containerPort: 30090
+        hostPort: 9090
+        protocol: TCP
+      # Grafana UI access
+      - containerPort: 30300
+        hostPort: 3000
+        protocol: TCP
+      # agentgateway UI access
+      - containerPort: 30015
+        hostPort: 30015
+        protocol: TCP
