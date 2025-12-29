@@ -97,36 +97,36 @@ You'll want to run the cleanup script as soon as you're done as the `ConfigMap` 
 
 # Manual Run
 
-# 1. Check current state
+### 1. Check current state
 kubectl get pods -n demo -l app=httpbin
 kubectl get deployment httpbin -n demo
 kubectl get svc -n kagent
 kubectl get agents -n kagent
 
-# 2. Scale up httpbin if Pods do not exist
+### 2. Scale up httpbin if Pods do not exist
 kubectl scale deployment httpbin -n demo --replicas=3
 
-# 3. Verify pods came up
+### 3. Verify pods came up
 kubectl get pods -n demo -l app=httpbin
 
-# 4. Test the agent API endpoint (JSON-RPC format)
+### 4. Test the agent API endpoint (JSON-RPC format)
 kubectl run curl-test --rm -i --restart=Never --image=curlimages/curl -n kagent -- \
   curl -s -X POST http://self-healing-agent:8080/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc": "2.0", "method": "message/send", "params": {"message": {"messageId": "test-1", "role": "user", "parts": [{"kind": "text", "text": "List pods in demo namespace"}]}}, "id": 1}'
 
-# 5. Apply updated CronJob
+### 5. Apply updated CronJob
 kubectl apply -f kagent/scheduled-task.yaml
 
-# 6. Inject chaos (scale to 0)
+### 6. Inject chaos (scale to 0)
 kubectl scale deployment httpbin -n demo --replicas=0
 
-# 7. Trigger agent to fix it
+### 7. Trigger agent to fix it
 kubectl run curl-test --rm -i --restart=Never --image=curlimages/curl -n kagent -- \
   curl -s -X POST http://self-healing-agent:8080/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc": "2.0", "method": "message/send", "params": {"message": {"messageId": "fix-test-1", "role": "user", "parts": [{"kind": "text", "text": "Check the demo namespace. The httpbin deployment should have 3 replicas. If it has 0 replicas, scale it back to 3."}]}}, "id": 1}'
 
-# 8. Verify fix
+### 8. Verify fix
 kubectl get pods -n demo -l app=httpbin
 kubectl get deployment httpbin -n demo
