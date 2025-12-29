@@ -65,7 +65,7 @@ Username: admin
 Password: prom-operator
 ```
 
-## 3. Apply the agent and CronJob
+## 3. Apply the Agent and CronJob
 
 ```bash
 kubectl apply -f kagent/self-healing-agent.yaml
