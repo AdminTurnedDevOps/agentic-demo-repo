@@ -10,18 +10,15 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      # ISSUE #2: Selector uses "api-backend"
       app: api-backend
   template:
     metadata:
       labels:
-        # Labels match selector (api-backend)
         app: api-backend
         tier: backend
     spec:
       serviceAccountName: backend-sa
       initContainers:
-        # ISSUE #3: Init container waits for "postgresql-svc" but actual service is "postgres-db-svc"
         - name: wait-for-db
           image: busybox:1.36
           command:
@@ -70,7 +67,6 @@ spec:
               value: "production"
             - name: PORT
               value: "3000"
-            # ISSUE #4: References configmap key "db_host" but configmap has "database_host"
             - name: DATABASE_HOST
               valueFrom:
                 configMapKeyRef:
@@ -106,10 +102,8 @@ spec:
               memory: "128Mi"
               cpu: "100m"
             limits:
-              # ISSUE #5: Memory limit too low for Node.js - will cause OOMKilled under load
-              memory: "64Mi"
+              memory: "256Mi"
               cpu: "200m"
-          # ISSUE #6: Readiness probe checks port 8080 but app runs on 3000
           readinessProbe:
             httpGet:
               path: /ready
@@ -125,7 +119,6 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
 ---
-# ISSUE #7: Service selector uses "backend-api" but pods have label "api-backend"
 apiVersion: v1
 kind: Service
 metadata:

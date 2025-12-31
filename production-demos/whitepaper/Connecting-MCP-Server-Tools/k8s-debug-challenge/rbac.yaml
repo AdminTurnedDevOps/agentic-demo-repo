@@ -15,8 +15,7 @@ rules:
     verbs: ["get", "list"]
   - apiGroups: [""]
     resources: ["secrets"]
-    # ISSUE #9: Missing "get" verb - only has "list", pod can't read individual secrets
-    verbs: ["list"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

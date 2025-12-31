@@ -30,8 +30,7 @@ metadata:
   name: backend-pdb
   namespace: ecommerce-app
 spec:
-  # ISSUE #12: minAvailable equals replicas (2), so rolling updates will be blocked
-  minAvailable: 2
+  minAvailable: 1
   selector:
     matchLabels:
       app: api-backend

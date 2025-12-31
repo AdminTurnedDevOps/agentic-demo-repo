@@ -6,8 +6,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      # ISSUE #10: Selector matches "backend-api" but pods have "api-backend"
-      app: backend-api
+      app: api-backend
   policyTypes:
     - Ingress
     - Egress
@@ -51,9 +50,8 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              # ISSUE #11: Expects "tier: backend" but also requires "app: backend-api" - pods have "api-backend"
               tier: backend
-              app: backend-api
+              app: api-backend
       ports:
         - protocol: TCP
           port: 5432
