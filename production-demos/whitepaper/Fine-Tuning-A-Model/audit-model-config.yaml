@@ -1,0 +1,78 @@
+# ModelConfig for Fine-Tuned Kubernetes Audit Log Analyzer
+# This represents the "specialized hardware/software node" in our distributed AI system
+# The fine-tuned model is optimized for detecting privilege escalation and unauthorized access patterns
+---
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: fine-tuned-audit-brain
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: fine-tuned-audit-brain
+    app.kubernetes.io/component: model-config
+    kagent.dev/purpose: security-forensics
+  annotations:
+    kagent.dev/description: "Fine-tuned Llama-3-8B for Kubernetes audit log analysis"
+    kagent.dev/specialization: "privilege-escalation-detection"
+spec:
+  # Model identifier - fine-tuned variant optimized for K8s audit logs
+  model: llama3-8b-k8s-audit-v1
+
+  # Using Ollama for local/on-prem fine-tuned model deployment
+  provider: Ollama
+  ollama:
+    host: http://ollama.ollama.svc.cluster.local:11434
+
+---
+# Alternative: BYO OpenAI-compatible endpoint for cloud-hosted fine-tuned model
+# Uncomment this section if using a hosted fine-tuned model (e.g., OpenAI fine-tuned, Anyscale, Together.ai)
+# apiVersion: kagent.dev/v1alpha2
+# kind: ModelConfig
+# metadata:
+#   name: fine-tuned-audit-brain
+#   namespace: kagent
+#   labels:
+#     app.kubernetes.io/name: fine-tuned-audit-brain
+#     app.kubernetes.io/component: model-config
+#     kagent.dev/purpose: security-forensics
+# spec:
+#   model: ft:llama-3-8b:k8s-audit-detector:v1
+#   provider: OpenAI
+#   apiKeySecret: fine-tuned-model-credentials
+#   apiKeySecretKey: API_KEY
+#   openAI:
+#     baseUrl: "https://api.your-fine-tuned-provider.com/v1"
+
+---
+# Base model configuration for comparison benchmarks
+# This uses a general-purpose model without fine-tuning
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: base-model-config
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: base-model-config
+    app.kubernetes.io/component: model-config
+    kagent.dev/purpose: benchmark-baseline
+  annotations:
+    kagent.dev/description: "Base Llama-3-8B without fine-tuning for comparison"
+spec:
+  model: llama3
+  provider: Ollama
+  ollama:
+    host: http://ollama.ollama.svc.cluster.local:11434
+
+---
+# Secret for API credentials (if using hosted fine-tuned model)
+# Create this secret before deploying the BYO OpenAI-compatible ModelConfig
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fine-tuned-model-credentials
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: fine-tuned-audit-brain
+type: Opaque
+stringData:
+  API_KEY: "your-api-key-here"  # Replace with actual API key

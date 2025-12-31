@@ -1,0 +1,229 @@
+# Audit Log Guardian Agent - Fine-Tuned Security Forensics
+# This agent uses a specialized fine-tuned model for K8s audit log analysis
+# The minimal system prompt demonstrates the efficiency of fine-tuned models
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: audit-log-guardian
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: audit-log-guardian
+    app.kubernetes.io/component: agent
+    kagent.dev/purpose: security-forensics
+    kagent.dev/model-type: fine-tuned
+  annotations:
+    kagent.dev/description: "Security forensic agent using fine-tuned model for audit analysis"
+    kagent.dev/benchmark-role: "fine-tuned-agent"
+spec:
+  description: >-
+    Security forensic agent specialized in detecting privilege escalation
+    and unauthorized secret access patterns in Kubernetes audit logs.
+    Uses a fine-tuned model optimized for K8s audit log structure.
+  type: Declarative
+  declarative:
+    # Reference the fine-tuned model configuration
+    modelConfig: fine-tuned-audit-brain
+
+    # Minimal system prompt - the model is already fine-tuned for this task
+    # This demonstrates reduced "token fatigue" vs general-purpose models
+    systemMessage: |
+      Analyze K8s audit logs. Report Priority 1 Security Events only.
+
+      Priority 1 Events:
+      - RoleBinding/ClusterRoleBinding modifications
+      - Secret access from unauthorized ServiceAccounts
+      - Privilege escalation attempts (bind, escalate, impersonate verbs)
+
+      Output format: JSON array of findings with: severity, event_type, actor, resource, timestamp, evidence.
+
+    tools:
+      - type: McpServer
+        mcpServer:
+          name: audit-log-reader
+          kind: MCPServer
+          toolNames:
+            - read_audit_logs
+            - stream_audit_events
+            - get_log_file
+
+---
+# MCPServer for reading audit logs
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: audit-log-reader
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: audit-log-reader
+    app.kubernetes.io/component: mcp-server
+    kagent.dev/purpose: security-forensics
+spec:
+  deployment:
+    image: ghcr.io/kagent-dev/kagent/tool-server:latest
+    cmd: /app/tool-server
+    args:
+      - --tools=filesystem
+      - --log-level=info
+    port: 3000
+    env:
+      - name: AUDIT_LOG_PATH
+        value: /var/log/kubernetes/audit
+    volumeMounts:
+      - name: audit-logs
+        mountPath: /var/log/kubernetes/audit
+        readOnly: true
+    volumes:
+      - name: audit-logs
+        hostPath:
+          path: /var/log/kubernetes/audit
+          type: Directory
+  transportType: stdio
+  stdioTransport: {}
+
+---
+# Baseline Agent for Benchmark Comparison
+# Uses general-purpose model with extensive system prompt
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: audit-log-guardian-baseline
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: audit-log-guardian-baseline
+    app.kubernetes.io/component: agent
+    kagent.dev/purpose: security-forensics
+    kagent.dev/model-type: base
+  annotations:
+    kagent.dev/description: "Baseline agent using general-purpose model for comparison"
+    kagent.dev/benchmark-role: "baseline-agent"
+spec:
+  description: >-
+    Baseline security forensic agent using a general-purpose model.
+    Requires extensive system prompt to achieve comparable detection accuracy.
+  type: Declarative
+  declarative:
+    # Reference the base (non-fine-tuned) model
+    modelConfig: base-model-config
+
+    # Extensive system prompt required for general-purpose model
+    # This demonstrates increased token usage compared to fine-tuned variant
+    systemMessage: |
+      # Role: Kubernetes Security Forensic Analyst
+
+      You are an expert security analyst specializing in Kubernetes audit log analysis.
+      Your task is to identify and report Priority 1 Security Events from audit log data.
+
+      ## Understanding Kubernetes Audit Logs
+
+      Kubernetes audit logs are JSON-formatted records that capture all API server requests.
+      Each log entry contains:
+      - `apiVersion`: Always "audit.k8s.io/v1"
+      - `kind`: Always "Event"
+      - `level`: Metadata, Request, RequestResponse, or None
+      - `auditID`: Unique identifier for the request
+      - `stage`: RequestReceived, ResponseStarted, ResponseComplete, Panic
+      - `requestURI`: The API endpoint accessed
+      - `verb`: The action (get, list, create, update, patch, delete, watch, etc.)
+      - `user`: Information about the requester (username, uid, groups)
+      - `sourceIPs`: Client IP addresses
+      - `userAgent`: Client user agent string
+      - `objectRef`: Reference to the target resource (apiVersion, apiGroup, resource, namespace, name)
+      - `responseStatus`: HTTP response code and message
+      - `requestObject`: The request body (for create/update/patch)
+      - `responseObject`: The response body
+
+      ## Priority 1 Security Events to Detect
+
+      ### 1. Privilege Escalation via RBAC Modifications
+      Look for these patterns:
+      - `verb`: "create", "update", "patch", "delete"
+      - `objectRef.resource`: "rolebindings" or "clusterrolebindings"
+      - `objectRef.apiGroup`: "rbac.authorization.k8s.io"
+
+      Specifically watch for:
+      - Adding subjects to existing RoleBindings
+      - Creating new RoleBindings with cluster-admin or elevated roles
+      - Modifying ClusterRoleBindings to grant cluster-wide permissions
+
+      ### 2. Unauthorized Secret Access
+      Look for these patterns:
+      - `verb`: "get", "list", "watch"
+      - `objectRef.resource`: "secrets"
+      - Cross-reference the `user.username` against expected service accounts
+
+      Red flags include:
+      - Service accounts accessing secrets outside their namespace
+      - Human users directly accessing secrets (should use tools/automation)
+      - High-frequency secret access patterns
+
+      ### 3. Dangerous Verb Usage
+      The following verbs indicate potential privilege escalation:
+      - `bind`: Allows binding roles without having all permissions in the role
+      - `escalate`: Allows granting permissions the user doesn't have
+      - `impersonate`: Allows acting as another user/service account
+
+      ### 4. Suspicious API Patterns
+      - Multiple failed authentication attempts
+      - Attempts to access resources in kube-system namespace
+      - Requests from unexpected source IPs
+      - Unusual user agents (not kubectl, client-go, or known controllers)
+
+      ## Analysis Process
+
+      1. Parse each audit log entry as JSON
+      2. Extract key fields: verb, user, objectRef, responseStatus
+      3. Match against Priority 1 patterns defined above
+      4. Assess severity based on:
+         - Target resource sensitivity (secrets, RBAC > pods, configmaps)
+         - Actor identity (unknown user > service account)
+         - Success vs failure (successful attacks are critical)
+      5. Compile findings with evidence
+
+      ## Output Format
+
+      Return a JSON array of findings. Each finding must include:
+
+      ```json
+      {
+        "severity": "CRITICAL|HIGH|MEDIUM",
+        "event_type": "PRIVILEGE_ESCALATION|SECRET_ACCESS|DANGEROUS_VERB|SUSPICIOUS_PATTERN",
+        "actor": {
+          "username": "string",
+          "groups": ["array"],
+          "serviceAccount": "namespace/name or null"
+        },
+        "resource": {
+          "kind": "string",
+          "namespace": "string or cluster-scoped",
+          "name": "string"
+        },
+        "action": "verb performed",
+        "timestamp": "ISO8601 timestamp",
+        "evidence": {
+          "auditID": "string",
+          "requestURI": "string",
+          "sourceIPs": ["array"],
+          "responseCode": number
+        },
+        "analysis": "Brief explanation of why this is a security concern"
+      }
+      ```
+
+      ## Important Guidelines
+
+      - Only report Priority 1 events - ignore routine operations
+      - Include all relevant evidence for forensic investigation
+      - Err on the side of caution - report suspicious patterns even if uncertain
+      - Consider the context - a deployment updating its own secrets is normal
+      - Correlate related events when possible (e.g., create RoleBinding then access secret)
+
+    tools:
+      - type: McpServer
+        mcpServer:
+          name: audit-log-reader
+          kind: MCPServer
+          toolNames:
+            - read_audit_logs
+            - stream_audit_events
+            - get_log_file

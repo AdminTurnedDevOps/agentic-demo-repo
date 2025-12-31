@@ -1,0 +1,241 @@
+# Kubernetes CrashLoopBackOff Triage Skill
+# This skill defines a multi-step RCA workflow for diagnosing pod failures
+# Skills in kagent are containerized capabilities that agents can invoke
+---
+# ConfigMap containing the skill's triage logic and prompts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-crash-triage-skill
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: k8s-crash-triage
+    app.kubernetes.io/component: skill
+    kagent.dev/skill-id: k8s-crash-triage
+  annotations:
+    kagent.dev/description: "Multi-step RCA workflow for CrashLoopBackOff diagnosis"
+    kagent.dev/version: "1.0.0"
+data:
+  # Skill metadata and configuration
+  skill-config.yaml: |
+    id: k8s-crash-triage
+    name: Kubernetes Crash Triage
+    description: |
+      Performs comprehensive root-cause analysis for pods stuck in CrashLoopBackOff.
+      Executes a multi-step workflow covering event inspection, log extraction,
+      and network validation to produce actionable fix recommendations.
+    version: "1.0.0"
+    tags:
+      - kubernetes
+      - troubleshooting
+      - sre
+      - crash-analysis
+    inputModes:
+      - text
+    outputModes:
+      - text
+
+    # Multi-step workflow definition
+    workflow:
+      steps:
+        - id: event-inspection
+          name: "Step 1: Event Inspection"
+          description: "Check for OOMKills, Liveness Probe failures, and scheduling issues"
+          commands:
+            - "kubectl get events --field-selector involvedObject.name={pod_name} -n {namespace} --sort-by='.lastTimestamp'"
+            - "kubectl describe pod {pod_name} -n {namespace}"
+          analysis_focus:
+            - "OOMKilled exit code (137)"
+            - "Liveness probe failed"
+            - "Readiness probe failed"
+            - "FailedScheduling"
+            - "ImagePullBackOff"
+            - "ErrImagePull"
+
+        - id: log-extraction
+          name: "Step 2: Log Extraction"
+          description: "Extract logs from current and previous container instances"
+          commands:
+            - "kubectl logs {pod_name} -n {namespace} --tail=100"
+            - "kubectl logs {pod_name} -n {namespace} --previous --tail=100"
+          analysis_focus:
+            - "Error patterns and stack traces"
+            - "Connection refused/timeout errors"
+            - "Missing environment variable errors"
+            - "Permission denied errors"
+            - "Out of memory errors"
+            - "Panic/Fatal messages"
+
+        - id: network-validation
+          name: "Step 3: Network Validation"
+          description: "Check connectivity to dependent services"
+          commands:
+            - "kubectl get endpoints -n {namespace}"
+            - "kubectl get svc -n {namespace}"
+            - "kubectl auth can-i get pods -n {namespace}"
+          analysis_focus:
+            - "Service endpoint availability"
+            - "DNS resolution issues"
+            - "Network policy blocks"
+            - "RBAC permission issues"
+
+    # Correlation instructions for the agent
+    correlation_rules: |
+      When analyzing the data from all three steps, correlate as follows:
+
+      1. Match event timestamps with log timestamps to identify the exact failure moment
+      2. If OOMKilled in events + memory-related errors in logs → Memory limit issue
+      3. If Liveness probe failed + timeout/connection errors in logs → Health check or dependency issue
+      4. If connection errors in logs + empty endpoints → Service discovery problem
+      5. If permission errors + auth can-i fails → RBAC misconfiguration
+
+      Always provide:
+      - Root cause category (Memory, Configuration, Network, Dependency, RBAC)
+      - Specific evidence from each step
+      - Recommended fix with exact kubectl commands
+
+  # Specialized prompt for the skill
+  skill-prompt.md: |
+    # Kubernetes CrashLoopBackOff Triage Skill
+
+    You are executing a specialized triage skill for diagnosing CrashLoopBackOff issues.
+    Follow this exact workflow and produce a structured Root Cause Report.
+
+    ## Workflow Execution
+
+    ### Step 1: Event Inspection
+    Execute: `kubectl get events` and `kubectl describe pod`
+
+    Look for these critical indicators:
+    - **OOMKilled**: Exit code 137 indicates container exceeded memory limit
+    - **Liveness probe failed**: Container not responding to health checks
+    - **Readiness probe failed**: Container not ready to receive traffic
+    - **FailedScheduling**: Insufficient resources or node constraints
+    - **ImagePullBackOff**: Image not found or auth failure
+
+    ### Step 2: Log Extraction
+    Execute: `kubectl logs` and `kubectl logs --previous`
+
+    Search for these error patterns:
+    - Stack traces and panic messages
+    - "connection refused" or "connection timeout"
+    - "no such host" or DNS resolution failures
+    - "environment variable not set" or missing config
+    - "permission denied" or auth errors
+    - Java: OutOfMemoryError, Node: FATAL ERROR, Python: MemoryError
+
+    ### Step 3: Network Validation
+    Execute: `kubectl get endpoints` and `kubectl get svc`
+
+    Verify:
+    - Dependent services have active endpoints
+    - Service selectors match pod labels
+    - No network policies blocking traffic
+    - RBAC allows required operations
+
+    ## Correlation Analysis
+
+    After gathering data from all steps, correlate timestamps and patterns:
+
+    | Event Pattern | Log Pattern | Root Cause | Fix |
+    |--------------|-------------|------------|-----|
+    | OOMKilled (exit 137) | MemoryError, OutOfMemory | Memory limit too low | Increase `resources.limits.memory` |
+    | Liveness probe failed | Connection timeout to DB | Dependency not ready | Add initContainer or fix dependency |
+    | None | "env VAR not set" | Missing configuration | Add environment variable to deployment |
+    | ImagePullBackOff | N/A | Image issue | Fix image name or add imagePullSecret |
+    | FailedScheduling | N/A | Resource constraints | Reduce requests or scale cluster |
+
+    ## Output Format
+
+    Produce a Root Cause Report with this structure:
+
+    ```
+    ═══════════════════════════════════════════════════════════════
+                      ROOT CAUSE ANALYSIS REPORT
+    ═══════════════════════════════════════════════════════════════
+
+    Pod: {namespace}/{pod_name}
+    Status: CrashLoopBackOff
+    Analysis Timestamp: {timestamp}
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │ ROOT CAUSE: {category}                                      │
+    ├─────────────────────────────────────────────────────────────┤
+    │ {detailed description}                                      │
+    └─────────────────────────────────────────────────────────────┘
+
+    EVIDENCE:
+
+    Step 1 (Events):
+      • {key finding from events}
+
+    Step 2 (Logs):
+      • {key finding from logs}
+
+    Step 3 (Network):
+      • {key finding from network validation}
+
+    RECOMMENDED FIX:
+
+    {description of the fix}
+
+    Commands to execute:
+    $ {kubectl command 1}
+    $ {kubectl command 2}
+
+    CONFIDENCE: {High/Medium/Low}
+    ═══════════════════════════════════════════════════════════════
+    ```
+
+---
+# Skill container image specification (for skill loading)
+# This would typically be built from the ConfigMap content
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-crash-triage-skill-image
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: k8s-crash-triage
+    app.kubernetes.io/component: skill-image
+data:
+  # Dockerfile for building the skill container
+  Dockerfile: |
+    FROM alpine:3.19
+    RUN apk add --no-cache curl bash
+    WORKDIR /skill
+    COPY skill-config.yaml /skill/
+    COPY skill-prompt.md /skill/
+    # Skill entry point for kagent to discover
+    CMD ["cat", "/skill/skill-config.yaml"]
+
+---
+# RBAC for the triage skill operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-crash-triage-role
+  labels:
+    app.kubernetes.io/name: k8s-crash-triage
+rules:
+  # Read access for diagnosis
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "services", "endpoints", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  # Auth check capability
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["selfsubjectaccessreviews"]
+    verbs: ["create"]
+  # Write access for remediation
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]  # For restarting pods

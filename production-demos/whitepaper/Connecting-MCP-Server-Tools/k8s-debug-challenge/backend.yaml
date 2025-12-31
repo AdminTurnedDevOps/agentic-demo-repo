@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+  namespace: ecommerce-app
+  labels:
+    app: api-backend
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      # ISSUE #2: Selector uses "api-backend"
+      app: api-backend
+  template:
+    metadata:
+      labels:
+        # Labels match selector (api-backend)
+        app: api-backend
+        tier: backend
+    spec:
+      serviceAccountName: backend-sa
+      initContainers:
+        # ISSUE #3: Init container waits for "postgresql-svc" but actual service is "postgres-db-svc"
+        - name: wait-for-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until nc -z postgresql-svc 5432; do
+                echo "PostgreSQL is unavailable - sleeping"
+                sleep 2
+              done
+              echo "PostgreSQL is up!"
+      containers:
+        - name: api
+          image: node:18-alpine
+          command:
+            - sh
+            - -c
+            - |
+              echo "Starting API server..."
+              cat > /app/server.js << 'EOF'
+              const http = require('http');
+              const server = http.createServer((req, res) => {
+                if (req.url === '/health') {
+                  res.writeHead(200);
+                  res.end('OK');
+                } else if (req.url === '/ready') {
+                  res.writeHead(200);
+                  res.end('Ready');
+                } else if (req.url === '/api/products') {
+                  res.writeHead(200, {'Content-Type': 'application/json'});
+                  res.end(JSON.stringify({products: []}));
+                } else {
+                  res.writeHead(200, {'Content-Type': 'application/json'});
+                  res.end(JSON.stringify({status: 'running'}));
+                }
+              });
+              server.listen(3000, () => console.log('Server running on port 3000'));
+              EOF
+              mkdir -p /app && node /app/server.js
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            # ISSUE #4: References configmap key "db_host" but configmap has "database_host"
+            - name: DATABASE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: db_host
+            - name: DATABASE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: database_port
+            - name: DATABASE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: database_name
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: postgres-user
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: postgres-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: jwt-secret
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              # ISSUE #5: Memory limit too low for Node.js - will cause OOMKilled under load
+              memory: "64Mi"
+              cpu: "200m"
+          # ISSUE #6: Readiness probe checks port 8080 but app runs on 3000
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+---
+# ISSUE #7: Service selector uses "backend-api" but pods have label "api-backend"
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: ecommerce-app
+  labels:
+    app: backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 3000
+      name: http
+  selector:
+    app: backend-api

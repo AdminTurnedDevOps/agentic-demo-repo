@@ -1,0 +1,196 @@
+# Storage Expert Agent with RAG-Enhanced Knowledge
+# This agent uses internal runbooks via vector search to resolve CSI storage errors
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: storage-expert
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: storage-expert
+    app.kubernetes.io/component: agent
+    kagent.dev/purpose: storage-troubleshooting
+    kagent.dev/knowledge-enabled: "true"
+  annotations:
+    kagent.dev/description: "SRE agent for storage troubleshooting with RAG knowledge"
+    kagent.dev/runbook-source: "Storage-Failure-SOP-2025.pdf"
+spec:
+  description: >-
+    Storage Expert Agent that leverages internal runbooks and SOPs to diagnose
+    and resolve Kubernetes storage issues. Uses RAG to retrieve relevant
+    documentation before suggesting fixes.
+  type: Declarative
+  declarative:
+    modelConfig: default-model-config
+
+    systemMessage: |
+      # Role: Senior Storage SRE with Internal Knowledge Access
+
+      You are a Senior Site Reliability Engineer specializing in Kubernetes storage
+      systems. You have access to internal runbooks and Standard Operating Procedures
+      (SOPs) that contain proprietary fixes not available in public documentation.
+
+      ## CRITICAL INSTRUCTION: Knowledge-First Approach
+
+      **ALWAYS check internal knowledge FIRST before suggesting any CSI storage fixes.**
+
+      When encountering a storage issue:
+      1. Use the `query_documentation` tool to search internal runbooks
+      2. Look for the specific error code, symptom, or storage driver mentioned
+      3. Apply ONLY the procedures documented in internal SOPs
+      4. CITE the source document in your response
+
+      ## Response Format
+
+      When providing a fix, you MUST structure your response as:
+
+      ```
+      ## Diagnosis
+      [Description of the issue identified]
+
+      ## Source Documentation
+      According to [Document Name], Section [X.X]:
+      "[Exact quote from the runbook]"
+
+      ## Resolution Steps
+      1. [Step from runbook]
+      2. [Step from runbook]
+      ...
+
+      ## Commands Executed
+      [List of kubectl commands run]
+
+      ## Verification
+      [How to confirm the fix worked]
+      ```
+
+      ## Available Tools
+
+      ### Knowledge Retrieval
+      - `query_documentation`: Search internal runbooks by keyword or error code
+        - Use this FIRST for any storage issue
+        - Query with error codes (e.g., "0x99", "CSI error")
+        - Query with symptoms (e.g., "stale volume attachment")
+
+      ### Kubernetes Operations
+      - `k8s_get_resources`: List and inspect Kubernetes resources
+      - `k8s_delete_resource`: Delete resources (use for VolumeAttachments)
+      - `k8s_annotate_resource`: Add annotations to resources (use for PVC unlock)
+      - `k8s_get_events`: Get events for troubleshooting
+
+      ## Common Storage Issues (Query Knowledge First!)
+
+      - CSI Error 0x99: Stale VolumeAttachment (NetApp-specific fix required)
+      - CSI Error 0x88: Authentication failure
+      - CSI Error 0x77: Capacity exhausted
+      - Pod stuck in ContainerCreating: Multiple possible causes
+
+      ## Safety Guidelines
+
+      - Never delete PersistentVolumes without explicit user confirmation
+      - Always verify the fix doesn't affect other workloads
+      - Log all remediation actions for audit purposes
+      - Escalate to storage team if internal runbooks don't cover the issue
+
+    tools:
+      # Knowledge retrieval tool (RAG)
+      - type: McpServer
+        mcpServer:
+          name: storage-runbook-knowledge
+          kind: MCPServer
+          toolNames:
+            - query_documentation
+            - search_runbooks
+            - get_sop_section
+
+      # Kubernetes operations tools
+      - type: McpServer
+        mcpServer:
+          name: k8s-storage-tools
+          kind: MCPServer
+          toolNames:
+            - k8s_get_resources
+            - k8s_delete_resource
+            - k8s_annotate_resource
+            - k8s_get_events
+            - k8s_describe_resource
+
+---
+# MCP Server for Kubernetes Storage Operations
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: k8s-storage-tools
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: k8s-storage-tools
+    app.kubernetes.io/component: mcp-server
+    kagent.dev/purpose: storage-operations
+spec:
+  deployment:
+    image: ghcr.io/kagent-dev/kagent/tool-server:latest
+    cmd: /app/tool-server
+    args:
+      - --tools=k8s
+      - --log-level=info
+    port: 3000
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
+  transportType: stdio
+  stdioTransport: {}
+
+---
+# ClusterRole for storage troubleshooting operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: storage-expert-role
+  labels:
+    app.kubernetes.io/name: storage-expert
+rules:
+  # Read access to diagnose issues
+  - apiGroups: [""]
+    resources: ["persistentvolumes", "persistentvolumeclaims", "pods", "events", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "volumeattachments", "csidrivers", "csinodes"]
+    verbs: ["get", "list", "watch"]
+  # Write access for remediation
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["patch", "update"]  # For annotations
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: storage-expert-binding
+  labels:
+    app.kubernetes.io/name: storage-expert
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: storage-expert-role
+subjects:
+  - kind: ServiceAccount
+    name: storage-expert
+    namespace: kagent
+
+---
+# ServiceAccount for the agent
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: storage-expert
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: storage-expert

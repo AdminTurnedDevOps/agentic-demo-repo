@@ -1,0 +1,340 @@
+# Chaos Scenario: Intentionally Broken Applications
+# These deployments will enter CrashLoopBackOff for different reasons
+# Use these to demonstrate the triage skill's diagnostic capabilities
+---
+# Namespace for broken applications
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: broken-apps
+  labels:
+    app.kubernetes.io/part-of: skill-demo
+    scenario: crashloopbackoff
+
+---
+# =============================================================================
+# SCENARIO 1: Missing Environment Variable
+# Root Cause: Configuration
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server-missing-env
+  namespace: broken-apps
+  labels:
+    app.kubernetes.io/name: api-server
+    app.kubernetes.io/part-of: skill-demo
+    failure-type: missing-config
+  annotations:
+    scenario: "Pod crashes because DATABASE_URL environment variable is not set"
+    expected-diagnosis: "Configuration error - missing required environment variable"
+    expected-fix: "Add DATABASE_URL environment variable to deployment"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-server
+  template:
+    metadata:
+      labels:
+        app: api-server
+        failure-type: missing-config
+    spec:
+      containers:
+        - name: api-server
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting API server..."
+              if [ -z "$DATABASE_URL" ]; then
+                echo "FATAL ERROR: Required environment variable DATABASE_URL is not set"
+                echo "Application cannot start without database configuration"
+                exit 1
+              fi
+              echo "Connected to database: $DATABASE_URL"
+              sleep infinity
+          # Intentionally NOT setting DATABASE_URL
+          env:
+            - name: APP_NAME
+              value: "api-server"
+            - name: LOG_LEVEL
+              value: "debug"
+            # DATABASE_URL is missing - this causes the crash
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+
+---
+# =============================================================================
+# SCENARIO 2: Out of Memory (OOMKilled)
+# Root Cause: Memory
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-hog-oom
+  namespace: broken-apps
+  labels:
+    app.kubernetes.io/name: memory-hog
+    app.kubernetes.io/part-of: skill-demo
+    failure-type: oom-killed
+  annotations:
+    scenario: "Pod gets OOMKilled due to memory limit being too low"
+    expected-diagnosis: "Memory issue - container exceeded memory limit (exit code 137)"
+    expected-fix: "Increase resources.limits.memory from 32Mi to at least 128Mi"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memory-hog
+  template:
+    metadata:
+      labels:
+        app: memory-hog
+        failure-type: oom-killed
+    spec:
+      containers:
+        - name: memory-hog
+          image: python:3.11-slim
+          command:
+            - python
+            - -c
+            - |
+              import sys
+              print("Starting memory-intensive application...")
+              print("Allocating memory for data processing...")
+              # Allocate more memory than the limit allows
+              data = []
+              for i in range(100):
+                  # Each iteration adds ~10MB
+                  chunk = 'x' * (10 * 1024 * 1024)
+                  data.append(chunk)
+                  print(f"Allocated {(i+1)*10}MB...")
+                  sys.stdout.flush()
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "50m"
+            limits:
+              # Intentionally too low - will cause OOMKill
+              memory: "32Mi"
+              cpu: "100m"
+
+---
+# =============================================================================
+# SCENARIO 3: Dependency Service Unreachable
+# Root Cause: Network/Dependency
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app-no-db
+  namespace: broken-apps
+  labels:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/part-of: skill-demo
+    failure-type: dependency-failure
+  annotations:
+    scenario: "Pod crashes because it cannot connect to required database service"
+    expected-diagnosis: "Dependency failure - cannot connect to postgres-db service"
+    expected-fix: "Deploy the postgres-db service or fix the connection string"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+        failure-type: dependency-failure
+    spec:
+      containers:
+        - name: web-app
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting web application..."
+              echo "Checking database connectivity..."
+
+              # Try to connect to non-existent database service
+              for i in 1 2 3 4 5; do
+                echo "Attempt $i: Connecting to postgres-db.broken-apps.svc.cluster.local:5432..."
+                if nc -z -w 2 postgres-db.broken-apps.svc.cluster.local 5432 2>/dev/null; then
+                  echo "Database connection successful!"
+                  sleep infinity
+                else
+                  echo "ERROR: Connection refused - postgres-db service not reachable"
+                fi
+                sleep 2
+              done
+
+              echo "FATAL: Could not establish database connection after 5 attempts"
+              echo "Application startup failed - exiting"
+              exit 1
+          env:
+            - name: DB_HOST
+              value: "postgres-db.broken-apps.svc.cluster.local"
+            - name: DB_PORT
+              value: "5432"
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+
+---
+# =============================================================================
+# SCENARIO 4: Liveness Probe Failure
+# Root Cause: Health Check Configuration
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-bad-healthcheck
+  namespace: broken-apps
+  labels:
+    app.kubernetes.io/name: healthcheck-app
+    app.kubernetes.io/part-of: skill-demo
+    failure-type: liveness-failure
+  annotations:
+    scenario: "Pod gets killed by failing liveness probe"
+    expected-diagnosis: "Liveness probe failure - health endpoint not responding"
+    expected-fix: "Fix liveness probe path or increase initialDelaySeconds"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: healthcheck-app
+  template:
+    metadata:
+      labels:
+        app: healthcheck-app
+        failure-type: liveness-failure
+    spec:
+      containers:
+        - name: healthcheck-app
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting application..."
+              echo "Application running but health endpoint not implemented"
+              # App runs but doesn't have /healthz endpoint
+              while true; do
+                echo "Processing requests..."
+                sleep 10
+              done
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              # This path doesn't exist - probe will fail
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+
+---
+# =============================================================================
+# SCENARIO 5: Permission/RBAC Issue (Simulated)
+# Root Cause: RBAC
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secret-reader-no-perms
+  namespace: broken-apps
+  labels:
+    app.kubernetes.io/name: secret-reader
+    app.kubernetes.io/part-of: skill-demo
+    failure-type: rbac-failure
+  annotations:
+    scenario: "Pod crashes because ServiceAccount lacks permissions to read secrets"
+    expected-diagnosis: "RBAC failure - ServiceAccount cannot read required secrets"
+    expected-fix: "Create RoleBinding for ServiceAccount to read secrets"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secret-reader
+  template:
+    metadata:
+      labels:
+        app: secret-reader
+        failure-type: rbac-failure
+    spec:
+      serviceAccountName: restricted-sa
+      automountServiceAccountToken: true
+      containers:
+        - name: secret-reader
+          image: bitnami/kubectl:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting application that needs to read secrets..."
+              echo "Attempting to read database credentials from secret..."
+
+              # This will fail due to RBAC
+              if kubectl get secret db-credentials -n broken-apps -o jsonpath='{.data.password}' 2>&1; then
+                echo "Successfully read credentials"
+                sleep infinity
+              else
+                echo "FATAL ERROR: Failed to read secret 'db-credentials'"
+                echo "Error: forbidden - User cannot get secrets in namespace 'broken-apps'"
+                echo "Application cannot start without database credentials"
+                exit 1
+              fi
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+
+---
+# Restricted ServiceAccount (intentionally has no permissions)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: restricted-sa
+  namespace: broken-apps
+  labels:
+    app.kubernetes.io/part-of: skill-demo
+  annotations:
+    description: "ServiceAccount with no permissions - causes RBAC failure"
+
+---
+# Secret that the app tries to read (but can't due to RBAC)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+  namespace: broken-apps
+  labels:
+    app.kubernetes.io/part-of: skill-demo
+type: Opaque
+stringData:
+  password: "super-secret-password"
+  username: "db-admin"

@@ -1,0 +1,213 @@
+# Chaos Scenario: Failing PVC with CSI Error 0x99
+# This simulates a production storage failure that requires internal runbook knowledge to fix
+---
+# Namespace for the chaos scenario
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production-app
+  labels:
+    app.kubernetes.io/part-of: rag-demo
+    scenario: storage-failure
+
+---
+# StorageClass simulating NetApp CSI driver
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: netapp-csi-gold
+  labels:
+    app.kubernetes.io/part-of: rag-demo
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+    description: "Simulated NetApp CSI storage class for demo"
+provisioner: csi.trident.netapp.io  # Would be real in production
+parameters:
+  backendType: "ontap-nas"
+  storagePools: "gold-pool"
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+
+---
+# PersistentVolume (pre-provisioned to simulate stale attachment scenario)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-database-storage
+  labels:
+    app.kubernetes.io/part-of: rag-demo
+    app.kubernetes.io/name: database-storage
+    scenario: csi-error-0x99
+  annotations:
+    pv.kubernetes.io/provisioned-by: csi.trident.netapp.io
+    # These annotations simulate a stale/failed state
+    storage.internal/last-attached-node: "worker-node-03"
+    storage.internal/attachment-state: "stale"
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: netapp-csi-gold
+  csi:
+    driver: csi.trident.netapp.io
+    volumeHandle: "ontap-gold::trident_pvc_abc123"
+    fsType: ext4
+    volumeAttributes:
+      backendUUID: "12345678-1234-1234-1234-123456789abc"
+      internalName: "trident_pvc_abc123"
+      name: "pvc-database-storage"
+      protocol: "file"
+  # Simulating node affinity from previous attachment
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - worker-node-03
+
+---
+# PersistentVolumeClaim that will fail to mount
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: database-storage-claim
+  namespace: production-app
+  labels:
+    app.kubernetes.io/part-of: rag-demo
+    app.kubernetes.io/name: database-storage
+    scenario: csi-error-0x99
+  annotations:
+    description: "Database storage - currently experiencing CSI mount failure"
+    # Missing the required annotation that the runbook specifies
+    # storage.internal/manual-unlock: "true"  # <-- THIS IS MISSING (the fix!)
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: netapp-csi-gold
+  volumeName: pv-database-storage
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# Simulated stale VolumeAttachment (the resource that needs to be deleted)
+apiVersion: storage.k8s.io/v1
+kind: VolumeAttachment
+metadata:
+  name: csi-abc123-worker-node-03
+  labels:
+    app.kubernetes.io/part-of: rag-demo
+    scenario: stale-attachment
+  annotations:
+    description: "Stale volume attachment from previous node - needs deletion"
+    storage.internal/error-code: "0x99"
+    storage.internal/stale-since: "2025-01-15T02:45:00Z"
+spec:
+  attacher: csi.trident.netapp.io
+  nodeName: worker-node-03
+  source:
+    persistentVolumeName: pv-database-storage
+
+---
+# Pod that will be stuck in ContainerCreating due to mount failure
+apiVersion: v1
+kind: Pod
+metadata:
+  name: database-pod
+  namespace: production-app
+  labels:
+    app.kubernetes.io/part-of: rag-demo
+    app.kubernetes.io/name: database
+    app.kubernetes.io/component: postgresql
+    scenario: mount-failure
+  annotations:
+    description: "Production database pod - stuck due to CSI error 0x99"
+spec:
+  containers:
+    - name: postgresql
+      image: postgres:15-alpine
+      ports:
+        - containerPort: 5432
+          name: postgres
+      env:
+        - name: POSTGRES_DB
+          value: "production"
+        - name: POSTGRES_USER
+          value: "admin"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+      volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "1000m"
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: database-storage-claim
+  # Force scheduling to a different node than the stale attachment
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: NotIn
+                values:
+                  - worker-node-03  # Avoid the node with stale attachment
+
+---
+# Secret for database credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: database-credentials
+  namespace: production-app
+  labels:
+    app.kubernetes.io/part-of: rag-demo
+type: Opaque
+stringData:
+  password: "demo-password-12345"
+
+---
+# Event to simulate the CSI error (for agent to discover)
+# Note: In real scenarios, this would be created by Kubernetes
+apiVersion: v1
+kind: Event
+metadata:
+  name: database-pod.csi-mount-failure
+  namespace: production-app
+  labels:
+    app.kubernetes.io/part-of: rag-demo
+type: Warning
+reason: FailedMount
+message: |
+  MountVolume.SetUp failed for volume "pv-database-storage" :
+  rpc error: code = Internal desc = CSI driver error (0x99):
+  Volume attachment state mismatch - stale attachment exists on node worker-node-03.
+  Unable to attach volume to node worker-node-05.
+  Contact storage administrator or refer to internal runbook for resolution.
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: database-pod
+  namespace: production-app
+firstTimestamp: "2025-01-15T03:00:00Z"
+lastTimestamp: "2025-01-15T03:15:00Z"
+count: 45
+source:
+  component: kubelet
+  host: worker-node-05

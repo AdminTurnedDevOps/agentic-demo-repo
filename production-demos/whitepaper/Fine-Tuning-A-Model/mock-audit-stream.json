@@ -1,0 +1,531 @@
+{
+  "description": "Mock Kubernetes Audit Logs for Security Analysis Testing",
+  "generated": "2025-01-15T10:00:00Z",
+  "events": [
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000001",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/default/pods?limit=500",
+      "verb": "list",
+      "user": {
+        "username": "system:serviceaccount:kube-system:deployment-controller",
+        "uid": "sa-deployment-controller",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:kube-system", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.0.1"],
+      "userAgent": "kube-controller-manager/v1.28.0",
+      "objectRef": {
+        "resource": "pods",
+        "namespace": "default",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:00:01.000000Z",
+      "stageTimestamp": "2025-01-15T10:00:01.050000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"system:controller:deployment-controller\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000002",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/production/configmaps/app-config",
+      "verb": "get",
+      "user": {
+        "username": "system:serviceaccount:production:web-app",
+        "uid": "sa-web-app",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:production", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.2.15"],
+      "userAgent": "Go-http-client/2.0",
+      "objectRef": {
+        "resource": "configmaps",
+        "namespace": "production",
+        "name": "app-config",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:00:05.000000Z",
+      "stageTimestamp": "2025-01-15T10:00:05.012000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by RoleBinding \"web-app-config-reader\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000003",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/monitoring/pods",
+      "verb": "list",
+      "user": {
+        "username": "system:serviceaccount:monitoring:prometheus",
+        "uid": "sa-prometheus",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:monitoring", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.3.20"],
+      "userAgent": "Prometheus/2.45.0",
+      "objectRef": {
+        "resource": "pods",
+        "namespace": "monitoring",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:00:10.000000Z",
+      "stageTimestamp": "2025-01-15T10:00:10.025000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"prometheus-cluster-reader\""
+      }
+    },
+    {
+      "_comment": "SECURITY THREAT: Unauthorized user attempting to patch RoleBinding for privilege escalation",
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "THREAT-0001-PRIV-ESCALATION",
+      "stage": "ResponseComplete",
+      "requestURI": "/apis/rbac.authorization.k8s.io/v1/namespaces/production/rolebindings/developer-access",
+      "verb": "patch",
+      "user": {
+        "username": "dev-contractor-jsmith",
+        "uid": "user-jsmith-12345",
+        "groups": ["developers", "contractors", "system:authenticated"]
+      },
+      "sourceIPs": ["203.0.113.50"],
+      "userAgent": "kubectl/v1.28.0 (darwin/amd64) kubernetes/55e37e8",
+      "objectRef": {
+        "resource": "rolebindings",
+        "namespace": "production",
+        "name": "developer-access",
+        "apiGroup": "rbac.authorization.k8s.io",
+        "apiVersion": "v1"
+      },
+      "requestObject": {
+        "kind": "RoleBinding",
+        "apiVersion": "rbac.authorization.k8s.io/v1",
+        "metadata": {
+          "name": "developer-access",
+          "namespace": "production"
+        },
+        "subjects": [
+          {
+            "kind": "User",
+            "name": "dev-contractor-jsmith",
+            "apiGroup": "rbac.authorization.k8s.io"
+          },
+          {
+            "kind": "Group",
+            "name": "developers",
+            "apiGroup": "rbac.authorization.k8s.io"
+          },
+          {
+            "_comment": "THREAT: Adding admin group to escalate privileges",
+            "kind": "Group",
+            "name": "cluster-admins",
+            "apiGroup": "rbac.authorization.k8s.io"
+          }
+        ],
+        "roleRef": {
+          "kind": "ClusterRole",
+          "name": "admin",
+          "apiGroup": "rbac.authorization.k8s.io"
+        }
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200,
+        "status": "Success"
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:01:23.000000Z",
+      "stageTimestamp": "2025-01-15T10:01:23.150000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by RoleBinding \"developer-rbac-manager\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000005",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/default/services",
+      "verb": "list",
+      "user": {
+        "username": "system:serviceaccount:ingress-nginx:ingress-nginx",
+        "uid": "sa-ingress-nginx",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:ingress-nginx", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.1.100"],
+      "userAgent": "nginx-ingress-controller/v1.9.0",
+      "objectRef": {
+        "resource": "services",
+        "namespace": "default",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:02:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:02:00.030000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"ingress-nginx\""
+      }
+    },
+    {
+      "_comment": "SECURITY THREAT: Same contractor now accessing secrets after privilege escalation",
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "THREAT-0002-SECRET-ACCESS",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/production/secrets/database-credentials",
+      "verb": "get",
+      "user": {
+        "username": "dev-contractor-jsmith",
+        "uid": "user-jsmith-12345",
+        "groups": ["developers", "contractors", "cluster-admins", "system:authenticated"]
+      },
+      "sourceIPs": ["203.0.113.50"],
+      "userAgent": "kubectl/v1.28.0 (darwin/amd64) kubernetes/55e37e8",
+      "objectRef": {
+        "resource": "secrets",
+        "namespace": "production",
+        "name": "database-credentials",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:01:45.000000Z",
+      "stageTimestamp": "2025-01-15T10:01:45.080000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"cluster-admin\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000007",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/production/secrets/tls-cert",
+      "verb": "get",
+      "user": {
+        "username": "system:serviceaccount:production:web-app",
+        "uid": "sa-web-app",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:production", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.2.15"],
+      "userAgent": "Go-http-client/2.0",
+      "objectRef": {
+        "resource": "secrets",
+        "namespace": "production",
+        "name": "tls-cert",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:03:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:03:00.015000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by RoleBinding \"web-app-tls-reader\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000008",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/nodes",
+      "verb": "list",
+      "user": {
+        "username": "system:serviceaccount:kube-system:node-controller",
+        "uid": "sa-node-controller",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:kube-system", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.0.1"],
+      "userAgent": "kube-controller-manager/v1.28.0",
+      "objectRef": {
+        "resource": "nodes",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:03:30.000000Z",
+      "stageTimestamp": "2025-01-15T10:03:30.040000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"system:controller:node-controller\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "Metadata",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000009",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/default/pods/nginx-7bf8c77b5b-x9z2k",
+      "verb": "get",
+      "user": {
+        "username": "developer-alice",
+        "uid": "user-alice-67890",
+        "groups": ["developers", "system:authenticated"]
+      },
+      "sourceIPs": ["192.168.1.100"],
+      "userAgent": "kubectl/v1.28.0 (linux/amd64) kubernetes/55e37e8",
+      "objectRef": {
+        "resource": "pods",
+        "namespace": "default",
+        "name": "nginx-7bf8c77b5b-x9z2k",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:04:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:04:00.020000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"developers-view\""
+      }
+    },
+    {
+      "_comment": "SECURITY THREAT: Attempt to use impersonate verb - highly suspicious",
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "THREAT-0003-IMPERSONATION",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/kube-system/secrets",
+      "verb": "list",
+      "user": {
+        "username": "dev-contractor-jsmith",
+        "uid": "user-jsmith-12345",
+        "groups": ["developers", "contractors", "cluster-admins", "system:authenticated"]
+      },
+      "impersonatedUser": {
+        "username": "system:serviceaccount:kube-system:cluster-admin",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:kube-system", "system:masters"]
+      },
+      "sourceIPs": ["203.0.113.50"],
+      "userAgent": "kubectl/v1.28.0 (darwin/amd64) kubernetes/55e37e8",
+      "objectRef": {
+        "resource": "secrets",
+        "namespace": "kube-system",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:05:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:05:00.200000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"cluster-admin\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000011",
+      "stage": "ResponseComplete",
+      "requestURI": "/apis/apps/v1/namespaces/default/deployments/nginx",
+      "verb": "update",
+      "user": {
+        "username": "system:serviceaccount:argocd:argocd-application-controller",
+        "uid": "sa-argocd",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:argocd", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.4.50"],
+      "userAgent": "argocd-application-controller/v2.8.0",
+      "objectRef": {
+        "resource": "deployments",
+        "namespace": "default",
+        "name": "nginx",
+        "apiGroup": "apps",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:06:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:06:00.100000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"argocd-application-controller\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000012",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/monitoring/configmaps/prometheus-config",
+      "verb": "update",
+      "user": {
+        "username": "system:serviceaccount:monitoring:prometheus-operator",
+        "uid": "sa-prometheus-operator",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:monitoring", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.3.25"],
+      "userAgent": "prometheus-operator/v0.68.0",
+      "objectRef": {
+        "resource": "configmaps",
+        "namespace": "monitoring",
+        "name": "prometheus-config",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:07:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:07:00.050000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by RoleBinding \"prometheus-operator-configmap-manager\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "Metadata",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000013",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces",
+      "verb": "list",
+      "user": {
+        "username": "developer-bob",
+        "uid": "user-bob-11111",
+        "groups": ["developers", "system:authenticated"]
+      },
+      "sourceIPs": ["192.168.1.105"],
+      "userAgent": "kubectl/v1.28.0 (windows/amd64) kubernetes/55e37e8",
+      "objectRef": {
+        "resource": "namespaces",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:08:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:08:00.015000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by ClusterRoleBinding \"developers-view\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "RequestResponse",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000014",
+      "stage": "ResponseComplete",
+      "requestURI": "/api/v1/namespaces/default/pods",
+      "verb": "create",
+      "user": {
+        "username": "system:serviceaccount:default:default",
+        "uid": "sa-default",
+        "groups": ["system:serviceaccounts", "system:serviceaccounts:default", "system:authenticated"]
+      },
+      "sourceIPs": ["10.0.5.10"],
+      "userAgent": "kubectl/v1.28.0 (linux/amd64) kubernetes/55e37e8",
+      "objectRef": {
+        "resource": "pods",
+        "namespace": "default",
+        "apiVersion": "v1"
+      },
+      "responseStatus": {
+        "metadata": {},
+        "code": 201
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:09:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:09:00.200000Z",
+      "annotations": {
+        "authorization.k8s.io/decision": "allow",
+        "authorization.k8s.io/reason": "RBAC: allowed by RoleBinding \"default-pod-creator\""
+      }
+    },
+    {
+      "kind": "Event",
+      "apiVersion": "audit.k8s.io/v1",
+      "level": "Metadata",
+      "auditID": "a1b2c3d4-1111-4444-8888-000000000015",
+      "stage": "ResponseComplete",
+      "requestURI": "/healthz",
+      "verb": "get",
+      "user": {
+        "username": "system:anonymous",
+        "groups": ["system:unauthenticated"]
+      },
+      "sourceIPs": ["10.0.0.1"],
+      "userAgent": "kube-probe/1.28",
+      "responseStatus": {
+        "metadata": {},
+        "code": 200
+      },
+      "requestReceivedTimestamp": "2025-01-15T10:10:00.000000Z",
+      "stageTimestamp": "2025-01-15T10:10:00.005000Z"
+    }
+  ],
+  "threat_summary": {
+    "total_events": 15,
+    "priority_1_threats": 3,
+    "threats": [
+      {
+        "audit_id": "THREAT-0001-PRIV-ESCALATION",
+        "type": "Privilege Escalation via RoleBinding Patch",
+        "severity": "CRITICAL",
+        "description": "User 'dev-contractor-jsmith' patched RoleBinding to add 'cluster-admins' group"
+      },
+      {
+        "audit_id": "THREAT-0002-SECRET-ACCESS",
+        "type": "Unauthorized Secret Access",
+        "severity": "HIGH",
+        "description": "Same user accessed production database credentials after privilege escalation"
+      },
+      {
+        "audit_id": "THREAT-0003-IMPERSONATION",
+        "type": "User Impersonation Attack",
+        "severity": "CRITICAL",
+        "description": "User impersonated kube-system cluster-admin to access all kube-system secrets"
+      }
+    ]
+  }
+}

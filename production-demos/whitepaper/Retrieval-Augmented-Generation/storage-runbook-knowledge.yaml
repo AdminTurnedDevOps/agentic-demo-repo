@@ -1,0 +1,205 @@
+# Knowledge Base Configuration for Storage Runbooks
+# This implements RAG (Retrieval-Augmented Generation) for internal documentation
+# kagent uses MCP servers with vector databases to provide knowledge retrieval
+---
+# ConfigMap containing the runbook content for vectorization
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-runbook-content
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: storage-runbook-knowledge
+    app.kubernetes.io/component: knowledge-base
+    kagent.dev/purpose: rag-source
+  annotations:
+    kagent.dev/description: "Internal Storage SOP runbooks for RAG retrieval"
+    kagent.dev/document-source: "Storage-Failure-SOP-2025.pdf"
+data:
+  # Runbook content extracted from PDF for vector embedding
+  runbook-csi-errors.md: |
+    # Storage Failure Standard Operating Procedures 2025
+    ## Document: Storage-Failure-SOP-2025.pdf
+    ## Classification: Internal Use Only
+    ## Last Updated: 2025-01-15
+
+    ---
+
+    ## Section 3.2: CSI Driver Error Codes
+
+    ### Error 0x99 - Stale Volume Attachment (NetApp-CSI)
+
+    **Symptoms:**
+    - Pod stuck in `ContainerCreating` state
+    - Events show: `FailedMount` with CSI error code 0x99
+    - Volume attachment resource exists but storage array reports volume not attached
+
+    **Root Cause:**
+    This error occurs when the NetApp-CSI driver loses synchronization with the storage
+    array during a node failure or network partition. The Kubernetes VolumeAttachment
+    resource persists even though the actual attachment on the storage array has been
+    released.
+
+    **Resolution Procedure:**
+
+    1. **Identify the stale VolumeAttachment:**
+       ```bash
+       kubectl get volumeattachment | grep <pv-name>
+       ```
+
+    2. **Delete the stale VolumeAttachment resource:**
+       ```bash
+       kubectl delete volumeattachment <attachment-name>
+       ```
+
+    3. **Apply the manual unlock annotation to the PVC:**
+       ```bash
+       kubectl annotate pvc <pvc-name> storage.internal/manual-unlock=true -n <namespace>
+       ```
+
+    4. **Verify the pod recovers:**
+       ```bash
+       kubectl get pod <pod-name> -n <namespace> -w
+       ```
+
+    **CRITICAL:** The annotation `storage.internal/manual-unlock: true` is MANDATORY
+    for our NetApp-CSI configuration. Without this annotation, the CSI driver will
+    not attempt re-attachment even after the stale VolumeAttachment is removed.
+
+    **Prevention:**
+    - Ensure node drain procedures complete cleanly
+    - Monitor for VolumeAttachment age > 1 hour
+    - Configure alerting on CSI error 0x99 occurrences
+
+    ---
+
+    ### Error 0x88 - Authentication Failure (NetApp-CSI)
+
+    **Symptoms:**
+    - All PV mounts failing cluster-wide
+    - Events show: `FailedMount` with CSI error code 0x88
+
+    **Resolution:**
+    Rotate the NetApp API credentials in the `netapp-csi-secret` Secret.
+
+    ---
+
+    ### Error 0x77 - Capacity Exhausted
+
+    **Symptoms:**
+    - New PVC stuck in `Pending` state
+    - Events show: `ProvisioningFailed` with CSI error code 0x77
+
+    **Resolution:**
+    Contact storage team to expand the aggregate or create new storage pool.
+
+  runbook-emergency-contacts.md: |
+    # Emergency Contacts for Storage Issues
+
+    ## On-Call Escalation Path
+    1. Platform Engineering (PagerDuty: storage-oncall)
+    2. Storage Team (PagerDuty: netapp-oncall)
+    3. NetApp Support: 1-800-XXX-XXXX (Contract ID: XXXXXX)
+
+    ## Slack Channels
+    - #platform-storage-alerts (automated)
+    - #storage-incidents (manual escalation)
+
+---
+# MCP Server for Knowledge Retrieval (Vector Database)
+# This wraps a SQLite-vec database containing embedded runbook content
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: storage-runbook-knowledge
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: storage-runbook-knowledge
+    app.kubernetes.io/component: mcp-server
+    kagent.dev/purpose: rag-knowledge
+spec:
+  deployment:
+    image: ghcr.io/kagent-dev/doc-server:latest
+    cmd: node
+    args:
+      - /app/server.js
+    port: 3001
+    env:
+      - name: SQLITE_DB_DIR
+        value: /data
+      - name: OPENAI_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: kagent-openai
+            key: OPENAI_API_KEY
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    volumeMounts:
+      - name: knowledge-db
+        mountPath: /data
+      - name: runbook-content
+        mountPath: /content
+    volumes:
+      - name: knowledge-db
+        emptyDir: {}
+      - name: runbook-content
+        configMap:
+          name: storage-runbook-content
+  transportType: stdio
+  stdioTransport: {}
+
+---
+# RemoteMCPServer alternative - for pre-deployed knowledge service
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: storage-runbook-remote
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: storage-runbook-knowledge
+    app.kubernetes.io/component: remote-mcp-server
+    kagent.dev/purpose: rag-knowledge
+  annotations:
+    kagent.dev/description: "Remote MCP server for storage runbook knowledge retrieval"
+spec:
+  description: "Storage runbook knowledge base with vector search capabilities"
+  url: http://storage-runbook-knowledge.kagent.svc.cluster.local:3001/mcp
+  timeout: 30s
+  sseReadTimeout: 5m0s
+
+---
+# Secret for embedding API access
+apiVersion: v1
+kind: Secret
+metadata:
+  name: knowledge-embedding-secret
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: storage-runbook-knowledge
+type: Opaque
+stringData:
+  OPENAI_API_KEY: "your-openai-api-key-here"  # Required for text embeddings
+
+---
+# Service to expose the knowledge MCP server
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-runbook-knowledge
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: storage-runbook-knowledge
+spec:
+  selector:
+    app.kubernetes.io/name: storage-runbook-knowledge
+  ports:
+    - name: mcp
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
+  type: ClusterIP
