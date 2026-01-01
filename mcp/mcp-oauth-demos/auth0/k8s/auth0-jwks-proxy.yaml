@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth0-jwks-nginx-config
+  namespace: agentgateway-system
+data:
+  nginx.conf: |
+    events {
+      worker_connections 1024;
+    }
+
+    http {
+      server {
+        listen 8443;
+
+        location /.well-known/jwks.json {
+          proxy_pass https://YOUR_DOMAIN.us.auth0.com/.well-known/jwks.json;
+          proxy_ssl_server_name on;
+          proxy_set_header Host YOUR_DOMAIN.us.auth0.com;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth0-jwks
+  namespace: agentgateway-system
+  labels:
+    app: auth0-jwks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth0-jwks
+  template:
+    metadata:
+      labels:
+        app: auth0-jwks
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 8443
+          name: http
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: config
+        configMap:
+          name: auth0-jwks-nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth0-jwks
+  namespace: agentgateway-system
+  labels:
+    app: auth0-jwks
+spec:
+  selector:
+    app: auth0-jwks
+  ports:
+  - name: http
+    port: 8443
+    targetPort: 8443
+  type: ClusterIP

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mcp-server
-  namespace: mcp-demo-auth0
+  namespace: default
   labels:
     app: mcp-server
 spec:
@@ -17,29 +17,16 @@ spec:
     spec:
       containers:
       - name: mcp-server
-        image: adminturneddevops/mcp-oauth-demo:latest
-        imagePullPolicy: IfNotPresent
+        image: adminturneddevops/mcp-oauth-demo:v0.1
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
-          protocol: TCP
         env:
         - name: PORT
           value: "8080"
         - name: HOST
           value: "0.0.0.0"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
         resources:
           requests:
             memory: "128Mi"
@@ -52,7 +39,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mcp-server
-  namespace: mcp-demo-auth0
+  namespace: default
   labels:
     app: mcp-server
 spec:
@@ -62,5 +49,4 @@ spec:
   - name: http
     port: 8080
     targetPort: 8080
-    protocol: TCP
   type: ClusterIP

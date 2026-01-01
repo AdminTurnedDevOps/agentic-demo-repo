@@ -18,19 +18,25 @@
 1. Go to: **Applications > Applications > Create Application**
 2. Configure:
    - **Name:** MCP OAuth Test Client
-   - **Application Type:** Machine to Machine (for CLI testing)
+   - **Application Type:** Native (required for device code flow)
 3. Click **Create**
-4. If Machine to Machine, authorize it for your API and select the scopes
-5. Note your **Client ID** and **Client Secret**
+4. In the **Settings** tab:
+   - Scroll down to **Advanced Settings** and expand it
+   - Click on the **Grant Types** tab
+   - Enable the **Device Code** checkbox
+   - Click **Save Changes** at the bottom
+5. Note your **Client ID** from the Settings tab (you'll need this for testing)
 
 ## Step 3: Configure Custom Claims (Roles)
 
 Auth0 requires custom claims to be namespaced.
 
-1. Go to: **Actions > Flows > Login**
-2. Click **+** and choose **Build from scratch**
-3. Name it: `Add Roles to Token`
-4. Replace the code with:
+1. Go to: **Actions > Library** (or **Actions > Custom**)
+2. Click **Build Custom** (or **Create Action** button)
+3. Choose **Create Custom Action**
+4. Select the trigger: **Login / Post Login**
+5. Name it: `Add Roles to Token`
+6. Replace the code with:
 
 ```javascript
 exports.onExecutePostLogin = async (event, api) => {
@@ -43,10 +49,11 @@ exports.onExecutePostLogin = async (event, api) => {
 };
 ```
 
-5. Click **Deploy**
-6. Go back to **Actions > Flows > Login**
-7. Drag your action into the flow between Start and Complete
-8. Click **Apply**
+7. Click **Deploy**
+8. Go to: **Actions > Triggers**
+9. Click on the **Post-Login** trigger
+10. Drag your custom action from the right sidebar into the flow (between Start and Complete)
+11. Click **Apply**
 
 ### Assign Roles to Users
 
@@ -56,9 +63,3 @@ exports.onExecutePostLogin = async (event, api) => {
 4. In `app_metadata`, add:
    - For admin: `{"roles": ["admin"]}`
    - For regular user: `{"roles": ["user"]}`
-
-## Step 4: Update Kubernetes Manifests
-
-Edit `k8s/gloo-traffic-policy.yaml` and replace:
-- `{AUTH0_DOMAIN}` with your Auth0 domain (e.g., `your-tenant.us.auth0.com`)
-- `{API_IDENTIFIER}` with your API identifier (e.g., `https://mcp-oauth-demo`)
