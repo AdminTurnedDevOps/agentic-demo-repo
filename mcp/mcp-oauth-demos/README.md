@@ -39,9 +39,9 @@ Shows how agentgateway can validate JWT tokens and enforce tool-level authorizat
 
 For each provider (auth0 or Entra) there is a `setup.md`. You'll need to set up your provider so you can pass in the domain and API ID.
 
-*For Auth0:* Follow [auth0/SETUP.md](auth0/setup.md)
+*For Auth0:* Follow [auth0/setup.md](auth0/setup.md)
 
-*For Entra ID:* Follow [entra-id/SETUP.md](entra-id/SETUP.md)
+*For Entra ID:* Follow [entra-id/setup.md](entra-id/SETUP.md)
 
 ### 2. Install kgateway/agentgateway
 
