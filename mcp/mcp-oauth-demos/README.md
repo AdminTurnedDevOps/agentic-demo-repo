@@ -74,7 +74,7 @@ kubectl apply -k auth0/k8s/
 kubectl apply -k entraid/k8s/
 ```
 
-5. ### Test Without Auth
+### 5. Test Without Auth
 
 1. Open MCP Inspector
 ```
