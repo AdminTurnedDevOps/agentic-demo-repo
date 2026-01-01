@@ -31,9 +31,7 @@ Shows how agentgateway can validate JWT tokens and enforce tool-level authorizat
 ## Prerequisites
 
 - Kubernetes cluster
-- kubectl and helm installed
 - Docker
-- jq
 
 ## Quick Start
 
