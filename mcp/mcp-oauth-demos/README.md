@@ -105,7 +105,9 @@ export API_IDENTIFIER=https://mcp-oauth-demo
 kubectl apply -f auth0/k8s/auth0-jwks-proxy.yaml
 ```
 
-3. Apply the Traffic Policy to route traffic for agentgateway to authenticate via your oAuth provider
+3. Apply the Traffic Policy to route traffic for agentgateway to authenticate via your oAuth provider.
+
+Notice the MCP Server tools that are available and not available when you apply this policy.
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: agentgateway.dev/v1alpha1
