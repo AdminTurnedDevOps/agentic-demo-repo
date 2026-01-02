@@ -120,9 +120,6 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
         echo -e "${YELLOW}Export token for use in tests:${NC}"
         echo "export AUTH0_TOKEN=\"$ACCESS_TOKEN\""
         echo ""
-        echo -e "${YELLOW}Test with the MCP demo:${NC}"
-        echo "cd ../../auth0/test-client"
-        echo "./test-mcp.sh --token \$AUTH0_TOKEN --tool echo"
 
         exit 0
 
