@@ -13,16 +13,16 @@ def main():
 
 
     search = Agent(
-        role="A2A Expert",
-        goal="Let us all know the EXACT definition of A2A",
+        role="Platform Engineering Expert",
+        goal="Answer an question around Platform Engineering",
         backstory="An expert in A2A",
         # if you don't specify a Model, it will default to gpt-4
         llm=modelType,
     )
 
     job = Task(
-        description="Let us all know the EXACT definition of A2A",
-        expected_output="The best possible definition on the Agent2Agent(A2A) protocol",
+        description="Let us know all things Platform Engineering",
+        expected_output="Whats the best way to run Kubernetes",
         agent=search
     )
     
