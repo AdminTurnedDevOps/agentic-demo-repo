@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ecommerce-app
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - rbac.yaml
+  - database.yaml
+  - backend.yaml
+  - frontend.yaml
+  - networkpolicy.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+commonLabels:
+  managed-by: kustomize
+  environment: production

@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ecommerce-app
+  labels:
+    app: frontend
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: frontend
+    spec:
+      initContainers:
+        # ISSUE #8: Waits for backend-service to have endpoints, but service selector is broken
+        - name: wait-for-backend
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for backend API to be ready..."
+              until nc -z backend-service 8080; do
+                echo "Backend is unavailable - sleeping"
+                sleep 3
+              done
+              echo "Backend is up!"
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+              name: http
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: html-content
+              mountPath: /usr/share/nginx/html
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    cat > /usr/share/nginx/html/index.html << 'EOF'
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>E-Commerce Store</title></head>
+                    <body>
+                    <h1>Welcome to Our Store</h1>
+                    <div id="products"></div>
+                    <script>
+                    fetch('/api/products')
+                      .then(r => r.json())
+                      .then(data => {
+                        document.getElementById('products').innerHTML =
+                          JSON.stringify(data.products);
+                      })
+                      .catch(e => console.error('API Error:', e));
+                    </script>
+                    </body>
+                    </html>
+                    EOF
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+        - name: html-content
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: ecommerce-app
+  labels:
+    app: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+  selector:
+    app: frontend
