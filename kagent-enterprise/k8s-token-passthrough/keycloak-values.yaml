@@ -1,0 +1,24 @@
+# keycloak-values.yaml
+auth:
+  adminUser: admin
+  adminPassword: "Password12!@"
+
+production: false
+proxy: edge
+
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "Password12!@"
+    password: "Password12!@"
+
+service:
+  type: LoadBalancer
+
+resources:
+  requests:
+    memory: 512Mi
+    cpu: 250m
+  limits:
+    memory: 1Gi
+    cpu: 1000m

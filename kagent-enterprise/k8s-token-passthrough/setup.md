@@ -1,6 +1,6 @@
-# GKE OIDC Authentication with Keycloak
+# Kubernetes OIDC Authentication with Keycloak and Pinniped
 
-This guide covers setting up Keycloak as an OIDC provider for GKE authentication using GKE Identity Service.
+This guide covers setting up Keycloak as an OIDC provider for Kubernetes authentication using Pinniped. This approach works on any Kubernetes cluster (GKE, EKS, AKS, self-managed).
 
 ## Architecture Overview
 
@@ -12,51 +12,30 @@ This guide covers setting up Keycloak as an OIDC provider for GKE authentication
 │   User                                                               │
 │     │                                                                │
 │     ▼                                                                │
-│   gcloud anthos auth login                                           │
+│   pinniped get kubeconfig                                            │
+│     │                                                                │
+│     ▼                                                                │
+│   kubectl (with Pinniped credential plugin)                          │
 │     │                                                                │
 │     ▼                                                                │
 │   Browser → Keycloak (authenticate) → OIDC Token                     │
 │     │                                                                │
 │     ▼                                                                │
-│   kubeconfig updated with token                                      │
+│   Pinniped Concierge validates token → impersonates user             │
 │     │                                                                │
 │     ▼                                                                │
-│   kubectl → GKE API Server → Identity Service validates token        │
-│     │                                                                │
-│     ▼                                                                │
-│   RBAC authorization (based on user/group claims)                    │
+│   Kubernetes API Server → RBAC authorization                         │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
-- GKE cluster (Standard or Enterprise)
-- `gcloud` CLI installed and configured
-- Cluster admin permissions
+- Kubernetes cluster (GKE, EKS, AKS, or self-managed)
+- `kubectl` installed and configured with cluster-admin access
+- `helm` installed (v3+)
 
-The `gcloud` CLI is required because `gcloud anthos auth login` handles the OIDC authentication flow. It opens your browser to Keycloak, receives the tokens, and updates your kubeconfig automatically.
-
-### Provider Compatibility
-
-This guide uses GKE Identity Service, which is GKE-specific. Here's how OIDC authentication options vary by provider:
-
-| Approach | GKE | EKS | AKS | Self-managed |
-|----------|-----|-----|-----|--------------|
-| `gcloud anthos auth login` | ✅ | ❌ | ❌ | ❌ |
-| Native OIDC flags | ❌ (managed) | ✅ | ❌ | ✅ |
-| kubelogin (kubectl plugin) | ✅ | ✅ | ✅ | ✅ |
-| Pinniped | ✅ | ✅ | ✅ | ✅
-
-### Cross-Provider Alternative
-
-If you need a solution that works across multiple Kubernetes providers:
-
-- **kubelogin (kubectl-oidc-login)**: A kubectl plugin that handles OIDC auth. Works with any cluster that has OIDC configured on the API server. Requires API server OIDC configuration (EKS supports this natively, GKE/AKS don't).
-
-- **Pinniped**: Works on any cluster regardless of API server access. Uses an impersonation pattern so it doesn't need API server OIDC flags. Installs in-cluster and provides a consistent user experience across all providers.
-
-## Part 1: Install Keycloak in GKE
+## Part 1: Install Keycloak
 
 ### 1.1 Create Namespace
 
@@ -64,86 +43,155 @@ If you need a solution that works across multiple Kubernetes providers:
 kubectl create namespace keycloak
 ```
 
-### 1.2 Add Helm Repository
+### 1.2 Generate TLS Certificate
+
+Pinniped requires HTTPS for the OIDC issuer. Generate a self-signed certificate:
 
 ```bash
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm repo update
+# First, get the LoadBalancer IP (run after deploying Keycloak, or use a placeholder and regenerate later)
+# export KEYCLOAK_IP=<your-loadbalancer-ip>
+
+# Generate CA and certificate (include the IP in SANs for Pinniped to validate)
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout keycloak-tls.key \
+  -out keycloak-tls.crt \
+  -subj "/CN=keycloak" \
+  -addext "subjectAltName=DNS:keycloak,DNS:keycloak.keycloak.svc.cluster.local,IP:${KEYCLOAK_IP}"
+
+# Create Kubernetes secret
+kubectl create secret tls keycloak-tls \
+  --cert=keycloak-tls.crt \
+  --key=keycloak-tls.key \
+  -n keycloak
+
+# Save the CA for later use with Pinniped
+export KEYCLOAK_CA_BASE64=$(cat keycloak-tls.crt | base64 | tr -d '\n')
 ```
 
-### 1.3 Create Keycloak Values File
+### 1.3 Deploy Keycloak
 
-Create a file named `keycloak-values.yaml`:
-
-```yaml
-# keycloak-values.yaml
-auth:
-  adminUser: admin
-  adminPassword: "Password12!@"
-
-production: false
-proxy: edge
-
-postgresql:
-  enabled: true
-  auth:
-    postgresPassword: "Password12!@"
-    password: "Password12!@"
-
-service:
+```bash
+kubectl apply -f -<<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keycloak-data
+  namespace: keycloak
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          command: ['sh', '-c', 'chown -R 1000:1000 /data']
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.0
+          args: ["start-dev"]
+          env:
+            - name: KEYCLOAK_ADMIN
+              value: "admin"
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: "Password12!@"
+            - name: KC_HTTPS_CERTIFICATE_FILE
+              value: "/etc/keycloak/tls/tls.crt"
+            - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+              value: "/etc/keycloak/tls/tls.key"
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/keycloak/tls
+              readOnly: true
+            - name: data
+              mountPath: /opt/keycloak/data
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              memory: 1Gi
+              cpu: 1000m
+      volumes:
+        - name: tls
+          secret:
+            secretName: keycloak-tls
+        - name: data
+          persistentVolumeClaim:
+            claimName: keycloak-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
   type: LoadBalancer
-
-resources:
-  requests:
-    memory: 512Mi
-    cpu: 250m
-  limits:
-    memory: 1Gi
-    cpu: 1000m
+  selector:
+    app: keycloak
+  ports:
+    - port: 443
+      targetPort: 8443
+EOF
 ```
 
-### 1.4 Install Keycloak
-
-```bash
-helm install keycloak bitnami/keycloak \
-  --namespace keycloak \
-  --values keycloak-values.yaml \
-  --wait
-```
-
-### 1.5 Verify Installation
+### 1.4 Verify Installation
 
 ```bash
 # Check pods
-kubectl get pods -n keycloak
+kubectl get pods -n keycloak --watch
 
 # Get the LoadBalancer external IP (may take a few minutes)
 kubectl get svc keycloak -n keycloak
 
 # Save the IP for later use
 export KEYCLOAK_IP=$(kubectl get svc keycloak -n keycloak -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-echo "Keycloak is available at: http://${KEYCLOAK_IP}"
+echo "Keycloak is available at: https://${KEYCLOAK_IP}"
 ```
 
-## Part 2: Configure Keycloak for GKE
+## Part 2: Configure Keycloak
 
 ### 2.1 Access Keycloak Admin Console
 
-1. Navigate to `http://<KEYCLOAK_IP>` (the LoadBalancer IP from step 1.5)
+1. Navigate to `https://<KEYCLOAK_IP>` (the LoadBalancer IP from step 1.4, accept the self-signed cert warning)
 2. Click "Administration Console"
-3. Login with the admin credentials from `keycloak-values.yaml`
+3. Login with admin / Password12!@
 
 ### 2.2 Create a Realm
 
 1. Hover over "master" dropdown in top-left
 2. Click "Create Realm"
 3. Set:
-   - Realm name: `gke`
+   - Realm name: `kubernetes`
 4. Click "Create"
 
 ### 2.3 Create Groups
 
-1. In the `gke` realm, go to **Groups** (left sidebar)
+1. In the `kubernetes` realm, go to **Groups** (left sidebar)
 2. Click "Create group"
 3. Create the following groups:
    - `k8s-admins` (for cluster-admin access)
@@ -163,41 +211,36 @@ echo "Keycloak is available at: http://${KEYCLOAK_IP}"
 4. Click "Create"
 5. Go to **Credentials** tab:
    - Click "Set password"
-   - Set a password
+   - Set the password to `Password123`
    - Temporary: OFF
 6. Go to **Groups** tab:
    - Click "Join Group"
    - Select `k8s-admins`
 
-### 2.5 Create Client for GKE
+### 2.5 Create Client for Pinniped
 
 1. Go to **Clients** (left sidebar)
 2. Click "Create client"
 3. **General Settings**:
    - Client type: OpenID Connect
-   - Client ID: `gke-cluster`
+   - Client ID: `pinniped-cli`
    - Click "Next"
 4. **Capability config**:
-   - Client authentication: ON
+   - Client authentication: OFF (public client)
    - Authorization: OFF
-   - Authentication flow: Check "Standard flow" only
+   - Authentication flow: Check "Standard flow" and "Direct access grants"
    - Click "Next"
 5. **Login settings**:
-   - Valid redirect URIs: `http://localhost:8000/callback`
+   - Valid redirect URIs: `http://127.0.0.1/callback`
    - Click "Save"
 
-### 2.6 Get Client Secret
-
-1. In the `gke-cluster` client, go to **Credentials** tab
-2. Copy the "Client secret" - you'll need this later
-
-### 2.7 Configure Group Mapper
+### 2.6 Configure Group Mapper
 
 By default, Keycloak doesn't include groups in tokens. You need to add a mapper:
 
-1. In the `gke-cluster` client, go to **Client scopes** tab
-2. Click `gke-cluster-dedicated`
-3. Click "Add mapper" → "By configuration"
+1. In the `pinniped-cli` client, go to **Client scopes** tab
+2. Click `pinniped-cli-dedicated`
+3. Click "Configure a new mapper"
 4. Select "Group Membership"
 5. Configure:
    - Name: `groups`
@@ -208,84 +251,69 @@ By default, Keycloak doesn't include groups in tokens. You need to add a mapper:
    - Add to userinfo: ON
 6. Click "Save"
 
-### 2.8 Verify OIDC Endpoints
+### 2.7 Verify OIDC Endpoints
 
 Your OIDC issuer URL is:
 ```
-http://<KEYCLOAK_IP>/realms/gke
+https://<KEYCLOAK_IP>/realms/kubernetes
 ```
 
 You can verify the configuration at:
 ```
-http://<KEYCLOAK_IP>/realms/gke/.well-known/openid-configuration
+https://<KEYCLOAK_IP>/realms/kubernetes/.well-known/openid-configuration
 ```
 
-## Part 3: Enable GKE Identity Service
+## Part 3: Install Pinniped
 
-### 3.1 Enable Identity Service on Cluster
+Pinniped is an open-source authentication service for Kubernetes clusters. It allows you to use external identity providers (like Keycloak) without needing to configure the Kubernetes API server directly. Pinniped uses an impersonation pattern where its in-cluster component (Concierge) validates your OIDC token and then impersonates you when talking to the API server.
+
+### 3.1 Install Pinniped Concierge
+
+The Concierge runs in-cluster and handles token validation.
+
+```
+kubectl apply -f https://get.pinniped.dev/latest/install-pinniped-concierge.yaml
+```
+
+```
+kubectl get pods -n pinniped-concierge
+```
+
+### 3.2 Configure JWT Authenticator
+
+Create a JWTAuthenticator to tell Pinniped how to validate Keycloak tokens:
 
 ```bash
-# Replace with your cluster name and region/zone
-CLUSTER_NAME="your-cluster-name"
-REGION="us-central1"  # or use --zone for zonal clusters
-
-gcloud container clusters update ${CLUSTER_NAME} \
-  --enable-identity-service \
-  --region=${REGION}
-```
-
-This may take a few minutes. You can verify:
-
-```bash
-gcloud container clusters describe ${CLUSTER_NAME} \
-  --region=${REGION} \
-  --format="value(identityServiceConfig.enabled)"
-```
-
-### 3.2 Create ClientConfig for Keycloak
-
-Create a file named `client-config.yaml`:
-
-```yaml
-# client-config.yaml
-apiVersion: authentication.gke.io/v2alpha1
-kind: ClientConfig
+kubectl apply -f -<<EOF
+apiVersion: authentication.concierge.pinniped.dev/v1alpha1
+kind: JWTAuthenticator
 metadata:
-  name: default
-  namespace: kube-public
+  name: keycloak
 spec:
-  authentication:
-    - name: keycloak
-      oidc:
-        clientID: gke-cluster
-        clientSecret: YOUR_CLIENT_SECRET_HERE  # From step 2.6
-        issuerURI: http://<KEYCLOAK_IP>/realms/gke
-        kubectlRedirectURI: http://localhost:8000/callback
-        scopes: openid,email,groups
-        userClaim: email
-        groupsClaim: groups
-        userPrefix: ""
-        groupPrefix: ""
+  issuer: https://${KEYCLOAK_IP}/realms/kubernetes
+  audience: pinniped-cli
+  claims:
+    username: email
+    groups: groups
+  tls:
+    certificateAuthorityData: ${KEYCLOAK_CA_BASE64}
+EOF
 ```
 
-Apply the configuration:
+### 3.3 Verify JWTAuthenticator
 
 ```bash
-kubectl apply -f client-config.yaml
+kubectl get jwtauthenticator keycloak -o yaml
 ```
 
-### 3.3 Verify ClientConfig
-
-```bash
-kubectl get clientconfig default -n kube-public -o yaml
-```
+The status should show the authenticator is ready.
 
 ## Part 4: Configure RBAC
 
 ### 4.1 Cluster Admin Binding (k8s-admins group)
 
-```yaml
-# rbac-admins.yaml
+```bash
+kubectl apply -f -<<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -298,16 +326,13 @@ roleRef:
   kind: ClusterRole
   name: cluster-admin
   apiGroup: rbac.authorization.k8s.io
-```
-
-```bash
-kubectl apply -f rbac-admins.yaml
+EOF
 ```
 
 ### 4.2 Developer Binding (k8s-developers group)
 
-```yaml
-# rbac-developers.yaml
+```bash
+kubectl apply -f -<<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -320,16 +345,13 @@ roleRef:
   kind: ClusterRole
   name: edit
   apiGroup: rbac.authorization.k8s.io
-```
-
-```bash
-kubectl apply -f rbac-developers.yaml
+EOF
 ```
 
 ### 4.3 Viewer Binding (k8s-viewers group)
 
-```yaml
-# rbac-viewers.yaml
+```bash
+kubectl apply -f -<<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -342,79 +364,53 @@ roleRef:
   kind: ClusterRole
   name: view
   apiGroup: rbac.authorization.k8s.io
-```
-
-```bash
-kubectl apply -f rbac-viewers.yaml
+EOF
 ```
 
 ## Part 5: User Authentication
 
-### 5.1 Generate Login Config File
-
-First, get the login configuration file from your cluster:
+### 5.1 Install Pinniped CLI
 
 ```bash
-# Get the cluster's login config
-gcloud container clusters describe ${CLUSTER_NAME} \
-  --region=${REGION} \
-  --format="value(masterAuth.clusterCaCertificate)" | base64 -d > ca.crt
+# macOS
+brew install vmware-tanzu/pinniped/pinniped-cli
 
-# Get the cluster endpoint
-CLUSTER_ENDPOINT=$(gcloud container clusters describe ${CLUSTER_NAME} \
-  --region=${REGION} \
-  --format="value(endpoint)")
+# Linux
+curl -L https://get.pinniped.dev/latest/pinniped-cli-linux-amd64 -o pinniped
+chmod +x pinniped
+sudo mv pinniped /usr/local/bin/
 ```
 
-Create a login config file `login-config.yaml`:
+### 5.2 Generate Kubeconfig
 
-```yaml
-# login-config.yaml
-apiVersion: authentication.gke.io/v2alpha1
-kind: ClientConfig
-metadata:
-  name: default
-spec:
-  name: gke-cluster
-  server: https://CLUSTER_ENDPOINT  # Replace with actual endpoint
-  certificateAuthorityData: BASE64_CA_CERT  # Replace with base64 CA cert
-  authentication:
-    - name: keycloak
-      oidc:
-        clientID: gke-cluster
-        clientSecret: YOUR_CLIENT_SECRET
-        issuerURI: http://<KEYCLOAK_IP>/realms/gke
-        kubectlRedirectURI: http://localhost:8000/callback
-        scopes: openid,email,groups
-        userClaim: email
-        groupsClaim: groups
-```
-
-Or download it directly:
+Use the Pinniped CLI to generate a kubeconfig that uses OIDC authentication:
 
 ```bash
-gcloud container clusters get-credentials ${CLUSTER_NAME} \
-  --region=${REGION}
-
-kubectl get clientconfig default -n kube-public -o yaml > login-config.yaml
+pinniped get kubeconfig \
+  --oidc-issuer https://${KEYCLOAK_IP}/realms/kubernetes \
+  --oidc-client-id pinniped-cli \
+  --oidc-scopes openid,email,groups \
+  --oidc-listen-port 12345 \
+  --oidc-ca-bundle keycloak-tls.crt \
+  > pinniped-kubeconfig.yaml
 ```
 
-### 5.2 Authenticate with Keycloak
+### 5.3 Authenticate with Keycloak
 
 ```bash
-# Login via OIDC
-gcloud anthos auth login \
-  --cluster=${CLUSTER_NAME} \
-  --login-config=login-config.yaml \
-  --preferred-auth=keycloak
+# Use the Pinniped kubeconfig
+export KUBECONFIG=pinniped-kubeconfig.yaml
+
+# Run any kubectl command - it will trigger browser authentication
+kubectl get pods
 ```
 
 This will:
 1. Open your browser to Keycloak login page
 2. After authentication, redirect back with tokens
-3. Update your kubeconfig with the OIDC credentials
+3. Complete the kubectl command with your OIDC identity
 
-### 5.3 Verify Authentication
+### 5.4 Verify Authentication
 
 ```bash
 # Check your identity
@@ -426,22 +422,29 @@ kubectl get pods --all-namespaces
 
 ## Part 6: Troubleshooting
 
-### 6.1 Check Identity Service Logs
+### 6.1 Check Pinniped Concierge Logs
 
 ```bash
-kubectl logs -n anthos-identity-service -l app=ais --tail=100
+kubectl logs -n pinniped-concierge -l app=concierge --tail=100
 ```
 
-### 6.2 Verify Token Claims
-
-You can decode your token to verify claims:
+### 6.2 Check JWTAuthenticator Status
 
 ```bash
-# Get the token from kubeconfig
-TOKEN=$(kubectl config view --raw -o jsonpath='{.users[?(@.name=="keycloak")].user.auth-provider.config.id-token}')
+kubectl get jwtauthenticator keycloak -o jsonpath='{.status}' | jq .
+```
 
-# Decode (requires jq)
-echo $TOKEN | cut -d'.' -f2 | base64 -d 2>/dev/null | jq .
+### 6.3 Verify Token Claims
+
+You can test getting a token directly from Keycloak:
+
+```bash
+curl -k -X POST "https://${KEYCLOAK_IP}/realms/kubernetes/protocol/openid-connect/token" \
+  -d "client_id=pinniped-cli" \
+  -d "grant_type=password" \
+  -d "username=testuser" \
+  -d "password=Password123" \
+  -d "scope=openid email groups" | jq -r '.access_token' | cut -d'.' -f2 | base64 -d | jq .
 ```
 
 Expected output should include:
@@ -453,27 +456,27 @@ Expected output should include:
 }
 ```
 
+### 6.4 Common Issues
+
+**Issue: "Unable to connect to issuer"**
+- Verify Keycloak is accessible from the cluster
+- Check the issuer URL in JWTAuthenticator matches exactly
+
+**Issue: "Groups not appearing in token"**
+- Verify the group mapper is configured in Keycloak
+- Ensure "Add to ID token" is enabled
+
+**Issue: "Unauthorized" after login**
+- Verify RBAC bindings match the group names in Keycloak
+- Check that the user is in the correct group
+
 ## Quick Reference
 
 | Component | URL/Value |
 |-----------|-----------|
-| Keycloak Admin | `http://<KEYCLOAK_IP>` |
-| OIDC Issuer | `http://<KEYCLOAK_IP>/realms/gke` |
-| Discovery | `http://<KEYCLOAK_IP>/realms/gke/.well-known/openid-configuration` |
-| Client ID | `gke-cluster` |
-| Redirect URI | `http://localhost:8000/callback` |
-| User Claim | `email` |
+| Keycloak Admin | `https://<KEYCLOAK_IP>` |
+| OIDC Issuer | `https://<KEYCLOAK_IP>/realms/kubernetes` |
+| Discovery | `https://<KEYCLOAK_IP>/realms/kubernetes/.well-known/openid-configuration` |
+| Client ID | `pinniped-cli` |
+| Username Claim | `email` |
 | Groups Claim | `groups` |
-
-## Files Created
-
-After following this guide, you should have:
-
-```
-├── keycloak-values.yaml        # Helm values for Keycloak
-├── client-config.yaml          # GKE Identity Service config
-├── rbac-admins.yaml            # Admin RBAC binding
-├── rbac-developers.yaml        # Developer RBAC binding
-├── rbac-viewers.yaml           # Viewer RBAC binding
-└── login-config.yaml           # User login configuration
-```
