@@ -371,11 +371,7 @@ EOF
 
 ### 5.1 Install Pinniped CLI
 
-```bash
-# macOS
-brew install vmware-tanzu/pinniped/pinniped-cli
-
-# Linux
+```
 curl -L https://get.pinniped.dev/latest/pinniped-cli-linux-amd64 -o pinniped
 chmod +x pinniped
 sudo mv pinniped /usr/local/bin/
