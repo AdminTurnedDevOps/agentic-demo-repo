@@ -75,7 +75,7 @@ kubectl apply -f - <<EOF
 apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
 kind: AccessPolicy
 metadata:
-  name: deny-kagent-tool-server
+  name: deny-kagent-tool-server-dec
   namespace: kagent
 spec:
   from:
@@ -87,7 +87,7 @@ spec:
     kind: MCPServer
     name: test-mcp-server
     # if you comment out the tools parameter, the agent will say it has to tools
-    tools: ["search_repositories"]
+    tools: ["search_code"]
   action: ALLOW
 EOF
 ```
@@ -154,12 +154,12 @@ docker build . -t troubleshoot:latest \
 
 5. Tag the image with your container registry
 ```
-docker tag troubleshoot:latest adminturneddevops/troubleshoot:v0.3
+docker tag troubleshoot:latest adminturneddevops/troubleshoot:v0.5
 ```
 
 6. Push the container image to your container registry
 ```
-docker push adminturneddevops/troubleshoot:v0.3
+docker push adminturneddevops/troubleshoot:v0.5
 ```
 
 7. Specify the Google API key
@@ -185,7 +185,7 @@ spec:
   type: BYO
   byo:
     deployment:
-      image: adminturneddevops/troubleshoot:v0.3
+      image: adminturneddevops/troubleshoot:v0.5
       env:
         - name: GOOGLE_API_KEY
           valueFrom:
@@ -220,7 +220,7 @@ spec:
     kind: MCPServer
     name: test-mcp-server
     # if you comment out the tools parameter, the agent will say it has to tools
-    tools: ["search_code", "search_issues", "search_users"]
+    tools: ["search_repositories"]
   action: DENY
 EOF
 ```

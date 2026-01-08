@@ -195,7 +195,8 @@ tools=[
     google_search,
     MCPToolset(
         connection_params=StreamableHTTPConnectionParams(
-            url=os.getenv("MCP_SERVER_URL", "http://test-mcp-server.kagent.svc.cluster.local:3000"),
+            # Use the shorthand path to the k8s service
+            url=os.getenv("MCP_SERVER_URL", "http://test-mcp-server.kagent:3000/mcp"),
         ),
         tool_filter=[
             'search_repositories',
