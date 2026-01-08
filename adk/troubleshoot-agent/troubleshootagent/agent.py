@@ -1,13 +1,12 @@
 from google.adk.agents.llm_agent import Agent
 from google.adk.tools import google_search
 from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
-from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
-from mcp import StdioServerParameters
+from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
 
 import os
 
 root_agent = Agent(
-    model='gemini-2.5-pro',
+    model='gemini-2.5-flash',
     name='root_agent',
     description='A helpful assistant for SRE and Platform Engineering related questions.',
     instruction="""
@@ -195,21 +194,14 @@ Your goal is to help engineers build reliable, observable, and maintainable syst
 tools=[
     google_search,
     MCPToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(
-                command='npx',
-                args=["-y", "kubernetes-mcp-server"],
-                env=os.environ.copy(),
-            )
+        connection_params=StreamableHTTPConnectionParams(
+            url=os.getenv("MCP_SERVER_URL", "http://test-mcp-server.kagent.svc.cluster.local:3000"),
         ),
         tool_filter=[
-            'events_list',
-            'namespaces_list',
-            'pods_list',
-            'pods_get',
-            'pods_log',
-            'resources_list',
-            'resources_get'
+            'search_repositories',
+            'search_issues',
+            'search_code',
+            'search_users'
         ]
     ),
     # MCPToolset(
