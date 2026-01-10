@@ -48,23 +48,22 @@ EOF
 A Backend resource to define a backing destination that you want kgateway to route to. In this case, it's Claude.
 ```
 kubectl apply -f- <<EOF
-apiVersion: gateway.kgateway.dev/v1alpha1
-kind: Backend
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
 metadata:
   labels:
     app: agentgateway
   name: anthropic
   namespace: kgateway-system
 spec:
-  type: AI
   ai:
-    llm:
+    provider:
         anthropic:
-          authToken:
-            kind: SecretRef
-            secretRef:
-              name: anthropic-secret
           model: "claude-3-5-haiku-latest"
+  policies:
+    auth:
+      secretRef:
+        name: anthropic-secret
 EOF
 ```
 
@@ -100,10 +99,9 @@ spec:
           replaceFullPath: /v1/chat/completions
     backendRefs:
     - name: anthropic
-      namespace: kgateway-system
-      group: gateway.kgateway.dev
-      kind: Backend
-EOF
+      namespace: agentgateway-system
+      group: agentgateway.dev
+      kind: AgentgatewayBackend
 ```
 
 8. Test the LLM connectivity

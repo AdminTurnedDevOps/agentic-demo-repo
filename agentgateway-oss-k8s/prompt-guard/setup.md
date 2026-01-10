@@ -17,7 +17,7 @@ kind: Gateway
 apiVersion: gateway.networking.k8s.io/v1
 metadata:
   name: agentgateway
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 spec:
@@ -45,7 +45,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: anthropic-secret
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 type: Opaque
@@ -65,7 +65,7 @@ metadata:
   labels:
     app: agentgateway
   name: anthropic
-  namespace: kgateway-system
+  namespace: agentgateway-system
 spec:
   ai:
     provider:
@@ -80,23 +80,23 @@ EOF
 
 6. Ensure everything is running as expected
 ```
-kubectl get agentgatewaybackend -n kgateway-system
+kubectl get agentgatewaybackend -n agentgateway-system
 ```
 
 7. Apply the Route so you can reach the LLM
 ```
-kubectl delete -f- <<EOF
+kubectl apply -f- <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: claude
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 spec:
   parentRefs:
     - name: agentgateway
-      namespace: kgateway-system
+      namespace: agentgateway-system
   rules:
   - matches:
     - path:
@@ -111,7 +111,7 @@ spec:
     backendRefs:
     - name: anthropic
       namespace: kgateway-system
-      group: agentgatewaygateway.kgateway.dev
+      group: agentgateway.dev
       kind: AgentgatewayBackend
 EOF
 ```
@@ -136,11 +136,11 @@ curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v -H content-type:application/json -H
 
 ```
 kubectl apply -f - <<EOF
-apiVersion: gateway.kgateway.dev/v1alpha1
+apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayPolicy
 metadata:
   name: credit-guard-prompt-guard
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 spec:
