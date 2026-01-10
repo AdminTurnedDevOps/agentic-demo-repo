@@ -12,7 +12,7 @@ kind: Gateway
 apiVersion: gateway.networking.k8s.io/v1
 metadata:
   name: agentgateway
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 spec:
@@ -34,7 +34,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: anthropic-secret
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 type: Opaque
@@ -54,7 +54,7 @@ metadata:
   labels:
     app: agentgateway
   name: anthropic
-  namespace: kgateway-system
+  namespace: agentgateway-system
 spec:
   ai:
     provider:
@@ -79,13 +79,13 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: claude
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 spec:
   parentRefs:
     - name: agentgateway
-      namespace: kgateway-system
+      namespace: agentgateway-system
   rules:
   - matches:
     - path:
