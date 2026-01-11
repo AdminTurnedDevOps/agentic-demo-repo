@@ -86,7 +86,6 @@ spec:
   targetRef:
     kind: MCPServer
     name: test-mcp-server
-    # if you comment out the tools parameter, the agent will say it has to tools
     tools: ["search_repositories"]
   action: DENY
 EOF
