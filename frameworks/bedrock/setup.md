@@ -72,7 +72,7 @@ metadata:
   namespace: kagent
 spec:
   # The bedrock/ prefix tells litellm to use its native Bedrock provider (via boto3)
-  model: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
+  model: amazon.nova-2-sonic-v1:0
   # kagent requires a provider from its enum - there's no "Bedrock" option
   # litellm routes based on the model prefix, so this is just a placeholder
   provider: OpenAI
@@ -115,28 +115,6 @@ spec:
   declarative:
     modelConfig: bedrock-model-config
     deployment:
-      env:
-      # Dummy key to satisfy OpenAI provider validation - not actually used
-      - name: OPENAI_API_KEY
-        value: "sk-dummy-not-used"
-      - name: AWS_ACCESS_KEY_ID
-        valueFrom:
-          secretKeyRef:
-            name: kagent-bedrock-aws
-            key: AWS_ACCESS_KEY_ID
-      - name: AWS_SECRET_ACCESS_KEY
-        valueFrom:
-          secretKeyRef:
-            name: kagent-bedrock-aws
-            key: AWS_SECRET_ACCESS_KEY
-      - name: AWS_SESSION_TOKEN
-        valueFrom:
-          secretKeyRef:
-            name: kagent-bedrock-aws
-            key: AWS_SESSION_TOKEN
-            optional: true
-      - name: AWS_REGION_NAME
-        value: "us-west-1"
     systemMessage: |
       You're a friendly and helpful agent that uses Kubernetes tools to help with troubleshooting and deployments.
 
@@ -173,3 +151,19 @@ kubectl get agent bedrock-agent-test -n kagent -o jsonpath='{.status.conditions}
 Both conditions should show `status: "True"`:
 - `type: Accepted` - Agent spec is valid
 - `type: Ready` - Deployment is running
+
+
+kubectl apply -f - <<EOF
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: bedrock-model-config
+  namespace: kagent
+spec:
+  apiKeySecret: kagent-bedrock
+  apiKeySecretKey: AWS_API_KEY
+  model: amazon.nova-2-sonic-v1:0
+  provider: OpenAI
+  openAI:
+    baseUrl: "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1"
+EOF
