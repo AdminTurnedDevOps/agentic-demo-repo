@@ -110,7 +110,7 @@ export INGRESS_GW_ADDRESS=$(kubectl get svc -n kgateway-system agentgateway -o j
 echo $INGRESS_GW_ADDRESS
 ```
 
-9. Run `python3 route-agentgateway-traffic.pi`
+9. Run `python3 route-agentgateway-traffic.py`
 
 10. Check the logs in the agentgateway Pod to confirm the traffic flow:
 
