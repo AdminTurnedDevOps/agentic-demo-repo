@@ -171,27 +171,24 @@ spec:
   - group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: claude
-  backend:
-    ai:
-    policies:
-      localRateLimit:
-        - maxTokens: 1
-          tokensPerFill: 1
-          fillInterval: 100s
-          type: tokens
+  traffic:
+    rateLimit:
+      local:
+        - requests: 1
+          unit: Minutes
 EOF
 ```
 
 
 2. Capture the LB IP of the service to test again
 ```
-export INGRESS_GW_ADDRESS=$(kubectl get svc -n kgateway-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
+export INGRESS_GW_ADDRESS=$(kubectl get svc -n agentgateway-system agentgateway-rate -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
 3. Test the LLM connectivity
 ```
-curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v \ -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
+curl "$INGRESS_GW_ADDRESS:8080/anthropic" -v \ -H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
   "model": "claude-sonnet-4-5",
   "messages": [
     {
@@ -221,9 +218,9 @@ You'll see a `curl` error that looks something like this:
 And if you check the agentgateway Pod logs, you'll see the rate limit error.
 
 ```
-kubectl logs -n agentgateway-system agentgateway-74f485d95c-nnzq4 --tail=50 | grep -i "request\|error\|anthropic"
+kubectl logs agentgateway-rate-6f68f657d7-4vcqk -n agentgateway-system --tail=50 | grep -i "request\|error\|anthropic"
 ```
 
 ```
-2025-10-20T16:08:59.886579Z     info    request gateway=kgateway-system/agentgateway listener=http route=kgateway-system/claude src.addr=10.142.0.25:42187 http.method=POST http.host=34.148.15.158 http.path=/anthropic http.version=HTTP/1.1 http.status=429 error="rate limit exceeded" duration=0ms
+2026-01-16T14:16:20.194319Z     info    request gateway=agentgateway-system/agentgateway-rate listener=http route=agentgateway-system/claude src.addr=10.108.0.1:45917 http.method=POST http.host=34.148.238.201 http.path=/anthropic http.version=HTTP/1.1 http.status=429 protocol=http error="rate limit exceeded" duration=0ms
 ```
