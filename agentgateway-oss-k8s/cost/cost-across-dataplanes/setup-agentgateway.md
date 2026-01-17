@@ -34,7 +34,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: anthropic-secret
-  namespace: kgateway-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 type: Opaque
@@ -219,7 +219,7 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: claude1
+  name: claude3
   namespace: agentgateway-system
   labels:
     app: agentgateway3
@@ -261,7 +261,8 @@ echo $INGRESS_GW_ADDRESSTHREE
 
 Test the LLM connectivity
 ```
-curl "$INGRESS_GW_ADDRESSONE:8080/anthropic" -v \ -H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
+curl "$INGRESS_GW_ADDRESSONE:8080/anthropic" -v \
+-H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
   "model": "claude-sonnet-4-5",
   "messages": [
     {
@@ -277,7 +278,8 @@ curl "$INGRESS_GW_ADDRESSONE:8080/anthropic" -v \ -H content-type:application/js
 ```
 
 ```
-curl "$INGRESS_GW_ADDRESSTWO:8080/anthropic" -v \ -H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
+curl "$INGRESS_GW_ADDRESSTWO:8080/anthropic" -v \
+-H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
   "model": "claude-sonnet-4-5",
   "messages": [
     {
@@ -293,7 +295,8 @@ curl "$INGRESS_GW_ADDRESSTWO:8080/anthropic" -v \ -H content-type:application/js
 ```
 
 ```
-curl "$INGRESS_GW_ADDRESSTHREE:8080/anthropic" -v \ -H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
+curl "$INGRESS_GW_ADDRESSTHREE:8080/anthropic" -v \
+-H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
   "model": "claude-sonnet-4-5",
   "messages": [
     {

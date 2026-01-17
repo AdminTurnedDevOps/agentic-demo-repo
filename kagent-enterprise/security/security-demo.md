@@ -69,7 +69,9 @@ You should see four tools:
         - search_code
         - search_users
 
-4. Apply an access policy that specifies only access to one of the tools
+### Access Policy For Denying Tools
+
+1. Apply an access policy that specifies only access to one of the tools
 ```
 kubectl apply -f - <<EOF
 apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
@@ -91,18 +93,55 @@ spec:
 EOF
 ```
 
-5. Prompt again
+2. Prompt again
 ```
 What tools do you have available? Give me the list
 ```
 
-You should now only see access to the `search_repositories` tool
+You should now not the `search_repositories` tool
+
+### Access Policies For Allowing Specific Tools
+
+1. Apply an access policy that specifies only access to one of the tools
+```
+kubectl apply -f - <<EOF
+apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: deny-kagent-tool-server-dec
+  namespace: kagent
+spec:
+  from:
+    subjects:
+    - kind: Agent
+      name: test-access-policy
+      namespace: kagent
+  targetRef:
+    kind: MCPServer
+    name: test-mcp-server
+    tools: ["search_repositories"]
+  action: ALLOW
+EOF
+```
+
+2. Prompt again
+```
+What tools do you have available? Give me the list
+```
+
+You should now the `search_repositories` tool
 
 ## k8s Agent Access Policies (UI)
 
 1. Log into kagent
 2. Go to Access Policies
 3. Create a new access policy
+
+## Prompt Guards
+
+
+## Traffic Policies
+
 
 ## UI Auth with an OIDC provider
 
@@ -296,5 +335,3 @@ EOF
 ```
 
 > **Note**: The `roleMapper` CEL expression handles both `Groups` and `groups` claim names to account for case sensitivity differences across IdP implementations (Keycloak, Okta, Azure AD, etc.).
-
-## Access Policy That Points To Observability Agent
