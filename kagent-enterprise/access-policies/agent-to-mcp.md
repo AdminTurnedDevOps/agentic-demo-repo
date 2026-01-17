@@ -34,6 +34,10 @@ spec:
   description: This agent can use a single tool to expand it's Kubernetes knowledge for troubleshooting and deployment
   type: Declarative
   declarative:
+    deployment:
+      env:
+        - name: LOG_LEVEL
+          value: debug
     modelConfig: default-model-config
     systemMessage: |-
       You're a friendly and helpful agent that uses the Kubernetes tool to help troubleshooting and deploy environments
@@ -97,6 +101,7 @@ EOF
 ```
 
 You should now only see access to the `search_repositories` tool
+
 
 ## BYO Agent
 

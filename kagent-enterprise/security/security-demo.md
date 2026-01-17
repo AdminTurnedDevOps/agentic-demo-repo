@@ -98,6 +98,29 @@ What tools do you have available? Give me the list
 
 You should now only see access to the `search_repositories` tool
 
+6. Delete the policy:
+
+```
+kubectl delete -f - <<EOF
+apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: deny-kagent-tool-server-dec
+  namespace: kagent
+spec:
+  from:
+    subjects:
+    - kind: Agent
+      name: test-access-policy
+      namespace: kagent
+  targetRef:
+    kind: MCPServer
+    name: test-mcp-server
+    tools: ["search_repositories"]
+  action: DENY
+EOF
+```
+
 ## k8s Agent Access Policies (UI)
 
 1. Log into kagent
