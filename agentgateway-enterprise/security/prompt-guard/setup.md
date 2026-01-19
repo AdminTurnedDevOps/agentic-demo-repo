@@ -12,7 +12,7 @@ kind: Gateway
 apiVersion: gateway.networking.k8s.io/v1
 metadata:
   name: agentgateway-route
-  namespace: gloo-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway-route
 spec:
@@ -34,7 +34,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: anthropic-secret
-  namespace: gloo-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 type: Opaque
@@ -54,7 +54,7 @@ metadata:
   labels:
     app: agentgateway-route
   name: anthropic
-  namespace: gloo-system
+  namespace: agentgateway-system
 spec:
   ai:
     provider:
@@ -69,7 +69,7 @@ EOF
 
 5. Ensure everything is running as expected
 ```
-kubectl get agentgatewaybackend -n gloo-system
+kubectl get agentgatewaybackend -n agentgateway-system
 ```
 
 6. Apply the Route so you can reach the LLM
@@ -79,13 +79,13 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: claude
-  namespace: gloo-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway-route
 spec:
   parentRefs:
     - name: agentgateway-route
-      namespace: gloo-system
+      namespace: agentgateway-system
   rules:
   - matches:
     - path:
@@ -99,14 +99,14 @@ spec:
           replaceFullPath: /v1/chat/completions
     backendRefs:
     - name: anthropic
-      namespace: gloo-system
+      namespace: agentgateway-system
       group: agentgateway.dev
       kind: AgentgatewayBackend
 EOF
 ```
 
 ```
-export INGRESS_GW_ADDRESS=$(kubectl get svc -n gloo-system agentgateway-route -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
+export INGRESS_GW_ADDRESS=$(kubectl get svc -n agentgateway-system agentgateway-route -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
@@ -133,7 +133,7 @@ apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
   name: credit-guard-prompt-guard
-  namespace: gloo-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway-route
 spec:
@@ -148,7 +148,7 @@ spec:
         - response:
             message: "Rejected due to inappropriate content"
           regex:
-            action: REJECT
+            action: Reject
             matches:
             - "credit card"
 EOF
