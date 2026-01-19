@@ -312,29 +312,16 @@ Providers: https://docs.solo.io/kagent-enterprise/docs/main/install/idp/
 
 ## Platform RBAC (Kubernetes RBAC for the kagent CRDs)
 
-Below are several examples for managing kagent CRDs in k8s rbac
+1. Create a ServiceAccount to test with
 
-### ClusterRole for kagent CRD Management
-
-This ClusterRole grants full access to manage kagent custom resources:
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kagent-crd-admin
-rules:
-  - apiGroups: ["kagent.dev"]
-    resources: ["agents", "mcpservers", "modelconfigs"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["policy.kagent-enterprise.solo.io"]
-    resources: ["accesspolicies"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
+kubectl create serviceaccount test-reader -n kagent
 ```
 
-### ClusterRole for Read-Only Access
+2. Create the ClusterRole
 
-```yaml
+```
+kubectl apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -343,69 +330,74 @@ rules:
   - apiGroups: ["kagent.dev"]
     resources: ["agents", "mcpservers", "modelconfigs"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["policy.kagent-enterprise.solo.io"]
-    resources: ["accesspolicies"]
-    verbs: ["get", "list", "watch"]
+EOF
 ```
 
-### Namespace-scoped Role for Agent Operators
+3. Bind the ClusterRole to the ServiceAccount
 
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: kagent-operator
-  namespace: kagent
-rules:
-  - apiGroups: ["kagent.dev"]
-    resources: ["agents", "mcpservers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["policy.kagent-enterprise.solo.io"]
-    resources: ["accesspolicies"]
-    verbs: ["get", "list", "watch"]
 ```
-
-### ClusterRoleBinding for Admin Users
-
-Bind the admin ClusterRole to a specific group or user:
-
-```yaml
+kubectl apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kagent-admin-binding
+  name: kagent-viewer-binding
 subjects:
-  - kind: Group
-    name: kagent-admins
-    apiGroup: rbac.authorization.k8s.io
-  - kind: User
-    name: platform-admin@example.com
-    apiGroup: rbac.authorization.k8s.io
+  - kind: ServiceAccount
+    name: test-reader
+    namespace: kagent
 roleRef:
   kind: ClusterRole
-  name: kagent-crd-admin
+  name: kagent-crd-viewer
   apiGroup: rbac.authorization.k8s.io
+EOF
 ```
 
-### RoleBinding for Namespace Operators
+4. Verify read access works (should return "yes")
 
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+```
+kubectl auth can-i get mcpservers.kagent.dev --as=system:serviceaccount:kagent:test-reader
+```
+
+5. Verify create access is denied (should return "no")
+
+```
+kubectl auth can-i create mcpservers.kagent.dev --as=system:serviceaccount:kagent:test-reader
+```
+
+6. Try creating an MCPServer as the ServiceAccount (should be forbidden)
+
+```
+kubectl apply -f - <<EOF --as=system:serviceaccount:kagent:test-reader
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
 metadata:
-  name: kagent-operator-binding
+  name: test-reader-only
   namespace: kagent
-subjects:
-  - kind: Group
-    name: kagent-operators
-    apiGroup: rbac.authorization.k8s.io
-  - kind: ServiceAccount
-    name: ci-deploy-agent
-    namespace: ci-cd
-roleRef:
-  kind: Role
-  name: kagent-operator
-  apiGroup: rbac.authorization.k8s.io
+  labels:
+    kagent.solo.io/waypoint: "true"
+spec:
+  deployment:
+    image: mcp/everything
+    port: 3000
+    cmd: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-github"
+  transportType: stdio
+EOF
+```
+
+You'll get an error like the below:
+```
+Error from server (Forbidden): error when creating "STDIN": mcpservers.kagent.dev is forbidden: User "system:serviceaccount:kagent:test-reader" cannot create resource "mcpservers" in API group "kagent.dev" in the namespace "kagent"
+```
+
+7. Cleanup test resources
+
+```
+kubectl delete serviceaccount test-reader -n kagent
+kubectl delete clusterrolebinding test-reader-binding
+kubectl delete clusterrole kagent-crd-viewer
 ```
 
 ## Role mapping
