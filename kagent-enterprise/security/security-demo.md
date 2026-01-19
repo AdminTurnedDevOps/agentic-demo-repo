@@ -1,4 +1,4 @@
-## k8s Agent Access Policies (programmatic)
+## Access Policies (programmatic)
 
 1. Creat a new namespace to work in and enroll it into the mesh:
 ```
@@ -208,7 +208,7 @@ spec:
 EOF
 ```
 
-## k8s Agent Access Policies (UI)
+## Access Policies (UI)
 
 1. Log into kagent
 2. Go to Access Policies
