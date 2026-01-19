@@ -397,6 +397,12 @@ spec:
 EOF
 ```
 
+## Elicitation
+TODO!
+
+## OBO and oAuth
+TODO!
+
 ## UI Auth with an OIDC provider
 
 - Logging in with keycloak (currently works in demo environment. Show log in and log off)
