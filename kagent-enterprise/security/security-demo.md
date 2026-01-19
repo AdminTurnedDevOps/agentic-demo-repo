@@ -210,16 +210,12 @@ EOF
 
 ## k8s Agent Access Policies (UI)
 
-1. Create a Namespace called "policies":
-```
-kubectl create ns policies
-```
-2. Log into kagent
-3. Go to Access Policies
-4. Create a new access policy
-5. Choose "Deny" as the action
-6. For the **Subjects**, choose **Agent** for the Kind and your Agents name for the Agent (`test-tools-agent`)
-7. For the **Target Type**, choose **MCP Server** and specify the MCP Server tool `search_repositories` that will be denied via the Access Policy
+1. Log into kagent
+2. Go to Access Policies
+3. Create a new access policy
+4. Choose "Deny" as the action
+5. For the **Subjects**, choose **Agent** for the Kind and your Agents name for the Agent (`test-tools-agent`)
+6. For the **Target Type**, choose **MCP Server** and specify the MCP Server tool `search_repositories` that will be denied via the Access Policy
 
 You should now be able to open the `test-tools-agent` and prompt it with `What tools do you have access to?`. It should return:
 
