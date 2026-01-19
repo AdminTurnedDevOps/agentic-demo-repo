@@ -409,25 +409,3 @@ You can update this ConfigMap to map your claim name and user groups to roles.
 ```
 kubectl edit configmap rbac-config-management -n kagent
 ```
-
-### ConfigMap Structure
-
-The `rbac-config-management` ConfigMap uses a CEL expression to map IdP group claims to kagent roles:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: rbac-config-management
-  namespace: kagent
-data:
-  config: |
-    {
-      "roleMapper": "has(claims.Groups) ? claims.Groups.transformList(i, v, v in rolesMap, rolesMap[v]) : (has(claims.groups) ? claims.groups.transformList(i, v, v in rolesMap, rolesMap[v]) : [])",
-      "roleMappings": {
-        "admins": "global.Admin",
-        "readers": "global.Reader",
-        "writers": "global.Writer"
-      }
-    }
-```
