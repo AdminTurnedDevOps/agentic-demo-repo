@@ -23,3 +23,5 @@ fine-tuning/deepseek/results
 *kagent-enterprise/kagent-ee-gke*
 
 *.txt*
+
+!security-agw-kagent/
