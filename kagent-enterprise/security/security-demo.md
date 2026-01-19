@@ -399,13 +399,3 @@ kubectl delete serviceaccount test-reader -n kagent
 kubectl delete clusterrolebinding test-reader-binding
 kubectl delete clusterrole kagent-crd-viewer
 ```
-
-## Role mapping
-
-https://docs.solo.io/kagent-enterprise/docs/main/install/idp/#rbac
-
-You can update this ConfigMap to map your claim name and user groups to roles.
-
-```
-kubectl edit configmap rbac-config-management -n kagent
-```
