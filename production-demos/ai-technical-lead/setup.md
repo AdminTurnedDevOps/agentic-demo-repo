@@ -1,10 +1,20 @@
 # AI Technical Lead Agent
 
+Build an AI-powered Technical Lead agent using **kagent** (CNCF project) that monitors Prometheus/Grafana, assists with troubleshooting, and creates GitHub issues - all accessible via Slack. This project contains:
+1. MCP Servers
+2. Agent Skills
+3. kagent
+4. Slack (for kicking off agents)
+5. Python bot for Slack
+6. Monitoring and observability (prometheus and grafana)
+7. Anthropic for the LLM provider
+
+
 ## Prerequisites
 
-Before running this demo, ensure you have the following installed and configured:
+Before running this demo, ensure you have the following installed and configured.
 
-### Infrastructure
+1. Infrastructure
 - **Kubernetes cluster** - Any cluster (kind, minikube, EKS, GKE, AKS, etc.)
 - **kagent** - Install via `brew install kagent` or [installation guide](https://kagent.dev/docs/kagent/introduction/installation)
 - **Prometheus + Grafana**
@@ -33,7 +43,7 @@ kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3001:80
 Username: admin
 Password: `kubectl get secret kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.data.admin-password}' | base64 --decode`
 
-### API Keys & Tokens
+2. API Keys & Tokens
 - **Anthropic API Key** - Get from [console.anthropic.com](https://console.anthropic.com) and create the k8s secret
 ```
 kubectl create secret generic anthropic-credentials -n kagent \
@@ -47,6 +57,7 @@ kubectl create secret generic anthropic-credentials -n kagent \
   - App-Level Token Scope: `connections:write`
   - Socket Mode: Enabled
   - Slash Command: `/techlead`
+
 ---
 
 ## Quick Start
@@ -83,31 +94,37 @@ Once done, you can create the MCP Servers
 kubectl apply -f manifests/mcp-servers/
 ```
 
-5. 
+5. Apply the Agent
+```
 kubectl apply -f manifests/agent.yaml
+```
 
 # 3. Build and deploy Slack bot
+```
 cd slack-bot
 docker build -t ai-tech-lead-slack-bot:latest .
 kubectl apply -f deployment.yaml
+```
 
 # 4. Deploy demo apps and alerts
+```
 kubectl apply -f demo/sample-app/
 kubectl apply -f demo/prometheus-rules.yaml
+```
 
 # 5. Test via kagent CLI
+```
 kagent invoke -t "What alerts are firing?" --agent ai-tech-lead -n kagent
+```
 
 # 6. Test via Slack
+```
 # /techlead What's the cluster status?
 ```
 
 See [demo/demo-walkthrough.md](demo/demo-walkthrough.md) for the full demo script.
 
 ---
-
-## Overview
-Build an AI-powered Technical Lead agent using **kagent** (CNCF project) that monitors Prometheus/Grafana, assists with troubleshooting, and creates GitHub issues - all accessible via Slack.
 
 ## Architecture
 
