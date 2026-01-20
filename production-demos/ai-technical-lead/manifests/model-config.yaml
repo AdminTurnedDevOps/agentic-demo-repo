@@ -1,11 +1,3 @@
-# Anthropic Claude Model Configuration for kagent
-# Reference: https://kagent.dev/docs/kagent/supported-providers/anthropic
-#
-# Prerequisites:
-# 1. Create the secret first:
-#    kubectl create secret generic anthropic-credentials -n kagent \
-#      --from-literal=api-key=$ANTHROPIC_API_KEY
----
 apiVersion: kagent.dev/v1alpha2
 kind: ModelConfig
 metadata:

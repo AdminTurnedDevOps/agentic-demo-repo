@@ -34,7 +34,11 @@ Username: admin
 Password: `kubectl get secret kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.data.admin-password}' | base64 --decode`
 
 ### API Keys & Tokens
-- **Anthropic API Key** - Get from [console.anthropic.com](https://console.anthropic.com)
+- **Anthropic API Key** - Get from [console.anthropic.com](https://console.anthropic.com) and create the k8s secret
+```
+kubectl create secret generic anthropic-credentials -n kagent \
+--from-literal=api-key=$ANTHROPIC_API_KEY
+```
 - **GitHub Personal Access Token** - Create at [github.com/settings/tokens](https://github.com/settings/tokens) with `repo` scope
 - **Grafana Service Account Token** - Create in Grafana UI: Administration > Service Accounts > Add token (Viewer role minimum)
 - **Kubernetes Secrets** - Edit the `secrets.yaml` file under **manifests** with the appropriate secrets
@@ -48,10 +52,38 @@ Password: `kubectl get secret kube-prometheus-stack-grafana -n monitoring -o jso
 ## Quick Start
 
 # 2. Apply all manifests
+1. Create the Namespace
+```
 kubectl apply -f manifests/namespace.yaml
+```
+
+2. Create the secrets. Ensure you generate them and input them into the `secrets.yaml`. DO NOT save and commit this file with your secrets to a GitHub repo
+```
 kubectl apply -f manifests/secrets.yaml
+```
+
+3. Create the Model Config for your Agent to have an LLM provider to reach out to. In this case, its Anthropic.
+```
 kubectl apply -f manifests/model-config.yaml
+```
+
+4. Within the **manifests/mcp-servers** directory, you'll see three MCP Servers:
+- Grafana
+- GitHub
+- Slack
+
+For the GitHub MCP server, the secret is injected (the PAT token you created in the `secrets.yaml`), so nothing you need to do there.
+
+For the Slack MCP server, the secret is injected that you created in `secrets.yaml`, so nothing you need to do there.
+
+For the Grafana MCP server, you need to update it with the URL to your Grafana server (created in the **prerequisites** section). 
+
+Once done, you can create the MCP Servers
+```
 kubectl apply -f manifests/mcp-servers/
+```
+
+5. 
 kubectl apply -f manifests/agent.yaml
 
 # 3. Build and deploy Slack bot

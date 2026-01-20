@@ -24,18 +24,38 @@ spec:
         - id: monitor-and-triage
           name: Monitor and Triage Alerts
           description: Check current alerts, analyze severity, and prioritize issues
+          tags:
+            - monitoring
+            - alerts
+            - triage
         - id: investigate-issue
           name: Investigate Issue
           description: Pull metrics, logs, and Kubernetes state to investigate a problem
+          tags:
+            - investigation
+            - troubleshooting
+            - metrics
         - id: root-cause-analysis
           name: Root Cause Analysis
           description: Correlate signals to identify likely causes of an issue
+          tags:
+            - analysis
+            - debugging
+            - rca
         - id: create-ticket
           name: Create GitHub Issue
           description: Document a problem as a GitHub issue with full context
+          tags:
+            - github
+            - ticketing
+            - documentation
         - id: cluster-status
           name: Cluster Status
           description: Get overall health status of the Kubernetes cluster
+          tags:
+            - kubernetes
+            - health
+            - status
 
     systemMessage: |
       # AI Technical Lead Agent

@@ -7,10 +7,6 @@
 # - issue_read: Get issue details
 # - list_issues: Query issues with filters
 # - search_issues: Search using GitHub query syntax
-#
-# Prerequisites:
-# 1. Create a GitHub Personal Access Token with 'repo' scope
-# 2. Store in github-credentials secret
 ---
 apiVersion: kagent.dev/v1alpha1
 kind: MCPServer

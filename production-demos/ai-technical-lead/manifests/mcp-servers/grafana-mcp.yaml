@@ -9,11 +9,6 @@
 # - list_prometheus_label_values: Get label values
 # - search_dashboards: Find Grafana dashboards
 # - get_dashboard_by_uid: Retrieve dashboard details
-#
-# Prerequisites:
-# 1. Grafana must be accessible from within the cluster
-# 2. Create a Grafana Service Account with Viewer role
-# 3. Generate a token and store in grafana-credentials secret
 ---
 apiVersion: kagent.dev/v1alpha1
 kind: MCPServer
