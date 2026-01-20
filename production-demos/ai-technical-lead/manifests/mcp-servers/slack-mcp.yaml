@@ -1,0 +1,38 @@
+# Slack MCP Server - Provides Slack messaging tools
+# Used for sending proactive notifications to Slack channels
+#
+# Tools provided:
+# - send_message: Send messages to Slack channels
+# - list_channels: List available channels
+#
+# Prerequisites:
+# 1. Create a Slack App at https://api.slack.com/apps
+# 2. Add Bot Token Scopes: chat:write, channels:read
+# 3. Install to workspace and get Bot Token (xoxb-...)
+# 4. Store credentials in slack-credentials secret
+---
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: slack-mcp-server
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: ai-tech-lead
+    app.kubernetes.io/component: mcp-server
+spec:
+  deployment:
+    # Using the MCP Slack server from modelcontextprotocol
+    image: mcp/slack:latest
+    port: 3000
+    env:
+      - name: SLACK_BOT_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: slack-credentials
+            key: bot-token
+      - name: SLACK_TEAM_ID
+        valueFrom:
+          secretKeyRef:
+            name: slack-credentials
+            key: team-id
+  transportType: stdio

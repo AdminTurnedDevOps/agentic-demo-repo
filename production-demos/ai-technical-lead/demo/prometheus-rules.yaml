@@ -1,0 +1,168 @@
+# PrometheusRules for AI Technical Lead Demo
+#
+# These rules define alerts that will fire during the demo to showcase
+# the AI Tech Lead's capabilities. Some alerts are designed to fire
+# under normal conditions for demo purposes.
+#
+# Prerequisites:
+# - Prometheus Operator installed (kube-prometheus-stack)
+# - Demo apps deployed (see sample-app/)
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-tech-lead-demo-alerts
+  namespace: monitoring
+  labels:
+    release: prometheus  # Match your Prometheus Operator release label
+    app: ai-tech-lead-demo
+spec:
+  groups:
+    - name: demo-app-alerts
+      rules:
+        # High Error Rate Alert
+        # Will fire when HTTP error rate exceeds 1%
+        - alert: HighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{status=~"5.."}[5m])) by (job, namespace)
+              /
+              sum(rate(http_requests_total[5m])) by (job, namespace)
+            ) > 0.01
+          for: 2m
+          labels:
+            severity: critical
+            service: "{{ $labels.job }}"
+          annotations:
+            summary: "High error rate detected in {{ $labels.job }}"
+            description: |
+              Service {{ $labels.job }} in namespace {{ $labels.namespace }}
+              is experiencing {{ printf "%.2f" $value }}% error rate.
+            runbook_url: "https://runbooks.example.com/high-error-rate"
+
+        # High Latency Alert
+        # Will fire when 95th percentile latency exceeds 500ms
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job, namespace)
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            service: "{{ $labels.job }}"
+          annotations:
+            summary: "High latency detected in {{ $labels.job }}"
+            description: |
+              Service {{ $labels.job }} p95 latency is {{ printf "%.2f" $value }}s
+              (threshold: 500ms).
+
+        # Pod Restart Alert
+        # Will fire when pods restart more than 3 times in 15 minutes
+        - alert: PodRestartingTooOften
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="demo-apps"}[15m]) > 3
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} is restarting frequently"
+            description: |
+              Pod {{ $labels.pod }} in namespace {{ $labels.namespace }}
+              has restarted {{ printf "%.0f" $value }} times in the last 15 minutes.
+
+        # High Memory Usage Alert
+        - alert: HighMemoryUsage
+          expr: |
+            (
+              container_memory_working_set_bytes{namespace="demo-apps"}
+              /
+              container_spec_memory_limit_bytes{namespace="demo-apps"}
+            ) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage in {{ $labels.pod }}"
+            description: |
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              is using {{ printf "%.0f" $value }}% of its memory limit.
+
+        # High CPU Usage Alert
+        - alert: HighCPUUsage
+          expr: |
+            (
+              sum(rate(container_cpu_usage_seconds_total{namespace="demo-apps"}[5m])) by (pod, container)
+              /
+              sum(container_spec_cpu_quota{namespace="demo-apps"}/container_spec_cpu_period{namespace="demo-apps"}) by (pod, container)
+            ) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage in {{ $labels.pod }}"
+            description: |
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              is using {{ printf "%.0f" $value }}% of its CPU limit.
+
+    - name: demo-infrastructure-alerts
+      rules:
+        # Node Memory Pressure
+        - alert: NodeMemoryPressure
+          expr: |
+            (
+              node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes
+            ) < 0.1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.instance }} is under memory pressure"
+            description: |
+              Node {{ $labels.instance }} has less than 10% memory available.
+
+        # High Node CPU
+        - alert: NodeHighCPU
+          expr: |
+            (
+              1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance)
+            ) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage on node {{ $labels.instance }}"
+            description: |
+              Node {{ $labels.instance }} CPU usage is above 85% for 10 minutes.
+
+        # Disk Space Running Low
+        - alert: DiskSpaceLow
+          expr: |
+            (
+              node_filesystem_avail_bytes{mountpoint="/"}
+              / node_filesystem_size_bytes{mountpoint="/"}
+            ) < 0.15
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low disk space on {{ $labels.instance }}"
+            description: |
+              Node {{ $labels.instance }} has less than 15% disk space remaining
+              on root filesystem.
+
+    - name: demo-always-firing
+      # These alerts are designed to always fire for demo purposes
+      rules:
+        - alert: DemoAlertActive
+          expr: vector(1)
+          for: 0m
+          labels:
+            severity: info
+            demo: "true"
+          annotations:
+            summary: "AI Tech Lead Demo Alert"
+            description: |
+              This is a demo alert that is always active.
+              Use this to test the AI Tech Lead's alert monitoring capabilities.
+              Ask the agent: "What alerts are currently firing?"

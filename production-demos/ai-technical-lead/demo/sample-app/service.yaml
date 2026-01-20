@@ -1,0 +1,68 @@
+# Services for Demo Applications
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: demo-apps
+  labels:
+    app: payment-service
+spec:
+  selector:
+    app: payment-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: demo-apps
+  labels:
+    app: api-gateway
+spec:
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: demo-apps
+  labels:
+    app: user-service
+spec:
+  selector:
+    app: user-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+# ServiceMonitor for Prometheus Operator to scrape metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: demo-apps
+  namespace: demo-apps
+  labels:
+    release: prometheus  # Match your Prometheus Operator release label
+spec:
+  selector:
+    matchLabels: {}
+  namespaceSelector:
+    matchNames:
+      - demo-apps
+  endpoints:
+    - port: http
+      interval: 15s
+      path: /metrics

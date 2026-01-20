@@ -1,0 +1,77 @@
+# Kubernetes Deployment for AI Technical Lead Slack Bot
+#
+# Prerequisites:
+# 1. Build and push the Docker image:
+#    docker build -t your-registry/ai-tech-lead-slack-bot:latest .
+#    docker push your-registry/ai-tech-lead-slack-bot:latest
+#
+# 2. Create the slack-credentials secret (see manifests/secrets.yaml.template)
+#
+# 3. Deploy:
+#    kubectl apply -f deployment.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-tech-lead-slack-bot
+  namespace: kagent
+  labels:
+    app.kubernetes.io/name: ai-tech-lead
+    app.kubernetes.io/component: slack-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-tech-lead
+      app.kubernetes.io/component: slack-bot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-tech-lead
+        app.kubernetes.io/component: slack-bot
+    spec:
+      containers:
+        - name: slack-bot
+          # Update this to your actual image registry
+          image: ai-tech-lead-slack-bot:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-credentials
+                  key: bot-token
+            - name: SLACK_APP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-credentials
+                  key: app-token
+            - name: KAGENT_A2A_URL
+              value: "http://kagent-controller.kagent:8083/api/a2a/kagent/ai-tech-lead/"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+      restartPolicy: Always
+      serviceAccountName: default
+---
+# Optional: PodDisruptionBudget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-tech-lead-slack-bot-pdb
+  namespace: kagent
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-tech-lead
+      app.kubernetes.io/component: slack-bot
