@@ -23,14 +23,14 @@ import httpx
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-# Configure logging
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# Environment variables
+# Passed in at build time when deploying the `deployment.yaml`
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 SLACK_APP_TOKEN = os.environ.get("SLACK_APP_TOKEN")
 KAGENT_A2A_URL = os.environ.get(
@@ -38,13 +38,7 @@ KAGENT_A2A_URL = os.environ.get(
     "http://kagent-controller.kagent:8083/api/a2a/kagent/ai-tech-lead/"
 )
 
-# Validate required environment variables
-if not SLACK_BOT_TOKEN:
-    raise ValueError("SLACK_BOT_TOKEN environment variable is required")
-if not SLACK_APP_TOKEN:
-    raise ValueError("SLACK_APP_TOKEN environment variable is required")
 
-# Initialize the Slack app
 app = App(token=SLACK_BOT_TOKEN)
 
 
@@ -53,7 +47,7 @@ class A2AClient:
 
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
-        self.client = httpx.Client(timeout=120.0)  # 2 minute timeout for agent responses
+        self.client = httpx.Client(timeout=120.0)
 
     def invoke(self, message: str, skill_id: str = None) -> dict:
         """
@@ -98,7 +92,6 @@ class A2AClient:
             return []
 
 
-# Initialize A2A client
 a2a_client = A2AClient(KAGENT_A2A_URL)
 
 
@@ -121,7 +114,6 @@ def format_response_for_slack(response: dict) -> list:
 
     agent_response = response.get("response", "No response from agent")
 
-    # Split long responses into multiple blocks if needed
     blocks = [
         {
             "type": "section",
@@ -132,7 +124,6 @@ def format_response_for_slack(response: dict) -> list:
         }
     ]
 
-    # Add continuation blocks for long responses
     if len(agent_response) > 3000:
         remaining = agent_response[3000:]
         while remaining:
@@ -151,7 +142,7 @@ def format_response_for_slack(response: dict) -> list:
 @app.command("/techlead")
 def handle_techlead_command(ack, respond, command):
     """Handle the /techlead slash command."""
-    ack()  # Acknowledge the command immediately
+    ack()
 
     user = command["user_name"]
     text = command.get("text", "").strip()
@@ -167,13 +158,11 @@ def handle_techlead_command(ack, respond, command):
 
     logger.info(f"User {user} invoked /techlead: {text}")
 
-    # Send a "thinking" message
+
     respond(text=f":robot_face: AI Tech Lead is analyzing your request...")
 
-    # Invoke the agent
     result = a2a_client.invoke(text)
 
-    # Format and send the response
     blocks = format_response_for_slack(result)
     respond(blocks=blocks, replace_original=True)
 
@@ -184,8 +173,6 @@ def handle_mention(event, say):
     user = event.get("user")
     text = event.get("text", "")
 
-    # Remove the bot mention from the text
-    # Format is typically "<@BOTID> message"
     import re
     clean_text = re.sub(r"<@[A-Z0-9]+>\s*", "", text).strip()
 
@@ -203,16 +190,13 @@ def handle_mention(event, say):
 
     logger.info(f"User {user} mentioned bot: {clean_text}")
 
-    # Send a "thinking" message in thread
     say(
         text=":robot_face: Analyzing...",
         thread_ts=event.get("ts")
     )
 
-    # Invoke the agent
     result = a2a_client.invoke(clean_text)
 
-    # Format and send the response
     blocks = format_response_for_slack(result)
     say(blocks=blocks, thread_ts=event.get("ts"))
 
@@ -220,11 +204,9 @@ def handle_mention(event, say):
 @app.event("message")
 def handle_dm(event, say):
     """Handle direct messages to the bot."""
-    # Ignore messages from bots (including ourselves)
     if event.get("bot_id"):
         return
 
-    # Only handle DMs (channel type 'im')
     if event.get("channel_type") != "im":
         return
 
@@ -236,13 +218,10 @@ def handle_dm(event, say):
 
     logger.info(f"User {user} sent DM: {text}")
 
-    # Send a "thinking" message
     say(text=":robot_face: Analyzing...")
 
-    # Invoke the agent
     result = a2a_client.invoke(text)
 
-    # Format and send the response
     blocks = format_response_for_slack(result)
     say(blocks=blocks)
 
