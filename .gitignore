@@ -25,3 +25,5 @@ fine-tuning/deepseek/results
 *.txt*
 
 !security-agw-kagent/
+
+*production-demos/ai-technical-lead/plan.md*
