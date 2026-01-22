@@ -60,12 +60,13 @@ kubectl create secret generic kagent-bedrock-aws -n kagent \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
   --from-literal=AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
+  --from-literal=BEDROCK_API_KEY=ABSK... \
   --from-literal=OPENAI_API_KEY=$OPENAI_API_KEY
 ```
 
 ## Step 4: Create ModelConfig
 
-Create a ModelConfig for Amazon Nova Pro:
+Create a ModelConfig for OpenAI GPT-OSS (the only models Bedrock's OpenAI-compatible endpoint supports):
 
 ```
 kubectl apply -f - <<EOF
@@ -75,8 +76,12 @@ metadata:
   name: bedrock-model-config
   namespace: kagent
 spec:
-  model: bedrock/us.amazon.nova-pro-v1:0
+  apiKeySecret: kagent-bedrock-aws
+  apiKeySecretKey: BEDROCK_API_KEY
+  model: openai.gpt-oss-20b-1:0
   provider: OpenAI
+  openAI:
+    baseUrl: "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1"
 EOF
 ```
 
