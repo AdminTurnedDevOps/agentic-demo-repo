@@ -49,19 +49,23 @@ Example output:
 +---------------------------------------------------+-------------------------------------+
 ```
 
-## Step 3: Create Kubernetes Secret with AWS Credentials
+## Step 3: Create Kubernetes Secret with AWS Credentials and OpenAI API key
 
-```bash
-# Include AWS_SESSION_TOKEN only if using temporary credentials
+```
+export OPENAI_API_KEY=
+```
+
+```
 kubectl create secret generic kagent-bedrock-aws -n kagent \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-  --from-literal=AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN
+  --from-literal=AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
+  --from-literal=OPENAI_API_KEY=$OPENAI_API_KEY
 ```
 
 ## Step 4: Create ModelConfig
 
-The model uses the `bedrock/` prefix which tells litellm to use its native Bedrock provider:
+Create a ModelConfig for Amazon Nova Pro:
 
 ```
 kubectl apply -f - <<EOF
@@ -71,10 +75,7 @@ metadata:
   name: bedrock-model-config
   namespace: kagent
 spec:
-  # The bedrock/ prefix tells litellm to use its native Bedrock provider (via boto3)
-  model: amazon.nova-2-sonic-v1:0
-  # kagent requires a provider from its enum - there's no "Bedrock" option
-  # litellm routes based on the model prefix, so this is just a placeholder
+  model: bedrock/us.amazon.nova-pro-v1:0
   provider: OpenAI
 EOF
 ```
@@ -115,6 +116,27 @@ spec:
   declarative:
     modelConfig: bedrock-model-config
     deployment:
+      env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: kagent-bedrock-aws
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kagent-bedrock-aws
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: kagent-bedrock-aws
+              key: AWS_SESSION_TOKEN
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kagent-bedrock-aws
+              key: OPENAI_API_KEY
     systemMessage: |
       You're a friendly and helpful agent that uses Kubernetes tools to help with troubleshooting and deployments.
 

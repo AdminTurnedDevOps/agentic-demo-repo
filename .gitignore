@@ -26,4 +26,7 @@ fine-tuning/deepseek/results
 
 !security-agw-kagent/
 
-*production-demos/ai-technical-lead/plan.md*
+production-demos/ai-technical-lead/
+
+*agentregistry/agentregistry-enterprise*
+*agentregistry/agr-enterprise*
