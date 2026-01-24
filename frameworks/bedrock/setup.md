@@ -51,17 +51,13 @@ Example output:
 
 ## Step 3: Create Kubernetes Secret with AWS Credentials and OpenAI API key
 
-```
-export OPENAI_API_KEY=
-```
 
 ```
 kubectl create secret generic kagent-bedrock-aws -n kagent \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
   --from-literal=AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
-  --from-literal=BEDROCK_API_KEY=ABSK... \
-  --from-literal=OPENAI_API_KEY=$OPENAI_API_KEY
+  --from-literal=BEDROCK_API_KEY=ABSK...
 ```
 
 ## Step 4: Create ModelConfig
@@ -137,11 +133,6 @@ spec:
             secretKeyRef:
               name: kagent-bedrock-aws
               key: AWS_SESSION_TOKEN
-        - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: kagent-bedrock-aws
-              key: OPENAI_API_KEY
     systemMessage: |
       You're a friendly and helpful agent that uses Kubernetes tools to help with troubleshooting and deployments.
 
