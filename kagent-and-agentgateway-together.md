@@ -47,7 +47,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: anthropic-secret
-  namespace: agentgateway-system
+  namespace: kagent
   labels:
     app: agentgateway-route
 type: Opaque
@@ -165,7 +165,7 @@ spec:
   model: claude-3-5-haiku-latest
   provider: OpenAI
   openAI:
-    baseUrl: http://20.57.202.54:8080/anthropic
+    baseUrl: http://52.159.230.96:8080/anthropic
 EOF
 ```
 
