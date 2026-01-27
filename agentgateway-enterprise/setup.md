@@ -1,40 +1,26 @@
 ```
-export GLOO_GATEWAY_LICENSE_KEY=
-
 export AGENTGATEWAY_LICENSE_KEY=
 ```
 
 ```
-export CLUSTER1=
-
-export CLUSTER1_NAME=
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml 
 ```
 
 ```
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml --context=$CLUSTER1
+helm upgrade -i agentgateway-crds oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
+  --create-namespace \
+  --namespace agentgateway-system  \
+  --version 2.1.0-rc.2
 ```
 
 ```
-helm upgrade -i gloo-gateway-crds oci://us-docker.pkg.dev/solo-public/gloo-gateway/charts/gloo-gateway-crds --kube-context=$CLUSTER1 \
---create-namespace \
---namespace gloo-system \
---version 2.0.1
+helm upgrade -i agentgateway oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
+  -n agentgateway-system  \
+  --version 2.1.0-rc.2 \
+  --set agentgateway.enabled=true \
+  --set licensing.licenseKey=${AGENTGATEWAY_LICENSE_KEY}
 ```
 
 ```
-helm upgrade -i gloo-gateway oci://us-docker.pkg.dev/solo-public/gloo-gateway/charts/gloo-gateway --kube-context=$CLUSTER1 \
--n gloo-system \
---version 2.0.1 \
---set gateway.aiExtension.enabled=true \
---set agentgateway.enabled=true \
---set licensing.glooGatewayLicenseKey=$GLOO_GATEWAY_LICENSE_KEY \
---set licensing.agentgatewayLicenseKey=$AGENTGATEWAY_LICENSE_KEY
-```
-
-```
-kubectl get pods -n gloo-system --context=$CLUSTER1
-```
-
-```
-kubectl get gatewayclass -n gloo-system --context=$CLUSTER1
+kubectl get pods -n agentgateway-system
 ```
