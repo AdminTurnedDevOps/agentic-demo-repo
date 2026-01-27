@@ -53,6 +53,8 @@ Example output:
 
 ```
 export OPENAI_API_KEY=
+
+export BEDROCK_API_KEY=
 ```
 
 ```
@@ -60,7 +62,7 @@ kubectl create secret generic kagent-bedrock-aws -n kagent \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
   --from-literal=AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
-  --from-literal=BEDROCK_API_KEY=ABSK... \
+  --from-literal=BEDROCK_API_KEY=$BEDROCK_API_KEY \
   --from-literal=OPENAI_API_KEY=$OPENAI_API_KEY
 ```
 
@@ -68,6 +70,7 @@ kubectl create secret generic kagent-bedrock-aws -n kagent \
 
 Create a ModelConfig for OpenAI GPT-OSS (the only models Bedrock's OpenAI-compatible endpoint supports):
 
+For OpenAI
 ```
 kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
@@ -82,6 +85,24 @@ spec:
   provider: OpenAI
   openAI:
     baseUrl: "https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1"
+EOF
+```
+
+For Bedrock
+```
+kubectl apply -f - <<EOF
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: bedrock-model-config
+  namespace: kagent
+spec:
+  apiKeySecret: kagent-bedrock-aws
+  apiKeySecretKey: BEDROCK_API_KEY
+  model: claude-opus-4-20250514-v1:0
+  provider: Bedrock
+  bedrock:
+    baseUrl: "us.anthropic.claude-opus-4-20250514-v1:0"
 EOF
 ```
 

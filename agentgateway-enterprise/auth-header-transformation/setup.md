@@ -129,3 +129,49 @@ curl -s -H "Authorization: Bearer test-token-123" http://$GATEWAY_IP:8080/header
 | Removing the original Authorization header | ✅ Confirmed | `Authorization` header was NOT present in httpbin's response |
 
 **Note:** This test used httpbin as a stand-in for an upstream MCP server. httpbin echoes back all headers it receives, which proves the transformation happened before the request reached the upstream. The same transformation would apply to any backend (including an actual MCP server) referenced by the HTTPRoute.
+
+## Traffic Options
+
+The `EnterpriseAgentgatewayPolicy` supports the following traffic options:
+
+| Option | Description |
+|--------|-------------|
+| `jwtAuthentication` | JWT validation with providers, audiences, issuer, JWKS |
+| `apiKeyAuthentication` | API key auth (Strict/Optional mode) |
+| `basicAuthentication` | Basic auth with users/secretRef |
+| `extAuth` | External authz (gRPC/HTTP) with `forwardBody` support |
+| `entExtAuth` | Enterprise ext auth (authConfigRef) |
+| `authorization` | CEL-based authorization (Allow/Deny) |
+| `rateLimit` | Local and global rate limiting |
+| `entRateLimit` | Enterprise rate limit (rateLimitConfigRefs) |
+| `extProc` | External processing |
+| `transformation` | Header/body transformation with CEL |
+| `headerModifiers` | Static header add/set/remove (no CEL) |
+| `cors` | CORS configuration |
+| `csrf` | CSRF protection |
+| `retry` | Retry policy |
+| `timeouts` | Request timeouts |
+| `hostRewrite` | Host rewrite (Auto/None) |
+| `directResponse` | Direct response (status/body) |
+
+### Phase System
+
+| Phase | Supports |
+|-------|----------|
+| `PreRouting` | `extAuth`, `transformation`, `extProc` only |
+| `PostRouting` | Everything else (default) |
+
+### Filter Chain Ordering
+
+```
+JWT validation       ← First (authn)
+ext_authz            ← After JWT (authz)
+Authorization (CEL)  ← After ext_authz
+Local rate limit
+Remote rate limit
+ext_proc
+Transformation       ← AFTER ext_authz
+CSRF
+```
+
+**Note:** Transformation runs AFTER ext_authz. If you need to transform headers *before* auth, use `phase: PreRouting`.
