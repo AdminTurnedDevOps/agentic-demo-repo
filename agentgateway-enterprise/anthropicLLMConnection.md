@@ -7,8 +7,8 @@ kubectl apply -f- <<EOF
 kind: Gateway
 apiVersion: gateway.networking.k8s.io/v1
 metadata:
-  name: agentgateway
-  namespace: gloo-system
+  name: agentgateway-route
+  namespace: agent-system
   labels:
     app: agentgateway
 spec:
@@ -24,7 +24,7 @@ EOF
 ```
 
 ```
-export INGRESS_GW_ADDRESS=$(kubectl get svc -n gloo-system agentgateway -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
+export INGRESS_GW_ADDRESS=$(kubectl get svc -n agentgateway-system agentgateway-route -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
@@ -34,9 +34,9 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: anthropic-secret
-  namespace: gloo-system
+  namespace: agentgateway-system
   labels:
-    app: agentgateway
+    app: agentgateway-route
 type: Opaque
 stringData:
   Authorization: $CLAUDE_API_KEY
@@ -44,25 +44,28 @@ EOF
 ```
 
 ```
-kubectl apply -f - <<EOF
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayPolicy
+kubectl apply -f- <<EOF
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
 metadata:
-  name: anthropic-llm
-  namespace: gloo-system
+  labels:
+    app: agentgateway-route
+  name: anthropic
+  namespace: agentgateway-system
 spec:
-  llm:
-    targets:
-      - name: anthropic
+  ai:
+    provider:
         anthropic:
-          apiKeySecretRef:
-            name: anthropic-api-key
-            key: api-key
+          model: "claude-3-5-haiku-latest"
+  policies:
+    auth:
+      secretRef:
+        name: anthropic-secret
 EOF
 ```
 
 ```
-kubectl get backend -n gloo-system
+kubectl get backend -n agentgateway-system
 ```
 
 ```
@@ -71,13 +74,13 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: claude
-  namespace: gloo-system
+  namespace: agentgateway-system
   labels:
-    app: agentgateway
+    app: agentgateway-route
 spec:
   parentRefs:
-    - name: agentgateway
-      namespace: gloo-system
+    - name: agentgateway-route
+      namespace: agentgateway-system
   rules:
   - matches:
     - path:
@@ -91,9 +94,9 @@ spec:
           replaceFullPath: /v1/chat/completions
     backendRefs:
     - name: anthropic
-      namespace: gloo-system
-      group: gateway.kgateway.dev
-      kind: Backend
+      namespace: agentgateway-system
+      group: agentgateway.dev
+      kind: AgentgatewayBackend
 EOF
 ```
 
