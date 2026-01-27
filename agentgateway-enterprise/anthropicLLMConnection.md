@@ -44,24 +44,20 @@ EOF
 ```
 
 ```
-kubectl apply -f- <<EOF
-apiVersion: gateway.kgateway.dev/v1alpha1
-kind: Backend
+kubectl apply -f - <<EOF
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
 metadata:
-  labels:
-    app: agentgateway
-  name: anthropic
+  name: anthropic-llm
   namespace: gloo-system
 spec:
-  type: AI
-  ai:
-    llm:
+  llm:
+    targets:
+      - name: anthropic
         anthropic:
-          authToken:
-            kind: SecretRef
-            secretRef:
-              name: anthropic-secret
-          model: "claude-3-5-haiku-latest"
+          apiKeySecretRef:
+            name: anthropic-api-key
+            key: api-key
 EOF
 ```
 
