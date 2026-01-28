@@ -121,22 +121,25 @@ curl "$INGRESS_GW_ADDRESS:8080/anthropic" -H content-type:application/json -H x-
 
 ```
 kubectl apply -f- <<EOF
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayPolicy
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
 metadata:
-  name: jwt
+  name: mcp-gateway
   namespace: agentgateway-system
 spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: mcp-gateway
-  traffic:
-    jwtAuthentication:
-      providers:
-        - issuer: solo.io
-          jwks:
-            inline: '{"keys": [{"kty": "RSA", "kid": "solo-public-key-001", "use": "sig", "alg": "RS256", "n": "vdV2XxH70WcgDKedYXNQ3Dy1LN8LKziw3pxBe0M-QG3_urCbN-oTPL2e0xrj5t2JOV-eBNaII17oZ6z9q84lLzn4mgU_UzP-Efv6iTZLlC_SD30AknifnoX8k38zbJtuwkvVcZvkam0LM5oIwSf4wJVpdPKHb3o_gGRpCBxWdQHPdBWMBPwOeqFfONFrM0bEnShFWf3d87EgckdVcrypelLyUZJ_ACdEGYUhS6FHmyojA1g6zKryAAWsH5Y-UCUuJd7VlOCMoBpAKK0BSdlF3WVSYHDlyMSB5H61eYCXSpfKcGhoHxViLgq6yjUR7TOHkJ-OtWna513TrkRw2Y0hsQ", "e": "AQAB"}]}'
+  gatewayClassName: agentgateway
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: mcp-gateway-tls-secret
+            kind: Secret
+      allowedRoutes:
+        namespaces:
+          from: Same
 EOF
 ```
 
