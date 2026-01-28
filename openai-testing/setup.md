@@ -143,16 +143,16 @@ spec:
 EOF
 ```
 
-## oAuth2-proxy
+## ExtAuth Server
 
-You'll see `4180` as the port via the backend ref. `4180` is the default port that oauth2-proxy listens on.
+Uses Solo.io's extauth server with an AuthConfig for OAuth. Port `8083` is the default extauth service port.
 
 ```
 kubectl apply -f- <<EOF
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayPolicy
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
 metadata:
-  name: jwt
+  name: oauth
   namespace: agentgateway-system
 spec:
   targetRefs:
@@ -168,16 +168,13 @@ spec:
           - name: github.email
             expression: extauthz.githubEmail
   traffic:
-    extAuth:
+    entExtAuth:
+      authConfigRef:
+        name: oauth-github
+        namespace: agentgateway-system
       backendRef:
-        name: oauth2-proxy
-        port: 4180
-      http:
-        responseMetadata:
-          githubUser: 'response.headers["x-auth-request-user"]'
-          githubEmail: 'response.headers["x-auth-request-email"]'
-        allowedResponseHeaders:
-          - x-auth-request-user
-          - x-auth-request-email
+        name: ext-auth-service-enterprise-agentgateway
+        namespace: agentgateway-system
+        port: 8083
 EOF
 ```
