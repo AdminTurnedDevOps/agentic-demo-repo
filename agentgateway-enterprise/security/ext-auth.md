@@ -2,6 +2,22 @@
 
 Uses Solos extauth server with an AuthConfig for OAuth. Port `8083` is the default extauth service port. This guide uses Google OAuth, which fully supports OIDC.
 
+## Why Solos Extauth Server?
+
+The core value proposition is centralizing and standardizing authentication/authorization at the gateway layer, so your LLMs, MCP servers, and agents don't have to implement auth themselves.
+
+Key Benefits include:
+1. Unified Auth Across AI Traffic Types
+
+Solo's extauth handles auth for all three traffic patterns agentgateway manages: LLM provider calls, MCP server connections, and agent-to-agent (A2A) communication. One auth layer, multiple backends.
+
+2. Built-in OIDC/OAuth2 Support
+You get production-ready integration with identity providers (Keycloak, Entra ID, Auth0, Okta) without writing auth code.
+
+Two modes:
+- Authorization code flow — for end-user web apps hitting your AI APIs (redirects to IdP, exchanges codes for tokens)
+- Access token validation — for programmatic/service-to-service access (validate tokens already obtained)
+
 ## 1. Deploy a Test Backend
 
 Deploy a simple httpbin service to test the OAuth flow.
