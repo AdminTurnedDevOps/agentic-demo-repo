@@ -213,3 +213,14 @@ curl -v $INGRESS_GW_ADDRESS:8080/
 If OAuth is working, you'll see a `302` redirect to `https://accounts.google.com/o/oauth2/v2/auth`. Open the URL in a browser to complete the full OAuth flow.
 
 You can click it, log in, etc. It won't go anywhere because there's technically nothing to log into, but this confirms that the oAuth flow works.
+
+You can, however, confirm that the traffic did go through the extauth server.
+
+```
+kubectl logs -n agentgateway-system ext-auth-service-enterprise-agentgateway-PODNAME --tail=50 | grep googleusercontent
+```
+
+You see an output similar to the below:
+```
+{"level":"info","ts":"2026-01-29T04:44:24Z","logger":"ext-auth.ext-auth-service","msg":"received callback request","version":"0.71.4","client_id":"10077854408-mqjv2o89oqiri9rtctvivm5gcip2fv8k.apps.googleusercontent.com"}
+```
