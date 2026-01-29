@@ -8,11 +8,11 @@ kind: Gateway
 apiVersion: gateway.networking.k8s.io/v1
 metadata:
   name: agentgateway-route
-  namespace: agent-system
+  namespace: agentgateway-system
   labels:
     app: agentgateway
 spec:
-  gatewayClassName: agentgateway-enterprise
+  gatewayClassName: enterprise-agentgateway
   listeners:
   - protocol: HTTP
     port: 8080

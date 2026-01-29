@@ -143,38 +143,3 @@ spec:
 EOF
 ```
 
-## ExtAuth Server
-
-Uses Solo.io's extauth server with an AuthConfig for OAuth. Port `8083` is the default extauth service port.
-
-```
-kubectl apply -f- <<EOF
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayPolicy
-metadata:
-  name: oauth
-  namespace: agentgateway-system
-spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: mcp-gateway
-  frontend:
-    accessLog:
-      attributes:
-        add:
-          - name: github.user
-            expression: extauthz.githubUser
-          - name: github.email
-            expression: extauthz.githubEmail
-  traffic:
-    entExtAuth:
-      authConfigRef:
-        name: oauth-github
-        namespace: agentgateway-system
-      backendRef:
-        name: ext-auth-service-enterprise-agentgateway
-        namespace: agentgateway-system
-        port: 8083
-EOF
-```

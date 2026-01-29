@@ -18,7 +18,17 @@ helm upgrade -i agentgateway oci://us-docker.pkg.dev/solo-public/enterprise-agen
   -n agentgateway-system  \
   --version 2.1.0-rc.2 \
   --set agentgateway.enabled=true \
+  --set extAuthServer.enabled=true \
   --set licensing.licenseKey=${AGENTGATEWAY_LICENSE_KEY}
+```
+
+```
+helm upgrade -i management oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
+--namespace agentgateway-system \
+--create-namespace \
+--version 0.3.0 \
+--set cluster="mgmt-cluster" \
+--set products.agentgateway.enabled=true
 ```
 
 ```
