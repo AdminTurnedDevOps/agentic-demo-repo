@@ -9,7 +9,7 @@ The core value proposition is centralizing and standardizing authentication/auth
 Key Benefits include:
 1. Unified Auth Across AI Traffic Types
 
-Solo's extauth handles auth for all three traffic patterns agentgateway manages: LLM provider calls, MCP server connections, and agent-to-agent (A2A) communication. One auth layer, multiple backends.
+Solo's extauth handles auth for all three traffic patterns agentgateway manages: LLM provider calls, MCP server connections, and agent-to-agent (A2A) communication. One auth layer, multiple backends (LLM/MCP/A2A backends all using the same auth pattern)
 
 2. Built-in OIDC/OAuth2 Support
 You get production-ready integration with identity providers (Keycloak, Entra ID, Auth0, Okta) without writing auth code.
