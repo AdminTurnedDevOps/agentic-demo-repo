@@ -206,6 +206,7 @@ kubectl get pods -n agentgateway-system -l app=httpbin
 ## Test the OAuth flow
 
 1. Make a request - you should be redirected to Google OAuth
+```
 curl -v $INGRESS_GW_ADDRESS:8080/
 ```
 
