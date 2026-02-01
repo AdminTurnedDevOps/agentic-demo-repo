@@ -43,7 +43,9 @@ agents:
       event_expiry_days: 30
     identity:
       credential_providers:
-        - keycloak-provider
+        - name: keycloak-provider
+          type: oauth2
+          arn: arn:aws:bedrock-agentcore:us-east-1:986112284769:token-vault/default/oauth2credentialprovider/keycloak-provider
       workload: null
     aws_jwt:
       enabled: false

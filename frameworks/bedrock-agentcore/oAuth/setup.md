@@ -132,15 +132,65 @@ Ensure your agent's IAM role includes these permissions:
 }
 ```
 
-## Run the Agent
+## Deploy the Agent
+
+OAuth requires the agent to be deployed to AWS (not running locally) so that AWS AgentCore can handle the callback URL.
+
+### Step 1: Initial Deployment
+
+Deploy the agent to AWS Bedrock AgentCore runtime:
 
 ```bash
 cd solagent/soloagent
-source ../.venv/bin/activate
-agentcore dev
+agentcore deploy
 ```
 
-Invote the agent in a separate terminal:
+### Step 2: Get the Agent Endpoint URL
+
+After deployment, get your agent's endpoint URL:
+
+```bash
+agentcore status
 ```
-agentcore invoke --dev "Hello"
+
+Look for the endpoint URL in the output (e.g., `https://abc123.bedrock-agentcore.us-east-1.amazonaws.com`).
+
+### Step 3: Register Callback URL with Workload Identity
+
+Register the callback URL with your workload identity using the endpoint from Step 2:
+
+```bash
+export AGENT_ENDPOINT="https://<your-agent-endpoint-from-status>"
+
+agentcore identity update-workload-identity \
+  --name soloagent_Agent-workload \
+  --add-return-urls ${AGENT_ENDPOINT}/oauth/callback
 ```
+
+### Step 3: Update main.py with Callback URL
+
+Update the `OAUTH_CALLBACK_URL` in `src/main.py`:
+
+```python
+OAUTH_CALLBACK_URL = "https://<your-agent-endpoint>/oauth/callback"
+```
+
+### Step 4: Redeploy
+
+Redeploy the agent with the updated callback URL:
+
+```bash
+agentcore deploy
+```
+
+### Step 5: Invoke the Agent
+
+```bash
+agentcore invoke "Hello"
+```
+
+The OAuth flow will:
+1. Return an authorization URL pointing to Keycloak
+2. User authenticates in Keycloak
+3. Keycloak redirects to AWS AgentCore
+4. AWS stores the token and provides it to subsequent agent invocations
