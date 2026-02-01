@@ -90,19 +90,22 @@ OAUTH2_RESPONSE=$(aws bedrock-agentcore-control create-oauth2-credential-provide
   --output json)
 ```
 
-```
-export OAUTH_CALLBACK_URL=$(echo $OAUTH2_RESPONSE | jq -r '.callbackUrl')
-echo "Callback URL: $OAUTH_CALLBACK_URL"
+Verify the provider was created:
+
+```bash
+aws bedrock-agentcore-control get-oauth2-credential-provider --name "keycloak-provider"
 ```
 
 ## Update Keycloak Redirect URI
 
-Add the callback URL to your Keycloak client:
+Configure the redirect URI in your Keycloak client. The callback URL is provided dynamically by AgentCore at runtime, so use a wildcard:
 
 1. Go to Keycloak Admin Console at `https://$KEYCLOAK_HOST`
 2. Navigate to **Realm: agentcore** → **Clients** → **agentcore-client**
-3. Under **Access settings**, add the `$OAUTH_CALLBACK_URL` value to **Valid redirect URIs**
+3. Under **Access settings**, add `*` to **Valid redirect URIs** (or `https://*.amazonaws.com/*` for more security)
 4. Save
+
+Note: When you run the agent, the actual callback URL will be shown in the OAuth flow. You can then update this to the specific URL.
 
 ## IAM Permissions
 
@@ -131,7 +134,8 @@ Ensure your agent's IAM role includes these permissions:
 
 ## Run the Agent
 
-```
+```bash
 cd solagent/soloagent
-agentcore run
+source ../.venv/bin/activate
+agentcore dev
 ```
