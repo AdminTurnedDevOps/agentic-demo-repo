@@ -4,12 +4,12 @@ agents:
     name: soloagent_Agent
     language: python
     node_version: null
-    entrypoint: /Users/michaellevan/gitrepos/agentic-demo-repo/frameworks/bedrock-agentcore/solagent/soloagent/src/main.py
+    entrypoint: /Users/michaellevan/gitrepos/agentic-demo-repo/frameworks/bedrock-agentcore/oAuth/solagent/soloagent/src/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_10
     platform: linux/amd64
     container_runtime: null
-    source_path: /Users/michaellevan/gitrepos/agentic-demo-repo/frameworks/bedrock-agentcore/solagent/soloagent/src
+    source_path: /Users/michaellevan/gitrepos/agentic-demo-repo/frameworks/bedrock-agentcore/oAuth/solagent/soloagent/src
     aws:
       execution_role: null
       execution_role_auto_create: true
@@ -42,7 +42,8 @@ agents:
       memory_name: soloagent_Memory
       event_expiry_days: 30
     identity:
-      credential_providers: []
+      credential_providers:
+        - keycloak-provider
       workload: null
     aws_jwt:
       enabled: false

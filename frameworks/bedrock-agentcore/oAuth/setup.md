@@ -139,3 +139,8 @@ cd solagent/soloagent
 source ../.venv/bin/activate
 agentcore dev
 ```
+
+Invote the agent in a separate terminal:
+```
+agentcore invoke --dev "Hello"
+```
