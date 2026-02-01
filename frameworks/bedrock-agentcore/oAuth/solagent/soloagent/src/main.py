@@ -38,14 +38,13 @@ async def handle_auth_url(url):
     force_authentication=False,
     callback_url=OAUTH_CALLBACK_URL,
 )
+
 async def invoke(payload, context, *, access_token: str):
-    # Decode the JWT to get user info
     user_info = jwt.decode(access_token, options={"verify_signature": False})
     user_id = user_info.get("sub", "unknown-user")
 
     session_id = getattr(context, 'session_id', 'default')
 
-    # Create code interpreter
     code_interpreter = AgentCoreCodeInterpreter(
         region=REGION,
         session_name=session_id,
