@@ -86,6 +86,27 @@ spec:
 EOF
 ```
 
+#### For Token Passthrough/OBO
+```
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: gitlab-mcp-backend-obo
+  namespace: agentgateway-system
+spec:
+  mcp:
+    targets:
+      - name: gitlab-obo
+        static:
+          host: gitlab.com
+          port: 443
+          path: /api/v4/mcp
+          protocol: StreamableHTTP
+        auth:
+          tokenPassthrough:
+            enabled: true
+```
+
 ## 4. Create the AuthConfig for GitLab OAuth
 
 GitLab supports OIDC, so the ext-auth server can discover endpoints automatically via `https://gitlab.com/.well-known/openid-configuration`.
