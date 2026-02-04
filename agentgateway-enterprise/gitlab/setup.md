@@ -145,8 +145,16 @@ EOF
 Retrieve the JWKS from the enterprise-agentgateway STS:
 
 ```bash
-export CERT_KEYS=$(kubectl exec -n agentgateway-system deploy/enterprise-agentgateway -- \
-  curl -s http://localhost:7777/.well-known/jwks.json)
+# Port-forward to the control plane
+kubectl port-forward -n agentgateway-system deploy/enterprise-agentgateway 7777:7777 &
+PF_PID=$!
+sleep 2
+
+# Fetch the JWKS
+export CERT_KEYS=$(curl -s http://localhost:7777/.well-known/jwks.json)
+
+# Stop the port-forward
+kill $PF_PID
 ```
 
 Then apply an EnterpriseAgentgatewayPolicy to enable OBO token exchange on this route:
