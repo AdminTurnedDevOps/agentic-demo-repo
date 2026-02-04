@@ -88,6 +88,20 @@ EOF
 
 #### For Token Passthrough/OBO
 
+Within the agentgateway helm installation, token echange needs to be configured:
+```
+tokenExchange:
+  enabled: true
+  issuer: "enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  tokenExpiration: 24h
+  subjectValidator:
+    validatorType: remote
+    remoteConfig:
+      url: "https://gitlab.com/oauth/discovery/keys"  # GitLab's JWKS
+  actorValidator:
+    validatorType: k8s
+```
+
 Deploy a separate backend and HTTPRoute for OBO:
 
 ```bash
@@ -128,6 +142,13 @@ spec:
 EOF
 ```
 
+Retrieve the JWKS from the enterprise-agentgateway STS:
+
+```bash
+export CERT_KEYS=$(kubectl exec -n agentgateway-system deploy/enterprise-agentgateway -- \
+  curl -s http://localhost:7777/.well-known/jwks.json)
+```
+
 Then apply an EnterpriseAgentgatewayPolicy to enable OBO token exchange on this route:
 
 ```bash
@@ -146,14 +167,9 @@ spec:
     jwtAuthentication:
       mode: Strict
       providers:
-        - issuer: https://gitlab.com
-          audiences:
-            - $GITLAB_CLIENT_ID
-          jwks:
-            remote:
-              url: https://gitlab.com/oauth/discovery/keys
-    oboTokenExchange:
-      enabled: true
+      - issuer: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
+        jwks:
+          inline: '${CERT_KEYS}'
 EOF
 ```
 
