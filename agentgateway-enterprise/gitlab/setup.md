@@ -16,22 +16,7 @@ If you have a hostname for the Gateway or a public ALB IP, use that instead of `
    - Select scopes: `openid`, `read_api`, `read_user`
    - Note your **Application ID** (Client ID) and **Secret** (Client Secret)
 
-## 1. Set Environment Variables
-
-```bash
-export GITLAB_CLIENT_ID=<your-gitlab-application-id>
-export GITLAB_CLIENT_SECRET=<your-gitlab-client-secret>
-```
-
-## 2. Create the OAuth Secret
-
-```bash
-kubectl create secret generic gitlab-oauth-secret \
-  -n agentgateway-system \
-  --from-literal=oauth=$GITLAB_CLIENT_SECRET
-```
-
-## 3. Deploy Gateway, Backend, and HTTPRoute
+## 1. Deploy Gateway, Backend, and HTTPRoute
 
 ```bash
 kubectl apply -f - <<EOF
@@ -64,6 +49,8 @@ spec:
           port: 443
           path: /api/v4/mcp
           protocol: StreamableHTTP
+          policies:
+            tls: {}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -83,12 +70,31 @@ spec:
         - name: gitlab-mcp-backend
           group: agentgateway.dev
           kind: AgentgatewayBackend
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: oauth-callback
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+    - name: agentgateway-proxy
+      namespace: agentgateway-system
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /callback
+      backendRefs:
+        - name: gitlab-mcp-backend
+          group: agentgateway.dev
+          kind: AgentgatewayBackend
 EOF
 ```
 
 #### For Token Passthrough/OBO
 
-Within the agentgateway helm installation, token echange needs to be configured:
+Within the agentgateway helm installation, token exchange needs to be configured:
 ```
 tokenExchange:
   enabled: true
@@ -120,6 +126,8 @@ spec:
           port: 443
           path: /api/v4/mcp
           protocol: StreamableHTTP
+          policies:
+            tls: {}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -177,11 +185,24 @@ spec:
       providers:
       - issuer: enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
         jwks:
-          inline: '${CERT_KEYS}'
+          inline: $CERT_KEYS
 EOF
 ```
 
-## 4. Create the AuthConfig for GitLab OAuth
+## 2. Set Environment Variables
+
+```bash
+export GITLAB_CLIENT_ID=<your-gitlab-application-id>
+export GITLAB_CLIENT_SECRET=<your-gitlab-client-secret>
+```
+
+```bash
+kubectl create secret generic gitlab-oauth-secret \
+  -n agentgateway-system \
+  --from-literal=oauth=$GITLAB_CLIENT_SECRET
+```
+
+## 3. Create the AuthConfig for GitLab OAuth
 
 GitLab supports OIDC, so the ext-auth server can discover endpoints automatically via `https://gitlab.com/.well-known/openid-configuration`.
 
@@ -196,7 +217,7 @@ spec:
   configs:
     - oauth2:
         oidcAuthorizationCode:
-          appUrl: http://localhost:8080
+          appUrl: http://35.227.40.96:8080
           callbackPath: /callback
           clientId: $GITLAB_CLIENT_ID
           clientSecretRef:
@@ -210,12 +231,17 @@ spec:
           session:
             cookieOptions:
               notSecure: true  # Set to false in production with HTTPS
+          headers:
+            accessTokenHeader: "Authorization"
+            useBearerSchemaForAuthorization: true
 EOF
 ```
 
-## 5. Apply the EnterpriseAgentgatewayPolicy
+## 4. Apply the EnterpriseAgentgatewayPolicy
 
 This links the OAuth AuthConfig to the Gateway, enforcing authentication on all traffic.
+
+The `headerModifiers` section ensures the `X-Forwarded-Host` header includes the port, so ext-auth correctly constructs the original URL for post-OAuth redirect.
 
 ```bash
 kubectl apply -f - <<EOF
@@ -230,6 +256,13 @@ spec:
       kind: Gateway
       name: agentgateway-proxy
   traffic:
+    headerModifiers:
+      request:
+        set:
+          - name: "X-Forwarded-Host"
+            value: "35.227.40.96:8080"
+          - name: "X-Forwarded-Port"
+            value: "8080"
     entExtAuth:
       authConfigRef:
         name: oauth-gitlab
@@ -241,7 +274,7 @@ spec:
 EOF
 ```
 
-## 6. Verification
+## 5. Verification
 
 Verify all resources are created:
 
@@ -253,24 +286,94 @@ kubectl get authconfig oauth-gitlab -n agentgateway-system
 kubectl get enterpriseagentgatewaypolicy oauth-gitlab -n agentgateway-system
 ```
 
-## 7. Test the OAuth Flow
+## 6. Test the OAuth Flow
 
-Port-forward to access the gateway locally:
+1. Port-forward to access the gateway locally (if you don't have a gateway IP or hostname):
 
 ```bash
 kubectl port-forward -n agentgateway-system svc/agentgateway-proxy 8080:8080
 ```
 
-Test that OAuth redirect is working:
+2. Get the OAuth session cookie:
+   1. Open your browser and go to: `http://35.227.40.96:8080/mcp-gitlab`
+   2. Complete the GitLab OAuth flow
+   3. Open developer tools → Application → Cookies
+   4. Copy the `id_token` cookie value
+
+## 7. Using the GitLab MCP Server
+
+GitLab's MCP server uses the Streamable HTTP protocol, which requires initializing a session before making other requests.
+
+### Step 1: Initialize the MCP Session
 
 ```bash
-curl -v http://localhost:8080/mcp-gitlab
+curl -v http://35.227.40.96:8080/mcp-gitlab \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: id_token=<your-id-token>" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {},
+      "clientInfo": {
+        "name": "test-client",
+        "version": "1.0.0"
+      }
+    },
+    "id": 1
+  }'
 ```
 
-You should see a `302` redirect to `https://gitlab.com/oauth/authorize`. Open the URL in a browser to complete the GitLab OAuth flow.
-
-Verify traffic reached the ext-auth server:
+Look for the `mcp-session-id` header in the response and save it:
 
 ```bash
-kubectl logs -n agentgateway-system -l app=ext-auth-service-enterprise-agentgateway --tail=50 | grep gitlab
+export MCP_SESSION_ID=<session-id-from-response-header>
 ```
+
+### Step 2: List Available Tools
+
+```bash
+curl -v http://35.227.40.96:8080/mcp-gitlab \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: id_token=<your-id-token>" \
+  -H "Mcp-Session-Id: $MCP_SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "id": 2
+  }'
+```
+
+### Step 3: Call a Tool
+
+```bash
+curl -v http://35.227.40.96:8080/mcp-gitlab \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: id_token=<your-id-token>" \
+  -H "Mcp-Session-Id: $MCP_SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "list_projects",
+      "arguments": {
+        "owned": true,
+        "per_page": 5
+      }
+    },
+    "id": 3
+  }'
+```
+
+### Troubleshooting
+
+1. **406 Not Acceptable** - Add `Accept: application/json, text/event-stream` header
+2. **422 session header required** - You need to call `initialize` first and include the `Mcp-Session-Id` header
+3. **Check ext-auth logs** for token validation errors:
+   ```bash
+   kubectl logs -n agentgateway-system -l app=ext-auth-service-enterprise-agentgateway -f
+   ```
