@@ -87,7 +87,11 @@ EOF
 ```
 
 #### For Token Passthrough/OBO
-```
+
+Deploy a separate backend and HTTPRoute for OBO:
+
+```bash
+kubectl apply -f - <<EOF
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
@@ -102,9 +106,55 @@ spec:
           port: 443
           path: /api/v4/mcp
           protocol: StreamableHTTP
-        auth:
-          tokenPassthrough:
-            enabled: true
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-gitlab-obo
+  namespace: agentgateway-system
+spec:
+  parentRefs:
+    - name: agentgateway-proxy
+      namespace: agentgateway-system
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mcp-gitlab-obo
+      backendRefs:
+        - name: gitlab-mcp-backend-obo
+          group: agentgateway.dev
+          kind: AgentgatewayBackend
+EOF
+```
+
+Then apply an EnterpriseAgentgatewayPolicy to enable OBO token exchange on this route:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: gitlab-obo-policy
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: mcp-gitlab-obo
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: https://gitlab.com
+          audiences:
+            - $GITLAB_CLIENT_ID
+          jwks:
+            remote:
+              url: https://gitlab.com/oauth/discovery/keys
+    oboTokenExchange:
+      enabled: true
+EOF
 ```
 
 ## 4. Create the AuthConfig for GitLab OAuth
