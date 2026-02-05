@@ -1,6 +1,6 @@
 # GitLab MCP Server Integration with OAuth
 
-This guide configures the Agentgateway to reach GitLab's MCP Server using OAuth authentication (passing the token through) via GitLab as the identity provider.
+This guide configures the Agentgateway to reach GitLab's MCP Server using OIDC-based OAuth authentication (passing the token through) via GitLab as the identity provider.
 
 ## Prerequisites
 
