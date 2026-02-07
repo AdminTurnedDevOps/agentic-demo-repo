@@ -39,7 +39,7 @@ metadata:
     app: agentgateway-route
 type: Opaque
 stringData:
-  Authorization: $CLAUDE_API_KEY
+  Authorization: $ANTHROPIC_API_KEY
 EOF
 ```
 
@@ -56,7 +56,7 @@ spec:
   ai:
     provider:
         anthropic:
-          model: "claude-3-5-haiku-latest"
+          model: "claude-sonnet-4-5-20250929"
   policies:
     auth:
       secretRef:
@@ -65,7 +65,7 @@ EOF
 ```
 
 ```
-kubectl get backend -n agentgateway-system
+kubectl get agentgatewaybackend -n agentgateway-system
 ```
 
 ```
@@ -101,7 +101,7 @@ EOF
 ```
 
 ```
-curl "$INGRESS_GW_ADDRESS:8080/anthropic" -H content-type:application/json -H x-api-key:$ANTHROPIC_API_KEY -H "anthropic-version: 2023-06-01" -d '{
+curl "$INGRESS_GW_ADDRESS:8080/anthropic" -H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
   "messages": [
     {
       "role": "system",
