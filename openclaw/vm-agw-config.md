@@ -89,6 +89,10 @@ spec:
     - name: agentgateway-oc
       namespace: agentgateway-system
   rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1/chat/completions
   - backendRefs:
     - name: anthropic
       namespace: agentgateway-system
@@ -106,7 +110,7 @@ echo $INGRESS_GW_ADDRESS
 Test the connection.
 
 ```
-curl "$INGRESS_GW_ADDRESS:8080/oc" -H content-type:application/json -d '{
+curl "$INGRESS_GW_ADDRESS:8080" -H content-type:application/json -d '{
   "model": "claude-sonnet-4-5-20250929",
   "messages": [
     {
