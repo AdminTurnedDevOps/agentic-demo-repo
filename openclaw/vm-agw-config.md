@@ -93,7 +93,7 @@ spec:
     - path:
         type: PathPrefix
         value: /v1/chat/completions
-  - backendRefs:
+    backendRefs:
     - name: anthropic
       namespace: agentgateway-system
       group: agentgateway.dev
@@ -131,14 +131,21 @@ curl "$INGRESS_GW_ADDRESS:8080" -H content-type:application/json -d '{
 1. SSH into the Azure VM
 2. Update the OpenClaw config. The config lives in `~/.openclaw/openclaw.json` and you can override the baseUrl directly.
 
+> **Note:** Use the `openai` provider (not `anthropic`) so OpenClaw sends OpenAI-compatible format. AgentGateway translates this to Anthropic API on the backend. Using native Anthropic format causes marshaling errors with complex message content.
+
 ```json
 {
   "models": {
     "mode": "merge",
     "providers": {
-      "anthropic": {
-        "baseUrl": "http://YOUR_GATEWAY_IP:8080/oc",
-        "models": []
+      "openai": {
+        "baseUrl": "http://YOUR_GATEWAY_IP:8080/v1",
+        "models": [
+          {
+            "id": "claude-sonnet-4-5-20250929",
+            "name": "Claude Sonnet 4.5"
+          }
+        ]
       }
     }
   }
@@ -159,5 +166,5 @@ kubectl logs -n agentgateway-system agentgateway-oc-POD_NAME -f
 ```
 
 ```
-2026-02-07T16:37:48.767849Z     info    request gateway=agentgateway-system/agentgateway-oc listener=http route=agentgateway-system/claude endpoint=api.anthropic.com:443 src.addr=10.224.0.39:34200 http.method=POST http.host=40.125.42.28 http.path=/oc http.version=HTTP/1.1 http.status=200 protocol=llm gen_ai.operation.name=chat gen_ai.provider.name=anthropic gen_ai.request.model=claude-sonnet-4-5-20250929 gen_ai.response.model=claude-sonnet-4-5-20250929 gen_ai.usage.input_tokens=8 gen_ai.usage.output_tokens=12 duration=1502ms
+2026-02-07T16:37:48.767849Z     info    request gateway=agentgateway-system/agentgateway-oc listener=http route=agentgateway-system/anthropic endpoint=api.anthropic.com:443 src.addr=10.224.0.39:34200 http.method=POST http.host=40.125.42.28 http.path=/v1/chat/completions http.version=HTTP/1.1 http.status=200 protocol=llm gen_ai.operation.name=chat gen_ai.provider.name=anthropic gen_ai.request.model=claude-sonnet-4-5-20250929 gen_ai.response.model=claude-sonnet-4-5-20250929 gen_ai.usage.input_tokens=8 gen_ai.usage.output_tokens=12 duration=1502ms
 ```
