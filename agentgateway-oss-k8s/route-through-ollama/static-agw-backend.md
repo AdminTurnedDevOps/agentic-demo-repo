@@ -41,13 +41,13 @@ spec:
 EOF
 ```
 
-3. Capture the LB IP of the service. This will be used later to send a request to the LLM.
+Capture the LB IP of the service. This will be used later to send a request to the LLM.
 ```
 export INGRESS_GW_ADDRESS=$(kubectl get svc -n agentgateway-system agentgateway-llama -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
 echo $INGRESS_GW_ADDRESS
 ```
 
-4. Create a secret to store the Claude API key
+Create a secret to store the Claude API key
 ```
 kubectl apply -f- <<EOF
 apiVersion: v1
@@ -63,6 +63,7 @@ stringData:
 EOF
 ```
 
+Create the backend with the static host to connect to the Azure VM exposing Llama
 ```
 kubectl apply -f- <<EOF
 apiVersion: agentgateway.dev/v1alpha1
