@@ -85,7 +85,7 @@ spec:
 EOF
 ```
 
-7. Apply the Route so you can reach the LLM
+Apply the Route so you can reach the LLM
 ```
 kubectl apply -f- <<EOF
 apiVersion: gateway.networking.k8s.io/v1
