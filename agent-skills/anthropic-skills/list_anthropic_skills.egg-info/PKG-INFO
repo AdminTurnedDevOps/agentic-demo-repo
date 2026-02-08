@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: list-anthropic-skills
+Version: 0.1.0
+Summary: List available Anthropic skills
+Requires-Python: >=3.9
+Requires-Dist: anthropic

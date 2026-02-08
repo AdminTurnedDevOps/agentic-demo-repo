@@ -1,0 +1,8 @@
+[project]
+name = "list-anthropic-skills"
+version = "0.1.0"
+description = "List available Anthropic skills"
+requires-python = ">=3.9"
+dependencies = [
+    "anthropic",
+]
