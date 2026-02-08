@@ -16,7 +16,7 @@ SSH into your Ubuntu VM and run:
 
 2. Pull a Model
 
-`ollama pull llama3.1:8b`
+`ollama pull codellama:7b-instruct`
 
 Replace with whichever model you want (e.g., mistral, codellama, qwen2.5-coder).
 
