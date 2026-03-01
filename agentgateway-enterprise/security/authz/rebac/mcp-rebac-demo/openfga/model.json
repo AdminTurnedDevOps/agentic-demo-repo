@@ -1,0 +1,198 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "user"
+    },
+    {
+      "type": "team",
+      "relations": {
+        "member": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "member": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "project",
+      "relations": {
+        "approver": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "approver": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "agent",
+      "relations": {
+        "owner_team": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "owner_team": {
+            "directly_related_user_types": [
+              {
+                "type": "team"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "mcp_server",
+      "relations": {
+        "owner_team": {
+          "this": {}
+        },
+        "discoverer": {
+          "tupleToUserset": {
+            "tupleset": {
+              "relation": "owner_team"
+            },
+            "computedUserset": {
+              "relation": "member"
+            }
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "owner_team": {
+            "directly_related_user_types": [
+              {
+                "type": "team"
+              }
+            ]
+          },
+          "discoverer": {
+            "directly_related_user_types": []
+          }
+        }
+      }
+    },
+    {
+      "type": "tool",
+      "relations": {
+        "server": {
+          "this": {}
+        },
+        "invoke_team": {
+          "this": {}
+        },
+        "invoke_approver_project": {
+          "this": {}
+        },
+        "invoke_owner_agent": {
+          "this": {}
+        },
+        "discover": {
+          "tupleToUserset": {
+            "tupleset": {
+              "relation": "server"
+            },
+            "computedUserset": {
+              "relation": "discoverer"
+            }
+          }
+        },
+        "invoke": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "relation": "invoke_team"
+                  },
+                  "computedUserset": {
+                    "relation": "member"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "relation": "invoke_approver_project"
+                  },
+                  "computedUserset": {
+                    "relation": "approver"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "relation": "invoke_owner_agent"
+                  },
+                  "computedUserset": {
+                    "relation": "owner_team"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "server": {
+            "directly_related_user_types": [
+              {
+                "type": "mcp_server"
+              }
+            ]
+          },
+          "invoke_team": {
+            "directly_related_user_types": [
+              {
+                "type": "team"
+              }
+            ]
+          },
+          "invoke_approver_project": {
+            "directly_related_user_types": [
+              {
+                "type": "project"
+              }
+            ]
+          },
+          "invoke_owner_agent": {
+            "directly_related_user_types": [
+              {
+                "type": "agent"
+              }
+            ]
+          },
+          "discover": {
+            "directly_related_user_types": []
+          },
+          "invoke": {
+            "directly_related_user_types": []
+          }
+        }
+      }
+    }
+  ]
+}

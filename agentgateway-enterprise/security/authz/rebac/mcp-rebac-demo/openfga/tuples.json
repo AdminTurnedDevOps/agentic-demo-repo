@@ -1,0 +1,24 @@
+{
+  "writes": {
+    "tuple_keys": [
+      {"user": "user:alice", "relation": "member", "object": "team:finance"},
+      {"user": "user:bob", "relation": "member", "object": "team:engineering"},
+
+      {"user": "team:finance", "relation": "owner_team", "object": "mcp_server:finance"},
+      {"user": "team:engineering", "relation": "owner_team", "object": "mcp_server:engineering"},
+
+      {"user": "mcp_server:finance", "relation": "server", "object": "tool:finance/read_budget"},
+      {"user": "mcp_server:finance", "relation": "server", "object": "tool:finance/create_forecast_ticket"},
+      {"user": "mcp_server:engineering", "relation": "server", "object": "tool:engineering/get_deploy_status"},
+      {"user": "mcp_server:engineering", "relation": "server", "object": "tool:engineering/restart_staging_service"},
+
+      {"user": "team:engineering", "relation": "invoke_team", "object": "tool:engineering/get_deploy_status"},
+      {"user": "team:engineering", "relation": "invoke_team", "object": "tool:engineering/restart_staging_service"},
+
+      {"user": "project:q1-forecast", "relation": "invoke_approver_project", "object": "tool:finance/read_budget"},
+
+      {"user": "team:finance", "relation": "owner_team", "object": "agent:quarterly-report-bot"},
+      {"user": "agent:quarterly-report-bot", "relation": "invoke_owner_agent", "object": "tool:finance/create_forecast_ticket"}
+    ]
+  }
+}

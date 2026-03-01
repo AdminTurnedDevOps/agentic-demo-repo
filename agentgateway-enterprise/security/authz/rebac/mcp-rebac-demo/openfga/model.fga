@@ -1,0 +1,30 @@
+model
+  schema 1.1
+
+type user
+
+type team
+  relations
+    define member: [user]
+
+type project
+  relations
+    define approver: [user]
+
+type agent
+  relations
+    define owner_team: [team]
+
+type mcp_server
+  relations
+    define owner_team: [team]
+    define discoverer: owner_team->member
+
+type tool
+  relations
+    define server: [mcp_server]
+    define invoke_team: [team]
+    define invoke_approver_project: [project]
+    define invoke_owner_agent: [agent]
+    define discover: server->discoverer
+    define invoke: invoke_team->member or invoke_approver_project->approver or invoke_owner_agent->owner_team->member

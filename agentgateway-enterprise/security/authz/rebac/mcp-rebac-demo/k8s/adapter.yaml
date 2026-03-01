@@ -1,0 +1,244 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rebac-auth-adapter-code
+  namespace: rebac-mcp-demo
+data:
+  main.py: |
+    from __future__ import annotations
+    import base64, hashlib, hmac, json, os
+    from typing import Any
+    import requests, yaml
+    from fastapi import FastAPI, HTTPException, Request
+    from fastapi.responses import JSONResponse
+
+    TOOL_TO_OBJECT = {
+        "read_budget": "tool:finance/read_budget",
+        "create_forecast_ticket": "tool:finance/create_forecast_ticket",
+        "get_deploy_status": "tool:engineering/get_deploy_status",
+        "restart_staging_service": "tool:engineering/restart_staging_service",
+    }
+    TOOL_TO_UPSTREAM = {
+        "read_budget": "finance",
+        "create_forecast_ticket": "finance",
+        "get_deploy_status": "engineering",
+        "restart_staging_service": "engineering",
+    }
+
+    APP_CONFIG = os.getenv("APP_CONFIG", "/app/config.yaml")
+    JWT_HS256_SECRET = os.getenv("JWT_HS256_SECRET", "rebac-demo-shared-secret-please-change")
+    JWT_ISS = os.getenv("JWT_ISS", "rebac.demo.local")
+    JWT_AUD = os.getenv("JWT_AUD", "mcp-rebac-demo")
+
+    with open(APP_CONFIG, "r", encoding="utf-8") as f:
+      cfg = yaml.safe_load(f)
+
+    OPENFGA_URL = os.getenv("OPENFGA_URL", cfg["openfga"]["url"]).rstrip("/")
+    OPENFGA_STORE_ID = os.getenv("OPENFGA_STORE_ID", cfg["openfga"]["store_id"])
+    OPENFGA_MODEL_ID = os.getenv("OPENFGA_MODEL_ID", cfg["openfga"]["model_id"])
+    UPSTREAMS = cfg["upstreams"]
+
+    if not OPENFGA_STORE_ID or not OPENFGA_MODEL_ID:
+      raise RuntimeError("OPENFGA_STORE_ID and OPENFGA_MODEL_ID must be set")
+
+    app = FastAPI(title="rebac-auth-adapter")
+
+    def _b64url_decode(data: str) -> bytes:
+      data += "=" * ((4 - len(data) % 4) % 4)
+      return base64.urlsafe_b64decode(data.encode())
+
+    def parse_and_verify_jwt(auth_header: str | None) -> dict[str, Any]:
+      if not auth_header or not auth_header.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+      token = auth_header.split(" ", 1)[1]
+      h_b64, p_b64, s_b64 = token.split(".")
+      unsigned = f"{h_b64}.{p_b64}".encode()
+      expected = hmac.new(JWT_HS256_SECRET.encode(), unsigned, hashlib.sha256).digest()
+      actual = _b64url_decode(s_b64)
+      if not hmac.compare_digest(expected, actual):
+        raise HTTPException(status_code=401, detail="invalid token signature")
+      payload = json.loads(_b64url_decode(p_b64).decode())
+      if payload.get("iss") != JWT_ISS:
+        raise HTTPException(status_code=401, detail="invalid issuer")
+      aud = payload.get("aud")
+      if isinstance(aud, list):
+        if JWT_AUD not in aud:
+          raise HTTPException(status_code=401, detail="invalid audience")
+      elif aud != JWT_AUD:
+        raise HTTPException(status_code=401, detail="invalid audience")
+      return payload
+
+    def contextual_tuples_from_claims(claims: dict[str, Any]) -> list[dict[str, str]]:
+      tuples = []
+      sub = claims.get("sub")
+      team = claims.get("team")
+      if sub and team:
+        tuples.append({"user": f"user:{sub}", "relation": "member", "object": f"team:{team}"})
+      for project in claims.get("approver_projects", []) or []:
+        tuples.append({"user": f"user:{sub}", "relation": "approver", "object": f"project:{project}"})
+      return tuples
+
+    def fga_check(user: str, relation: str, obj: str, contextual: list[dict[str, str]]) -> bool:
+      payload = {
+        "tuple_key": {"user": user, "relation": relation, "object": obj},
+        "authorization_model_id": OPENFGA_MODEL_ID,
+        "contextual_tuples": {"tuple_keys": contextual},
+      }
+      r = requests.post(f"{OPENFGA_URL}/stores/{OPENFGA_STORE_ID}/check", json=payload, timeout=3)
+      r.raise_for_status()
+      return bool(r.json().get("allowed", False))
+
+    def fga_list_objects(user: str, relation: str, type_name: str, contextual: list[dict[str, str]]) -> list[str]:
+      payload = {
+        "user": user,
+        "relation": relation,
+        "type": type_name,
+        "authorization_model_id": OPENFGA_MODEL_ID,
+        "contextual_tuples": {"tuple_keys": contextual},
+      }
+      r = requests.post(f"{OPENFGA_URL}/stores/{OPENFGA_STORE_ID}/list-objects", json=payload, timeout=3)
+      r.raise_for_status()
+      return r.json().get("objects", [])
+
+    def upstream_call(url: str, payload: dict[str, Any], auth_header: str | None) -> dict[str, Any]:
+      headers = {"content-type": "application/json"}
+      if auth_header:
+        headers["authorization"] = auth_header
+      r = requests.post(url, json=payload, headers=headers, timeout=5)
+      r.raise_for_status()
+      return r.json()
+
+    @app.get("/")
+    def health():
+      return {"status": "ok"}
+
+    @app.post("/extauth")
+    async def extauth(request: Request):
+      claims = parse_and_verify_jwt(request.headers.get("authorization"))
+      body = await request.body()
+      try:
+        payload = json.loads(body.decode()) if body else {}
+      except json.JSONDecodeError:
+        payload = {}
+      if payload.get("method") != "tools/call":
+        return JSONResponse(status_code=200, content={"allow": True})
+      tool_name = ((payload.get("params") or {}).get("name"))
+      object_id = TOOL_TO_OBJECT.get(tool_name or "")
+      if not object_id:
+        return JSONResponse(status_code=403, content={"allow": False})
+      allowed = fga_check(f"user:{claims['sub']}", "invoke", object_id, contextual_tuples_from_claims(claims))
+      if not allowed:
+        return JSONResponse(status_code=403, content={"allow": False})
+      return JSONResponse(status_code=200, content={"allow": True})
+
+    @app.post("/mcp")
+    async def mcp(request: Request):
+      auth = request.headers.get("authorization")
+      claims = parse_and_verify_jwt(auth)
+      payload = await request.json()
+      method = payload.get("method")
+      msg_id = payload.get("id")
+      subject = f"user:{claims['sub']}"
+      contextual = contextual_tuples_from_claims(claims)
+
+      if method == "initialize":
+        return JSONResponse({"jsonrpc":"2.0","id":msg_id,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"rebac-adapter","version":"0.1.0"}}})
+
+      if method == "tools/list":
+        visible = set(fga_list_objects(subject, "discover", "tool", contextual))
+        tools = []
+        for tool_name, upstream_key in TOOL_TO_UPSTREAM.items():
+          object_id = TOOL_TO_OBJECT[tool_name]
+          if object_id not in visible:
+            continue
+          resp = upstream_call(UPSTREAMS[upstream_key], {"jsonrpc":"2.0","id":900,"method":"tools/list"}, auth)
+          for t in (resp.get("result") or {}).get("tools", []):
+            if t.get("name") == tool_name:
+              tools.append(t)
+        return JSONResponse({"jsonrpc":"2.0","id":msg_id,"result":{"tools":tools}})
+
+      if method == "tools/call":
+        params = payload.get("params") or {}
+        tool_name = params.get("name")
+        object_id = TOOL_TO_OBJECT.get(tool_name or "")
+        if not object_id:
+          return JSONResponse({"jsonrpc":"2.0","id":msg_id,"error":{"code":-32602,"message":"unknown tool"}}, status_code=400)
+        allowed = fga_check(subject, "invoke", object_id, contextual)
+        if not allowed:
+          return JSONResponse({"jsonrpc":"2.0","id":msg_id,"error":{"code":-32001,"message":"forbidden"}}, status_code=403)
+        upstream = UPSTREAMS[TOOL_TO_UPSTREAM[tool_name]]
+        return JSONResponse(upstream_call(upstream, payload, auth))
+
+      return JSONResponse({"jsonrpc":"2.0","id":msg_id,"error":{"code":-32601,"message":"method not found"}}, status_code=404)
+  config.yaml: |
+    openfga:
+      url: http://openfga.rebac-mcp-demo.svc.cluster.local:8080
+      store_id: ""
+      model_id: ""
+    upstreams:
+      finance: http://mcp-finance.rebac-mcp-demo.svc.cluster.local:8000/mcp
+      engineering: http://mcp-engineering.rebac-mcp-demo.svc.cluster.local:8000/mcp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rebac-auth-adapter
+  namespace: rebac-mcp-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rebac-auth-adapter
+  template:
+    metadata:
+      labels:
+        app: rebac-auth-adapter
+    spec:
+      containers:
+        - name: adapter
+          image: python:3.11-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - pip install --no-cache-dir fastapi uvicorn requests pyyaml && uvicorn main:app --host 0.0.0.0 --port 8080
+          env:
+            - name: OPENFGA_URL
+              value: http://openfga.rebac-mcp-demo.svc.cluster.local:8080
+            - name: OPENFGA_STORE_ID
+              value: ""
+            - name: OPENFGA_MODEL_ID
+              value: ""
+            - name: JWT_HS256_SECRET
+              value: rebac-demo-shared-secret-please-change
+            - name: JWT_ISS
+              value: rebac.demo.local
+            - name: JWT_AUD
+              value: mcp-rebac-demo
+          volumeMounts:
+            - name: code
+              mountPath: /app
+          workingDir: /app
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: code
+          configMap:
+            name: rebac-auth-adapter-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rebac-auth-adapter
+  namespace: rebac-mcp-demo
+spec:
+  selector:
+    app: rebac-auth-adapter
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

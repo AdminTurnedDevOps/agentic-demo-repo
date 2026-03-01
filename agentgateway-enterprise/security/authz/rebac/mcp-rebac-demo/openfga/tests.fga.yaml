@@ -1,0 +1,53 @@
+model_file: ./model.fga
+tuple_file: ./tuples.json
+tests:
+  - name: alice_can_discover_finance_tools
+    check:
+      - user: user:alice
+        object: tool:finance/read_budget
+        assertions:
+          discover: true
+      - user: user:alice
+        object: tool:finance/create_forecast_ticket
+        assertions:
+          discover: true
+  - name: alice_cannot_discover_engineering_tools
+    check:
+      - user: user:alice
+        object: tool:engineering/get_deploy_status
+        assertions:
+          discover: false
+  - name: bob_can_discover_engineering_tools
+    check:
+      - user: user:bob
+        object: tool:engineering/restart_staging_service
+        assertions:
+          discover: true
+  - name: invoke_rules
+    check:
+      - user: user:alice
+        object: tool:finance/create_forecast_ticket
+        assertions:
+          invoke: true
+      - user: user:alice
+        object: tool:finance/read_budget
+        assertions:
+          invoke: false
+      - user: user:bob
+        object: tool:engineering/get_deploy_status
+        assertions:
+          invoke: true
+      - user: user:bob
+        object: tool:finance/create_forecast_ticket
+        assertions:
+          invoke: false
+  - name: contextual_tuple_grants_read_budget_to_alice
+    check:
+      - user: user:alice
+        object: tool:finance/read_budget
+        contextual_tuples:
+          - user: user:alice
+            relation: approver
+            object: project:q1-forecast
+        assertions:
+          invoke: true

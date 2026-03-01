@@ -1,0 +1,19 @@
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-rebac-jwt
+  namespace: rebac-mcp-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: mcp-rebac-gateway
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: rebac.demo.local
+          audiences:
+            - mcp-rebac-demo
+          jwks:
+            inline: '{"keys":[{"kty":"oct","k":"cmViYWMtZGVtby1zaGFyZWQtc2VjcmV0LXBsZWFzZS1jaGFuZ2U","alg":"HS256","kid":"rebac-demo-hs256"}]}'
