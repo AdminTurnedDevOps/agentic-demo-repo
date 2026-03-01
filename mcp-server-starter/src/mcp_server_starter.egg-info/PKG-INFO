@@ -1,0 +1,83 @@
+Metadata-Version: 2.4
+Name: mcp-server-starter
+Version: 0.1.0
+Summary: Starter-template MCP server using FastMCP
+Author: Your Name
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastmcp==3.0.2
+Provides-Extra: dev
+Requires-Dist: pytest==8.3.5; extra == "dev"
+
+# mcp-server-starter
+
+A small, production-style FastMCP starter template with:
+
+- `src/` layout
+- typed Python (3.11+)
+- pinned FastMCP dependency
+- tools + static resource + dynamic resource template
+- clean stderr logging (safe for STDIO transport)
+- simple tests
+
+## Features
+
+### Tools
+
+- `ping() -> str`
+- `add_numbers(a: int, b: int) -> int`
+- `lookup_customer(customer_id: str) -> dict`
+
+### Resources
+
+- static: `resource://config`
+- dynamic template: `customers://{customer_id}`
+
+Customer data is mock in-memory data for easy local development.
+
+## Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Run locally (STDIO, default)
+
+```bash
+python -m mcp_server_starter
+```
+
+Or explicitly:
+
+```bash
+python -m mcp_server_starter --transport stdio
+```
+
+## Run over HTTP (optional)
+
+```bash
+python -m mcp_server_starter --transport http --host 127.0.0.1 --port 8000 --path /mcp
+```
+
+## Run tests
+
+```bash
+pytest
+```
+
+## Where to extend for real projects
+
+- Authentication:
+  - Add auth validation in `src/mcp_server_starter/server.py` before exposing sensitive tools/resources.
+  - For HTTP mode, enforce token/header checks at transport/app layer.
+- External API calls:
+  - Add API client functions in `src/mcp_server_starter/services.py`.
+  - Keep FastMCP tool functions thin and delegate logic to services.
+- Database access:
+  - Replace in-memory store in `src/mcp_server_starter/data.py` with repository/DAO layer.
+  - Inject DB-backed lookups into `services.py`.
+- More tools/resources:
+  - Add new `@mcp.tool` / `@mcp.resource` functions in `server.py`.
+  - Put business logic in `services.py` and data contracts in typed models.

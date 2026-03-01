@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Gateway Expert"
+  short_description: "Build, secure, and troubleshoot Solo Agent Gateway."
+  default_prompt: "Use $agentgateway-expert to design or debug an Agent Gateway deployment and route policies."

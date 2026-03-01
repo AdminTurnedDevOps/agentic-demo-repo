@@ -1,0 +1,8 @@
+openfga:
+  url: http://openfga.rebac-mcp-demo.svc.cluster.local:8080
+  store_id: ""
+  model_id: ""
+
+upstreams:
+  finance: http://mcp-finance.rebac-mcp-demo.svc.cluster.local:8000/mcp
+  engineering: http://mcp-engineering.rebac-mcp-demo.svc.cluster.local:8000/mcp

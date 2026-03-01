@@ -43,6 +43,10 @@ For each provider (auth0 or Entra) there is a `setup.md`. You'll need to set up 
 
 *For Entra ID:* Follow [entra-id/setup.md](entra-id/SETUP.md)
 
+*For Entra ID + Solo ExtAuth (Enterprise):* Follow [entra/setup-extauth.md](entra/setup-extauth.md)
+
+*For Entra ID + MCP Inspector (JWT bearer tokens):* Follow [entra/setup-jwt-inspector.md](entra/setup-jwt-inspector.md)
+
 ### 2. Install kgateway/agentgateway
 
 1. Install OSS or Enterprise kgateway/agentgateway

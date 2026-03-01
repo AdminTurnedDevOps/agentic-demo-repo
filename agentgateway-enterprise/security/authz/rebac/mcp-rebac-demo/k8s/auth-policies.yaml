@@ -1,0 +1,27 @@
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: mcp-rebac-extauth
+  namespace: rebac-mcp-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: mcp-rebac-gateway
+  traffic:
+    extAuth:
+      backendRef:
+        kind: Service
+        group: ""
+        name: rebac-auth-adapter
+        namespace: rebac-mcp-demo
+        port: 8080
+      forwardBody:
+        maxSize: 32768
+      http:
+        path: /extauth
+        allowedRequestHeaders:
+          - authorization
+          - content-type
+        allowedResponseHeaders:
+          - x-extauthz-reason

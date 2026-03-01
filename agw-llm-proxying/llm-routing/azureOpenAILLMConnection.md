@@ -56,7 +56,7 @@ spec:
   ai:
     provider:
       azureopenai:
-        endpoint: tmotesting-resource.services.ai.azure.com
+        endpoint: mlevantesting-resource.services.ai.azure.com
         deploymentName: gpt-5-mini
         apiVersion: 2025-01-01-preview
   policies:

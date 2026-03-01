@@ -185,7 +185,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: agentgateway-mcp
-  namespace: gloo-system
+  namespace: agentgateway-system
 spec:
   gatewayClassName: enterprise-agentgateway
   listeners:
@@ -205,7 +205,7 @@ apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
   name: demo-mcp-server
-  namespace: gloo-system
+  namespace: agentgateway-system
 spec:
   mcp:
     targets:
@@ -225,14 +225,14 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: mcp-route
-  namespace: gloo-system
+  namespace: agentgateway-system
 spec:
   parentRefs:
   - name: agentgateway-mcp
   rules:
   - backendRefs:
     - name: demo-mcp-server
-      namespace: gloo-system
+      namespace: agentgateway-system
       group: agentgateway.dev
       kind: AgentgatewayBackend
 EOF
@@ -240,12 +240,12 @@ EOF
 
 5. Test the Gateway/route
 ```
-export GATEWAY_IP=$(kubectl get svc agentgateway-mcp -n gloo-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export GATEWAY_IP=$(kubectl get svc agentgateway-mcp -n agentgateway-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 echo $GATEWAY_IP
 ```
 
 ```
-npx modelcontextprotocol/inspector#0.16.2
+npx modelcontextprotocol/inspector#0.18.0
 ```
 
 URL to put into Inspector: `http://YOUR_ALB_LB_IP:8080/mcp`
