@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-server-starter"
+version = "0.1.0"
+description = "Starter-template MCP server using FastMCP"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Your Name" }
+]
+dependencies = [
+  "fastmcp==3.0.2"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.5"
+]
+
+[project.scripts]
+mcp-server-starter = "mcp_server_starter.server:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
