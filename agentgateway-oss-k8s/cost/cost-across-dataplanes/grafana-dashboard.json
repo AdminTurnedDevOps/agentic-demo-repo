@@ -67,11 +67,11 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "agentgateway:cost_usd:total_daily",
+          "expr": "agentgateway:cost_usd:daily",
           "refId": "A"
         }
       ],
-      "title": "Total Daily Cost (All Gateways)",
+      "title": "Daily Cost",
       "type": "gauge"
     },
     {
@@ -141,12 +141,12 @@
       },
       "targets": [
         {
-          "expr": "agentgateway:cost_usd:by_gateway",
-          "legendFormat": "{{ gateway_instance }}",
+          "expr": "agentgateway:cost_usd:hourly",
+          "legendFormat": "Hourly Cost",
           "refId": "A"
         }
       ],
-      "title": "Hourly Cost by Gateway",
+      "title": "Hourly Cost Trend",
       "type": "timeseries"
     },
     {
@@ -294,7 +294,7 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "agentgateway:cost_usd:total_hourly",
+          "expr": "agentgateway:cost_usd:hourly",
           "refId": "A"
         }
       ],
@@ -342,7 +342,7 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "agentgateway:cost_usd:total_weekly",
+          "expr": "agentgateway:cost_usd:weekly",
           "refId": "A"
         }
       ],
@@ -398,7 +398,7 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "agentgateway:cost_usd:total_monthly",
+          "expr": "agentgateway:cost_usd:monthly",
           "refId": "A"
         }
       ],
@@ -472,17 +472,17 @@
       },
       "targets": [
         {
-          "expr": "rate(agentgateway_ai_tokens_input_total[5m])",
-          "legendFormat": "{{ gateway_instance }} - input",
+          "expr": "rate(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type=\"input\"}[5m])",
+          "legendFormat": "Input Tokens",
           "refId": "A"
         },
         {
-          "expr": "rate(agentgateway_ai_tokens_output_total[5m])",
-          "legendFormat": "{{ gateway_instance }} - output",
+          "expr": "rate(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type=\"output\"}[5m])",
+          "legendFormat": "Output Tokens",
           "refId": "B"
         }
       ],
-      "title": "Token Rate by Gateway",
+      "title": "Token Rate",
       "type": "timeseries"
     },
     {
@@ -556,7 +556,7 @@
       },
       "targets": [
         {
-          "expr": "agentgateway:cost_usd:total_daily",
+          "expr": "agentgateway:cost_usd:daily",
           "legendFormat": "Daily Cost",
           "refId": "A"
         }
@@ -578,7 +578,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "AgentGateway - Multi-Gateway Cost Tracking",
+  "title": "AgentGateway - Cost Tracking",
   "uid": "agentgateway-cost",
   "version": 1,
   "weekStart": ""

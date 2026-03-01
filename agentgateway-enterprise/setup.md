@@ -27,7 +27,7 @@ helm upgrade -i agentgateway oci://us-docker.pkg.dev/solo-public/enterprise-agen
 helm upgrade -i management oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
 --namespace agentgateway-system \
 --create-namespace \
---version 0.3.0 \
+--version 0.3.7 \
 --set cluster="mgmt-cluster" \
 --set tracing.verbose=true \
 --set telemetry.traces.enabled=true \

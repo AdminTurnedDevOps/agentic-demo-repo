@@ -1,0 +1,134 @@
+# PodMonitor for agentgateway
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: agentgateway-cost
+  namespace: telemetry
+  labels:
+    app: agentgateway-route
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: agentgateway-route
+  namespaceSelector:
+    matchNames:
+      - agentgateway-system
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_pod_name]
+        targetLabel: pod
+      - sourceLabels: [__meta_kubernetes_namespace]
+        targetLabel: namespace
+---
+# PrometheusRule for cost calculation and alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agentgateway-cost-rules
+  namespace: telemetry
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: agentgateway_cost_tracking
+      interval: 30s
+      rules:
+        # Record total input tokens
+        - record: agentgateway:input_tokens:total
+          expr: |
+            sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[5m]))
+
+        # Record total output tokens
+        - record: agentgateway:output_tokens:total
+          expr: |
+            sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[5m]))
+
+        # Calculate cost (Claude 4.6 Sonnet pricing: $0.80/1M input, $4.00/1M output)
+        - record: agentgateway:cost_usd:hourly
+          expr: |
+            (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[1h])) * 0.80 / 1000000
+            ) + (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[1h])) * 4.00 / 1000000
+            )
+
+        # Calculate cumulative cost (daily)
+        - record: agentgateway:cost_usd:daily
+          expr: |
+            (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[24h])) * 0.80 / 1000000
+            ) + (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[24h])) * 4.00 / 1000000
+            )
+
+        # Calculate cumulative cost (weekly)
+        - record: agentgateway:cost_usd:weekly
+          expr: |
+            (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[7d])) * 0.80 / 1000000
+            ) + (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[7d])) * 4.00 / 1000000
+            )
+
+        # Calculate cumulative cost (monthly)
+        - record: agentgateway:cost_usd:monthly
+          expr: |
+            (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[30d])) * 0.80 / 1000000
+            ) + (
+              sum(increase(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="output"}[30d])) * 4.00 / 1000000
+            )
+
+    - name: agentgateway_cost_alerts
+      interval: 1m
+      rules:
+        # Alert when daily cost exceeds $50
+        - alert: AgentGatewayDailyCostExceeded
+          expr: agentgateway:cost_usd:daily >= 50
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "AgentGateway daily cost exceeded $50"
+            description: "The agentgateway instance has spent ${{ $value | humanize }} in the last 24 hours, exceeding the $50 threshold."
+
+        # Alert when weekly cost exceeds $200
+        - alert: AgentGatewayWeeklyCostExceeded
+          expr: agentgateway:cost_usd:weekly >= 200
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "AgentGateway weekly cost exceeded $200"
+            description: "The agentgateway instance has spent ${{ $value | humanize }} in the last 7 days."
+
+        # Alert when monthly cost exceeds $500
+        - alert: AgentGatewayMonthlyCostExceeded
+          expr: agentgateway:cost_usd:monthly >= 500
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "AgentGateway monthly cost exceeded $500"
+            description: "The agentgateway instance has spent ${{ $value | humanize }} in the last 30 days."
+
+        # Alert on high cost rate (projected to exceed $50/day based on hourly rate)
+        - alert: AgentGatewayHighCostRate
+          expr: agentgateway:cost_usd:hourly * 24 >= 50
+          for: 15m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "AgentGateway cost rate is high"
+            description: |
+              Current hourly cost rate (${{ $value | humanize }}/hr) projects to exceed the $50 daily threshold.
+              Projected daily cost: ${{ with query "agentgateway:cost_usd:hourly * 24" }}{{ . | first | value | humanize }}{{ end }}/day
