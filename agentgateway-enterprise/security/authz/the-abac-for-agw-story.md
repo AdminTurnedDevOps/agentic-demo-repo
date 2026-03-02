@@ -139,11 +139,16 @@ spec:
 
 3. BYO Policy Enforcement
 
-You can use OPA, Kyverno, or any other policy enforcement platform/tool you'd like within your environment. Agentgateway can call out to it for authorization decisions.
+You can use OPA or another policy engine that can participate in the external authorization decision path. Agentgateway can call out for authorization decisions through either the Enterprise ExtAuth server or a BYO external auth service.
 
-BYO external auth means that agentgateway can call your gRPC external authorization service with headers, path, and method, and that service can make decisions using tokens, headers, database lookups, etc. It can also optionally inject headers back into the request. That is the right path when your policy depends on business data like account tier, project membership, entitlements, or time-based rules.
+With the **Enterprise ExtAuth server**, the built-in ext-auth path can be used in an OPA-based authorization flow (we have first-class, native support for this)
 
+With **BYO external auth**, Agentgateway can call your gRPC external authorization service with request attributes such as headers, path, and method. That service can make decisions using tokens, headers, database lookups, and other business context, and it can optionally inject headers back into the request.
+
+
+https://docs.solo.io/agentgateway/2.1.x/security/extauth/
 https://docs.solo.io/agentgateway/2.1.x/security/extauth/byo-ext-auth-service/
+
 
 Sidenote: For attribute enrichment, ExtProc is useful when the attributes are not already present as headers/claims. The docs say ExtProc can read and modify headers, body, and trailers, and can terminate the request.
 
