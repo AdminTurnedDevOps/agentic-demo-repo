@@ -152,6 +152,42 @@ https://docs.solo.io/agentgateway/2.1.x/security/extauth/byo-ext-auth-service/
 
 Sidenote: For attribute enrichment, ExtProc is useful when the attributes are not already present as headers/claims. The docs say ExtProc can read and modify headers, body, and trailers, and can terminate the request.
 
+Example (Enterprise ExtAuth + AuthConfig (OPA-backed) on the Gateway)
+```yaml
+  apiVersion: extauth.solo.io/v1
+  kind: AuthConfig
+  metadata:
+    namespace: agentgateway-system
+    name: gateway-opa-authconfig
+  spec:
+    configs:
+      - opaServerAuth:
+          serverAddr: opa.agentgateway-system.svc.cluster.local:8181
+          package: agw.authz
+          ruleName: allow
+  ---
+  apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+  kind: EnterpriseAgentgatewayPolicy
+  metadata:
+    namespace: agentgateway-system
+    name: gateway-ent-ext-auth-policy
+  spec:
+    targetRefs:
+      - group: gateway.networking.k8s.io
+        kind: Gateway
+        name: agentgateway-proxy
+    traffic:
+      entExtAuth:
+        authConfigRef:
+          name: gateway-opa-authconfig
+          namespace: agentgateway-system
+        # Optional: omit backendRef to use the default built-in Enterprise ExtAuth service.
+        backendRef:
+          name: ext-auth-service-enterprise-agentgateway
+          namespace: agentgateway-system
+          port: 8083
+```
+
 Example (external auth service + gateway policy):
 
 ```yaml
