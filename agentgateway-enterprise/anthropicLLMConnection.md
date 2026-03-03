@@ -10,12 +10,17 @@ metadata:
   name: agentgateway-route
   namespace: agentgateway-system
   labels:
-    app: agentgateway
+    app: agentgateway-route
 spec:
   gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: tracing
   listeners:
   - protocol: HTTP
-    port: 8080
+    port: 8082
     name: http
     allowedRoutes:
       namespaces:
@@ -56,7 +61,7 @@ spec:
   ai:
     provider:
         anthropic:
-          model: "claude-sonnet-4-5-20250929"
+          model: "claude-sonnet-4-6"
   policies:
     auth:
       secretRef:
@@ -101,7 +106,7 @@ EOF
 ```
 
 ```
-curl "$INGRESS_GW_ADDRESS:8080/anthropic" -H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
+curl "$INGRESS_GW_ADDRESS:8082/anthropic" -H content-type:application/json -H "anthropic-version: 2023-06-01" -d '{
   "messages": [
     {
       "role": "system",

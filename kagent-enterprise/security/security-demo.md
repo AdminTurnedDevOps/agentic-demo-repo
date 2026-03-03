@@ -1,6 +1,6 @@
 ## Access Policies (programmatic)
 
-1. Creat a new namespace to work in and enroll it into the mesh:
+1. Create a new namespace to work in and enroll it into the mesh:
 ```
 kubectl create ns policies
 
