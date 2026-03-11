@@ -8,9 +8,10 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 
 ```
 helm upgrade -i agentgateway-crds oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
-  --create-namespace \
-  --namespace agentgateway-system  \
-  --version 2.1.1
+  --version v2.2.0-rc.3 \
+  --namespace agentgateway-system \
+  --reuse-values
+  
 ```
 
 ```
