@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openclaw-agw-config
+  labels:
+    app: openclaw
+data:
+  agw-overlay.json: |
+    {
+      "gateway": {
+        "bind": "lan"
+      },
+      "models": {
+        "mode": "merge",
+        "providers": {
+          "anthropic": {
+            "baseUrl": "http://52.241.254.163:8081",
+            "models": []
+          }
+        }
+      }
+    }

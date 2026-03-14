@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw
+  labels:
+    app: openclaw
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openclaw
+  template:
+    metadata:
+      labels:
+        app: openclaw
+    spec:
+      containers:
+        - name: openclaw
+          image: alpine/openclaw:2026.3.11
+          ports:
+            - name: gateway
+              containerPort: 18789
+              protocol: TCP
+            - name: bridge
+              containerPort: 18790
+              protocol: TCP
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /home/node/.openclaw
+              cp /tmp/agw-overlay.json /home/node/.openclaw/openclaw.json
+              trap 'kill $(jobs -p) 2>/dev/null' EXIT
+              while true; do
+                docker-entrypoint.sh node openclaw.mjs gateway --allow-unconfigured
+                echo "OpenClaw process exited, restarting..."
+                sleep 2
+              done
+          volumeMounts:
+            - name: agw-config
+              mountPath: /tmp/agw-overlay.json
+              subPath: agw-overlay.json
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+      volumes:
+        - name: agw-config
+          configMap:
+            name: openclaw-agw-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openclaw
+  labels:
+    app: openclaw
+spec:
+  type: ClusterIP
+  selector:
+    app: openclaw
+  ports:
+    - name: gateway
+      port: 18789
+      targetPort: gateway
+      protocol: TCP
+    - name: bridge
+      port: 18790
+      targetPort: bridge
+      protocol: TCP
