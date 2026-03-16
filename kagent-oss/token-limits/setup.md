@@ -13,7 +13,6 @@ spec:
     temperature: "0.7"
     maxTokens: 4096
 ---
-kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
