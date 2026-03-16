@@ -1,3 +1,4 @@
+```
 kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
@@ -47,3 +48,4 @@ spec:
         - get_tag
         - list_branches
 EOF
+```
