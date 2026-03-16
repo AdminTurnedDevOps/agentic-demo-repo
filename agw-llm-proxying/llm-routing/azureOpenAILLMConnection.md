@@ -13,9 +13,14 @@ metadata:
     app: agentgateway-azureopenai-route
 spec:
   gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: tracing
   listeners:
   - protocol: HTTP
-    port: 8081
+    port: 8088
     name: http
     allowedRoutes:
       namespaces:
@@ -56,8 +61,8 @@ spec:
   ai:
     provider:
       azureopenai:
-        endpoint: mlevantesting-resource.services.ai.azure.com
-        deploymentName: gpt-5-mini
+        endpoint: mlevantesting.services.ai.azure.com
+        deploymentName: gpt-4.1-mini
         apiVersion: 2025-01-01-preview
   policies:
     auth:
@@ -103,7 +108,7 @@ EOF
 ```
 
 ```
-curl "$INGRESS_GW_ADDRESS:8081/azureopenai" -v -H content-type:application/json -d '{
+curl "$INGRESS_GW_ADDRESS:8088/azureopenai" -v -H content-type:application/json -d '{
   "messages": [
     {
       "role": "system",
