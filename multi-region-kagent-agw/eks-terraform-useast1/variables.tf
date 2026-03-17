@@ -5,12 +5,12 @@ variable "aws_region" {
 
 variable "cluster_name" {
   description = "The name of the EKS cluster."
-  default     = "agw-tmo-test"
+  default     = "eastcluster01"
 }
 
 variable "cluster_version" {
   description = "The Kubernetes version for the EKS cluster."
-  default     = "1.35"
+  default     = "1.33"
 }
 
 variable "pub_subnet_id_1" {
