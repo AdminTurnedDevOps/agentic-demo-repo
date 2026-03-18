@@ -1,3 +1,8 @@
+Architecture:
+1. Agent (kagent) running in `us-east-1`
+2. MCP Server/MCP Gateway running in `us-west-1`
+3. Bedrock (using Claude Model) running in `ca-central-1`
+
 ## Part 1: Bedrock Setup
 
 ### Important Notes
