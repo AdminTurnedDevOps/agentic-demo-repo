@@ -13,11 +13,14 @@ You'll need AWS credentials with Bedrock access. For temporary credentials:
 
 ```bash
 aws sts get-session-token
+```
 
-# Or if using IAM user with permanent credentials
-export AWS_ACCESS_KEY_ID=<your-access-key-id>
-export AWS_SECRET_ACCESS_KEY=<your-secret-access-key>
-export AWS_REGION=us-west-1
+Or if using IAM user with permanent credentials
+
+```
+export AWS_ACCESS_KEY_ID=
+export AWS_SECRET_ACCESS_KEY=
+export AWS_REGION=ca-central-1
 ```
 
 ### Step 2: Find Available Claude Models
@@ -25,26 +28,29 @@ export AWS_REGION=us-west-1
 List inference profiles for Claude in your region:
 
 ```bash
-aws bedrock list-inference-profiles --region us-west-2 \
+aws bedrock list-inference-profiles --region ca-central-1 \
   --query "inferenceProfileSummaries[?contains(inferenceProfileId, 'claude')].{id:inferenceProfileId,name:inferenceProfileName}" \
   --output table
 ```
 
 Example output:
 ```
--------------------------------------------------------------------------------------------
-|                                  ListInferenceProfiles                                  |
-+---------------------------------------------------+-------------------------------------+
-|                        id                         |                name                 |
-+---------------------------------------------------+-------------------------------------+
-|  us.anthropic.claude-sonnet-4-20250514-v1:0       |  US Claude Sonnet 4                 |
-|  global.anthropic.claude-sonnet-4-5-20250929-v1:0 |  Global Claude Sonnet 4.5           |
-|  us.anthropic.claude-haiku-4-5-20251001-v1:0      |  US Anthropic Claude Haiku 4.5      |
-|  global.anthropic.claude-haiku-4-5-20251001-v1:0  |  Global Anthropic Claude Haiku 4.5  |
-|  us.anthropic.claude-opus-4-5-20251101-v1:0       |  US Anthropic Claude Opus 4.5       |
-|  global.anthropic.claude-opus-4-5-20251101-v1:0   |  GLOBAL Anthropic Claude Opus 4.5   |
-|  us.anthropic.claude-sonnet-4-5-20250929-v1:0     |  US Anthropic Claude Sonnet 4.5     |
-+---------------------------------------------------+-------------------------------------+
+--------------------------------------------------------------------------------------------
+|                                   ListInferenceProfiles                                  |
++---------------------------------------------------+--------------------------------------+
+|                        id                         |                name                  |
++---------------------------------------------------+--------------------------------------+
+|  us.anthropic.claude-haiku-4-5-20251001-v1:0      |  US Anthropic Claude Haiku 4.5       |
+|  global.anthropic.claude-haiku-4-5-20251001-v1:0  |  Global Anthropic Claude Haiku 4.5   |
+|  us.anthropic.claude-opus-4-5-20251101-v1:0       |  US Anthropic Claude Opus 4.5        |
+|  global.anthropic.claude-opus-4-5-20251101-v1:0   |  GLOBAL Anthropic Claude Opus 4.5    |
+|  us.anthropic.claude-sonnet-4-5-20250929-v1:0     |  US Anthropic Claude Sonnet 4.5      |
+|  us.anthropic.claude-opus-4-6-v1                  |  US Anthropic Claude Opus 4.6        |
+|  us.anthropic.claude-sonnet-4-6                   |  US Anthropic Claude Sonnet 4.6      |
+|  global.anthropic.claude-sonnet-4-6               |  Global Anthropic Claude Sonnet 4.6  |
+|  global.anthropic.claude-sonnet-4-5-20250929-v1:0 |  Global Claude Sonnet 4.5            |
+|  global.anthropic.claude-opus-4-6-v1              |  Global Anthropic Claude Opus 4.6    |
++---------------------------------------------------+--------------------------------------+
 ```
 
 ### Step 3: Create Kubernetes Secret with AWS Credentials and OpenAI API key
@@ -55,11 +61,8 @@ export BEDROCK_API_KEY=
 
 ```
 kubectl create secret generic kagent-bedrock-aws -n kagent \
-  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-  --from-literal=AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
-  --from-literal=BEDROCK_API_KEY=$BEDROCK_API_KEY \
-  --from-literal=OPENAI_API_KEY=$OPENAI_API_KEY
+  --from-literal=accessKey="" \
+  --from-literal=secretKey=""
 ```
 
 ## Part 2: MCP Setup
