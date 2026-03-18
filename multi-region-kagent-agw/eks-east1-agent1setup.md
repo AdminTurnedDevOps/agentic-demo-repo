@@ -84,7 +84,7 @@ metadata:
   name: math-server
   namespace: kagent
 spec:
-  description: Math server on eks2
+  description: Math server on eks2 in us-west-1
   url: http://a5404a2420706455cbe360275176fe95-229395782.us-west-1.elb.amazonaws.com:8080/mcp
   protocol: STREAMABLE_HTTP
   timeout: 5s
