@@ -1,0 +1,4 @@
+interface:
+  display_name: "kagent Platform"
+  short_description: "Help with kagent OSS and Enterprise workflows"
+  default_prompt: "Use $kagent-platform to install, configure, debug, or troubleshoot kagent OSS or Solo Enterprise on Kubernetes."
