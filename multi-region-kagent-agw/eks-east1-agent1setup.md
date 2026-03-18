@@ -100,14 +100,14 @@ metadata:
 spec:
   apiKeySecret: anthropic-secret
   apiKeySecretKey: Authorization
-  model: claude-3-5-haiku-latest
+  model: global.anthropic.claude-sonnet-4-6
   provider: OpenAI
   openAI:
-    baseUrl: http://52.159.230.96:8082/ai
+    baseUrl: http://a7f86628aa9c146df83e4f80986e4156-1288186659.us-east-1.elb.amazonaws.com:8082/anthropic
 EOF
 ```
 
-2. Create an Agent. This Agent hits the Bedrock via your LLM Gateway (Bedrock in `us-central-1`) and the `math-server` MCP Server via the MCP Gateway, both of which live in the EKS cluster running in `us-west-1`. This shows your Agent going through not only one, but two separate regions as the Agent is deployed in `us-east-1`.
+2. Create an Agent. This Agent hits the Bedrock via your LLM Gateway (Bedrock in `ca-central-1`) and the `math-server` MCP Server via the MCP Gateway, both of which live in the EKS cluster running in `us-west-1`. This shows your Agent going through not only one, but two separate regions as the Agent is deployed in `us-east-1`.
 ```
 kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
@@ -132,3 +132,31 @@ spec:
         - multiply
 EOF
 ```
+
+After running the Agent, you'll see outputs similar to the below:
+![](images/1.png)
+![](images/2.png)
+
+
+### Important kagent Enterprise Note
+
+If you are running `kagent-enterprise` on EKS, the Agent may look healthy and sessions may get created in the UI, but the Agent can still fail at runtime with no response.
+
+Why:
+- The Agent pod uses its projected Kubernetes service account token for internal calls back to `kagent-controller`
+- On EKS, `kagent-enterprise` may fail to initialize Kubernetes token validation through the JWKS endpoint
+- When that happens, the Agent's internal calls to `/api/sessions` and `/api/tasks` get `401 Unauthorized`, so the session is created but no output is produced
+
+Fix:
+
+```bash
+kubectl patch configmap kagent-enterprise-config -n kagent --type merge \
+  -p '{"data":{"K8S_TOKEN_REVIEW":"true"}}'
+
+kubectl rollout restart deployment/kagent-controller -n kagent
+kubectl rollout status deployment/kagent-controller -n kagent
+```
+
+Why this fixes it:
+- `K8S_TOKEN_REVIEW=true` tells `kagent-enterprise` to validate projected service account tokens with the Kubernetes `TokenReview` API instead of trying to fetch/verify JWKS directly
+- This is the safer path for EKS, where direct JWKS access can fail or time out

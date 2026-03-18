@@ -21,10 +21,12 @@ data:
 
     @mcp.tool()
     def add(a: int, b: int) -> int:
+        """Add two numbers together"""
         return a + b
 
     @mcp.tool()
     def multiply(a: int, b: int) -> int:
+        """Multiply two numbers together"""
         return a * b
 
     async def handle_mcp(request: Request):
@@ -77,8 +79,8 @@ data:
                              "mimeType": content.mimeType
                          })
                     else:
-                        # Fallback for dictionaries or other types
-                        serialized_content.append(content if isinstance(content, dict) else str(content))
+                        # Fallback: wrap as TextContent so MCP clients can parse it
+                        serialized_content.append({"type": "text", "text": str(content)})
 
                 result = {
                     "content": serialized_content,
