@@ -1,3 +1,5 @@
+![](images/arc.png)
+
 Use the following files in order:
 
 1. `terraform/eks-terraform-useast1`: Spins up an EKS cluster in `us-east-1`
