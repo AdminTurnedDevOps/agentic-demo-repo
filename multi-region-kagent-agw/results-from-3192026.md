@@ -135,6 +135,7 @@ kubectl delete pod net-baseline -n kagent --grace-period=0
 
 ### Baseline Results (March 19, 2026)
 
+```
   ┌───────────────────────────────────────────┬────────────────────┬──────────────────┬───────────────────────────────────────────┐
   │                    Hop                    │ TCP Connect (med.) │   TTFB (med.)    │              What it measures              │
   ├───────────────────────────────────────────┼────────────────────┼──────────────────┼───────────────────────────────────────────┤
@@ -144,6 +145,7 @@ kubectl delete pod net-baseline -n kagent --grace-period=0
   ├───────────────────────────────────────────┼────────────────────┼──────────────────┼───────────────────────────────────────────┤
   │ C: Pod → MCP ALB (us-west-1)              │ 67ms               │ ~133ms           │ Cross-region to MCP gateway + server      │
   └───────────────────────────────────────────┴────────────────────┴──────────────────┴───────────────────────────────────────────┘
+```
 
   *Baseline A TTFB includes Bedrock inference time (~1s+); only the TCP connect time is useful for isolating network cost.
 
