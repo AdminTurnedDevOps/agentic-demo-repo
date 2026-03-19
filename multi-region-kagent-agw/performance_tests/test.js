@@ -164,6 +164,8 @@ const mcpLatencyAgent1 = new Trend("agent1_mcp_latency_ms", true);
 const loopIterationCount = new Counter("loop_iterations_total");
 const totalCallsAgent1   = new Counter("agent1_total_mcp_llm_calls");
 const totalCallsAgent2   = new Counter("agent2_llm_calls");
+const mcpInitFailures    = new Counter("agent1_mcp_init_failures");
+const mcpInitSuccesses   = new Counter("agent1_mcp_init_successes");
 
 // ─── CONCURRENCY LEVELS (run both agents at each level) ─────────────────────
 //
@@ -263,13 +265,93 @@ function randomPayload() {
 
 // Available MCP tools from the math-server (see eks-east1-agent1setup.md)
 const MCP_TOOLS = ["add", "multiply"];
+const MCP_PROTOCOL_VERSION = __ENV.MCP_PROTOCOL_VERSION || "2024-11-05";
 
-function mcpToolCall(sessionId, toolIdx) {
+function headerValue(headers, headerName) {
+  const expected = headerName.toLowerCase();
+  for (const key in headers) {
+    if (key.toLowerCase() === expected) {
+      const value = headers[key];
+      return Array.isArray(value) ? value[0] : value;
+    }
+  }
+  return "";
+}
+
+function mcpPost(sessionId, payload, mcpSessionId, tags) {
+  const headers = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+    "Mcp-Protocol-Version": MCP_PROTOCOL_VERSION,
+    "Cache-Control": "no-store",
+    "X-Session-Id": sessionId,
+  };
+  if (mcpSessionId) {
+    headers["Mcp-Session-Id"] = mcpSessionId;
+  }
+  return http.post(ENDPOINTS.mcp_via_agentgateway, JSON.stringify(payload), { headers, tags });
+}
+
+function initMcpSession(sessionId) {
+  const initRes = mcpPost(
+    sessionId,
+    {
+      jsonrpc: "2.0",
+      method: "initialize",
+      id: `${sessionId}-init`,
+      params: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: {
+          name: "k6-load-test",
+          version: "1.0.0",
+        },
+      },
+    },
+    "",
+    { call_type: "mcp", mcp_phase: "initialize", agent: "test-math" }
+  );
+
+  const initOk = check(initRes, { "mcp initialize 200": (r) => r.status === 200 });
+  if (!initOk) {
+    mcpInitFailures.add(1);
+    return "";
+  }
+
+  const mcpSessionId =
+    headerValue(initRes.headers, "mcp-session-id") ||
+    headerValue(initRes.headers, "Mcp-Session-Id");
+
+  const initializedRes = mcpPost(
+    sessionId,
+    {
+      jsonrpc: "2.0",
+      method: "notifications/initialized",
+      params: {},
+    },
+    mcpSessionId,
+    { call_type: "mcp", mcp_phase: "initialized", agent: "test-math" }
+  );
+
+  const initializedOk = check(initializedRes, {
+    "mcp initialized accepted": (r) => r.status === 200 || r.status === 202 || r.status === 204,
+  });
+
+  if (!initializedOk) {
+    mcpInitFailures.add(1);
+    return "";
+  }
+
+  mcpInitSuccesses.add(1);
+  return mcpSessionId;
+}
+
+function mcpToolCall(sessionId, mcpSessionId, toolIdx) {
   const toolName = MCP_TOOLS[Math.floor(Math.random() * MCP_TOOLS.length)];
   const t0 = Date.now();
-  const res = http.post(
-    ENDPOINTS.mcp_via_agentgateway,
-    JSON.stringify({
+  const res = mcpPost(
+    sessionId,
+    {
       jsonrpc: "2.0",
       method:  "tools/call",
       id:      `${sessionId}-tool-${toolIdx}`,
@@ -277,11 +359,9 @@ function mcpToolCall(sessionId, toolIdx) {
         name:      toolName,
         arguments: { a: Math.floor(Math.random() * 1000), b: Math.floor(Math.random() * 1000) },
       },
-    }),
-    {
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Session-Id": sessionId },
-      tags:    { call_type: "mcp", agent: "test-math" },
-    }
+    },
+    mcpSessionId,
+    { call_type: "mcp", mcp_phase: "tool_call", agent: "test-math" }
   );
   check(res, { "mcp 200": (r) => r.status === 200 });
   totalCallsAgent1.add(1);
@@ -355,6 +435,7 @@ export function agent1Session() {
   const sessionId = uuidv4();
   const messages  = [{ role: "user", content: "Benchmark task " + sessionId }];
   const numLoops  = Math.floor(Math.random() * 3) + 2; // 2–4 iterations
+  const mcpSessionId = initMcpSession(sessionId);
 
   for (let loop = 0; loop < numLoops; loop++) {
     const iterStart = Date.now();
@@ -363,7 +444,7 @@ export function agent1Session() {
     // ≥2 MCP tool calls in first loop, 1 per subsequent loop
     const numMCP = loop === 0 ? 2 : 1;
     for (let t = 0; t < numMCP; t++) {
-      mcpTime += mcpToolCall(sessionId, `${loop}-${t}`);
+      mcpTime += mcpToolCall(sessionId, mcpSessionId, `${loop}-${t}`);
     }
     mcpLatencyAgent1.add(mcpTime);
 
