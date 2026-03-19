@@ -60,6 +60,7 @@ Agent1 MCP: Pod (us-east-1) ──→ ALB (us-west-1) ──→ agentgateway ─
 
 ### Summary: Who's responsible for what
 
+```
   ┌────────────────────────────────────┬───────────────┬─────────────┬─────────────────────────────────────────────────────────────┐
   │              Factor                │ LLM overhead  │ MCP overhead│                            Evidence                        │
   ├────────────────────────────────────┼───────────────┼─────────────┼─────────────────────────────────────────────────────────────┤
@@ -73,7 +74,7 @@ Agent1 MCP: Pod (us-east-1) ──→ ALB (us-west-1) ──→ agentgateway ─
   ├────────────────────────────────────┼───────────────┼─────────────┼─────────────────────────────────────────────────────────────┤
   │ MCP gateway success rate           │ N/A           │ 99.99%      │ 573,747 successful tool calls out of 573,818               │
   └────────────────────────────────────┴───────────────┴─────────────┴─────────────────────────────────────────────────────────────┘
-
+```
 
 *The 66ms MCP overhead includes both agentgateway proxying AND math-server execution time. To isolate just the gateway, measure math-server latency directly from within us-west-1 (bypassing the gateway) and subtract.
 
