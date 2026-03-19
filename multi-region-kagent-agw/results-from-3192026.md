@@ -41,6 +41,7 @@ Agent1 MCP: Pod (us-east-1) ──→ ALB (us-west-1) ──→ agentgateway ─
                  67ms TCP             <1ms              processing       <1ms (same cluster)
 ```
 
+```
   ┌─────────────────────────────────────┬─────────┬──────────────────────────────────────────────────────────────────┐
   │             Component               │ Latency │                          Responsible                            │
   ├─────────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────────────┤
@@ -50,6 +51,7 @@ Agent1 MCP: Pod (us-east-1) ──→ ALB (us-west-1) ──→ agentgateway ─
   ├─────────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────────────┤
   │ Load-induced contention             │ ~100ms  │ Connection queuing under 1000 VUs (infrastructure, not gateway)  │
   └─────────────────────────────────────┴─────────┴──────────────────────────────────────────────────────────────────┘
+```
 
   Of the 233ms median MCP latency under load:
   - ~67ms (29%) is AWS cross-region networking
