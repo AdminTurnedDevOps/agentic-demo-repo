@@ -13,7 +13,8 @@ curl https://raw.githubusercontent.com/kagent-dev/kagent/refs/heads/main/scripts
 ### CRDs
 
 ```
-helm install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
+helm upgrade --install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
+    --version 0.8.0-beta9 \
     --namespace kagent \
     --create-namespace
 ```
@@ -27,6 +28,7 @@ The below contains the flag to give the kagent UI a public IP so you can reach i
 ```
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
     --namespace kagent \
+    --version 0.8.0-beta9 \
     --set providers.default=anthropic \
     --set providers.anthropic.apiKey=$ANTHROPIC_API_KEY \
     --set ui.service.type=LoadBalancer
