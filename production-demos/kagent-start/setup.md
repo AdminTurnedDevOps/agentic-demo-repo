@@ -170,7 +170,6 @@ EOF
 
 ## Gateway/Backend Setup
 
-1. Create a Gateway
 ```
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -190,7 +189,6 @@ spec:
 EOF
 ```
 
-2. Create a Backend with two MCP Servers
 ```
 kubectl apply -f - <<EOF
 apiVersion: agentgateway.dev/v1alpha1
@@ -210,7 +208,6 @@ spec:
 EOF
 ```
 
-3. Create the HTTPRoute
 ```
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -230,7 +227,6 @@ spec:
 EOF
 ```
 
-5. Test the Gateway/route
 ```
 export GATEWAY_IP=$(kubectl get svc agentgateway-mcp -n agentgateway-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 echo $GATEWAY_IP
