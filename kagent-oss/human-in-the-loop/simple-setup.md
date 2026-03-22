@@ -1,5 +1,6 @@
 ```
-export GITHUB_PERSONAL_ACCESS_TOKEN=your_github_pat_here
+export GITHUB_PERSONAL_ACCESS_TOKEN=
+export ANTHROPIC_API_KEY=
 ```
 
 ```
@@ -34,6 +35,22 @@ spec:
         key: GITHUB_PERSONAL_ACCESS_TOKEN
   timeout: 5s
   terminateOnClose: true
+EOF
+```
+
+```
+kubectl apply -f - <<EOF
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: anthropic-model-config
+  namespace: kagent
+spec:
+  apiKeySecret: kagent-anthropic
+  apiKeySecretKey: ANTHROPIC_API_KEY
+  model: claude-sonnet-4-6
+  provider: Anthropic
+  anthropic: {}
 EOF
 ```
 
