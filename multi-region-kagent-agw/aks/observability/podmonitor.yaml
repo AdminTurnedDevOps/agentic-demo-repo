@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: agentgateway
+  namespace: agentgateway-system
+  labels:
+    app: agentgateway
+spec:
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - agentgateway-route-foundry
+          - agentgateway-mcp
+          - agentgateway
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
