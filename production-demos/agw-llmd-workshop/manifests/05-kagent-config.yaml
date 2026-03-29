@@ -1,0 +1,53 @@
+# The OpenAI SDK requires an API key to be set even though vLLM doesn't
+# enforce authentication. This dummy secret satisfies that requirement.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: llmd-dummy-api-key
+  namespace: kagent
+type: Opaque
+stringData:
+  api-key: "not-needed"
+---
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: llmd-vllm-config
+  namespace: kagent
+spec:
+  apiKeySecret: llmd-dummy-api-key
+  apiKeySecretKey: api-key
+  # Must match the model name in InferenceModel / vLLM server
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  # Use OpenAI provider because vLLM serves an OpenAI-compatible API
+  provider: OpenAI
+  openAI:
+    # Find it with: kubectl get svc -n llmd-workshop
+    baseUrl: http://20.66.113.50/v1
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: llmd-inference-agent
+  namespace: kagent
+spec:
+  description: >-
+    Demo agent that routes LLM requests through agentgateway and llm-d
+    for intelligent, cache-aware inference on Kubernetes.
+  type: Declarative
+  declarative:
+    # References the ModelConfig that points to agentgateway
+    modelConfig: llmd-vllm-config
+    systemMessage: |-
+      You are a helpful assistant running on a Kubernetes-native inference stack.
+      Your responses are served by vLLM through the llm-d intelligent routing layer.
+
+      # Instructions
+
+      - Answer user questions clearly and concisely
+      - If a question is unclear, ask for clarification
+      - If you don't know the answer, say so honestly
+
+      # Response format
+      - Format responses as Markdown
+      - Keep answers focused and relevant
