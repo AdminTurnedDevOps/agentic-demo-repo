@@ -30,7 +30,7 @@ This workshop deploys the full Kubernetes-native inference routing stack: a kage
 │  InferencePool           │  Selects pods: app=llmd-model-server
 │  "llmd-pool"             │
 └────────────┬─────────────┘
-             │ ext-proc (gRPC) — Envoy external processing
+             │ ext-proc (gRPC) ext-proc is the gRPC protocol the EPP speaks
              ▼
 ┌──────────────────────────┐
 │  llm-d EPP               │  Endpoint Picker — the routing brain

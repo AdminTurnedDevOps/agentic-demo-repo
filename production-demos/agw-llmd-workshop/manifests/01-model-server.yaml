@@ -16,6 +16,7 @@ metadata:
   name: llmd-model-server
   namespace: llmd-workshop
   labels:
+    # The InferencePool knows to select these Pods due to this label
     app: llmd-model-server
 spec:
   # 2 replicas to demonstrate load distribution and cache-aware routing
