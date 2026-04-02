@@ -1,0 +1,102 @@
+# vLLM Server Deployment
+#
+# Runs 2 replicas of vLLM serving Qwen2.5-0.5B-Instruct on CPU.
+# This is the smallest Qwen2.5 variant (~1GB), ideal for CPU-only demos.
+#
+# The label "app: llmd-model-server" is critical — the InferencePool
+# uses this label selector to discover these pods as backend endpoints.
+#
+# Each replica exposes an OpenAI-compatible API on port 8000 with
+# endpoints: /v1/completions, /v1/chat/completions, /health
+
+# This config tells vLLM which model to load and serve. It's the actual inference engine running the weights.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llmd-model-server
+  namespace: llmd-workshop
+  labels:
+    # The InferencePool knows to select these Pods due to this label
+    app: llmd-model-server
+spec:
+  # 2 replicas to demonstrate load distribution and cache-aware routing
+  replicas: 2
+  selector:
+    matchLabels:
+      app: llmd-model-server
+  template:
+    metadata:
+      labels:
+        app: llmd-model-server
+    spec:
+      containers:
+        - name: vllm
+          # CPU-optimized vLLM image — no GPU required
+          # Supports both AVX2 (AMD EPYC) and AVX512 (Intel) with runtime detection
+          image: "vllm/vllm-openai-cpu:v0.18.0"
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+          args:
+            - "--model"
+            - "Qwen/Qwen2.5-0.5B-Instruct"  # Smallest Qwen2.5 variant for CPU feasibility
+            - "--port"
+            - "8000"
+            - "--enable-auto-tool-choice"
+            - "--tool-call-parser"
+            - "hermes"
+          env:
+            - name: PORT
+              value: "8000"
+            # CPU KV cache size in GB — controls how much prompt context can be cached.
+            # This is what enables cache-aware routing via the EPP.
+            - name: VLLM_CPU_KVCACHE_SPACE
+              value: "2"
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          # vLLM takes time to download and load the model on first start.
+          # The high initialDelaySeconds and failureThreshold account for this.
+          livenessProbe:
+            failureThreshold: 240
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 180
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 600
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 180
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          # CPU inference is resource-intensive. These limits are sized for
+          # Qwen2.5-0.5B on CPU — adjust if using a larger model.
+          resources:
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+          volumeMounts:
+            - mountPath: /data
+              name: data
+            - mountPath: /dev/shm
+              name: shm
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: data
+          emptyDir: {}
+        # /dev/shm as Memory-backed emptyDir for vLLM's shared memory IPC
+        - name: shm
+          emptyDir:
+            medium: Memory
