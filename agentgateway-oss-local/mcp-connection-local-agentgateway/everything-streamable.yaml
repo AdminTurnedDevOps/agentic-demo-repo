@@ -1,0 +1,23 @@
+binds:
+- port: 3000
+  listeners:
+  - routes:
+    - policies:
+        cors:
+          allowOrigins:
+            - "*"
+          allowHeaders:
+            - "*"
+          exposeHeaders:
+            - "Mcp-Session-Id"
+        localRateLimit:
+          - maxTokens: 1
+            tokensPerFill: 1
+            fillInterval: 100s
+            type: requests
+      backends:
+        - mcp:
+            targets:
+            - name: deepwiki
+              mcp:
+                host: https://mcp.deepwiki.com/mcp
