@@ -42,12 +42,12 @@ kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
 kind: ModelConfig
 metadata:
-  name: anthropic-model-config
+  name: model-config
   namespace: policies
 spec:
   apiKeySecret: kagent-anthropic
   apiKeySecretKey: ANTHROPIC_API_KEY
-  model: claude-sonnet-4-20250514
+  model: "claude-sonnet-4-6"
   provider: Anthropic
   anthropic: {}
 EOF
@@ -65,7 +65,7 @@ spec:
   description: This agent can use a single tool to expand it's Kubernetes knowledge for troubleshooting and deployment
   type: Declarative
   declarative:
-    modelConfig: anthropic-model-config
+    modelConfig: model-config
     systemMessage: |-
       You're a friendly and helpful agent that uses the Kubernetes tool to help troubleshooting and deploy environments
   

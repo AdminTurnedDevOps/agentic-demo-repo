@@ -70,15 +70,15 @@ You need a backend app registration for kagent. If your browser-facing UI uses a
 7. Copy the **Value** — this is `KAGENT_BACKEND_CLIENT_SECRET`
 8. Go to **Expose an API**:
    - Set the Application ID URI (e.g., `api://<KAGENT_BACKEND_CLIENT_ID>`)
-   - Add a delegated scope such as `access_as_user`
+   - Add a delegated scope such as `kagent-backend`
 
-### 1b. Optional Frontend App Registration (kagent-ui)
+### 1b. Frontend App Registration (kagent-ui)
 
 1. Click **New registration**
 2. Configure:
    - **Name**: `kagent-ui`
    - **Supported account types**: Single tenant
-   - **Redirect URI**: Select **Web** (configure in Step 5 after you know the external IP)
+   - **Redirect URI**: Select **Single-page application (SPA)** (configure in Step 5 after you know the external IP)
 3. Click **Register**
 4. Note the **Application (client) ID** — this is `KAGENT_FRONTEND_CLIENT_ID`
 5. Go to **API permissions** > **Add a permission** > **My APIs** > select `kagent-backend`
@@ -95,26 +95,21 @@ From the Azure Portal:
 ```bash
 # Enterprise license keys
 KAGENT_LICENSE_KEY=<enterprise kagent license key>
+KAGENT_FRONTEND_CLIENT_ID=72714acf-cb3e-4a6c-9134-bddfbc73512f
 AGW_LICENSE_KEY=<enterprise AGW license key>
-
-# LLM provider
 ANTHROPIC_API_KEY=<api key for kagent>
-
-# Entra backend app
-KAGENT_BACKEND_CLIENT_ID=<uuid of entra kagent-backend application>
-KAGENT_BACKEND_CLIENT_SECRET=<client-secret of entra kagent-backend application>
-
-# Optional browser-facing frontend app
-# The Helm values below do not consume this directly, but keep it if your
-# deployed UI or auth layer needs a separate frontend client registration.
-KAGENT_FRONTEND_CLIENT_ID=<uuid of entra kagent-ui application>
-
+KAGENT_BACKEND_CLIENT_ID=<uuid of Entra kagent-backend app>
+KAGENT_BACKEND_CLIENT_SECRET=<client secret for Entra kagent-backend app>
 # Azure
 TENANT_ID=<Entra tenant id>
-
 # Optional group-to-role mapping
-K8S_TOKEN_PASSTHROUGH_GROUP_ID=<group for logging into ui -- e.g., k8stokenpassthrough>
+K8S_TOKEN_PASSTHROUGH_GROUP_ID=<Entra group object ID for the UI login group, for example 966e120a-237f-44fd-9b86-049da1106a93>
+# Enterprise chart version and management cluster name
+KAGENT_ENT_VERSION=0.3.12
+MGMT_CLUSTER=<your-cluster-name>
 ```
+
+`KAGENT_FRONTEND_CLIENT_ID` should be the browser-facing Entra app registration. For quick testing, you can reuse `KAGENT_BACKEND_CLIENT_ID`, but only if that app registration is configured to allow browser-based PKCE login with the callback URI from Step 5.
 
 ## Step 3: Create Kubernetes Secrets
 
@@ -122,7 +117,7 @@ K8S_TOKEN_PASSTHROUGH_GROUP_ID=<group for logging into ui -- e.g., k8stokenpasst
 # Create the namespace
 kubectl create namespace kagent
 
-# Entra OIDC secret for kagent-enterprise
+# Shared Entra OIDC client secret for the management UI backend and the runtime controller.
 kubectl create secret generic kagent-enterprise-oidc-secret \
   -n kagent \
   --from-literal=clientSecret="${KAGENT_BACKEND_CLIENT_SECRET}"
@@ -131,24 +126,41 @@ kubectl create secret generic kagent-enterprise-oidc-secret \
 kubectl create secret generic kagent-anthropic \
   -n kagent \
   --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
-
-# Kagent enterprise license
-kubectl create secret generic enterprise-kagent-license \
-  -n kagent \
-  --from-literal=enterprise-kagent-license-key="${KAGENT_LICENSE_KEY}"
-
-# Agentgateway enterprise license
-kubectl create secret generic enterprise-agentgateway-license \
-  -n kagent \
-  --from-literal=enterprise-agentgateway-license-key="${AGW_LICENSE_KEY}"
-
-# Entra client secret for agentgateway OBO token exchange
-kubectl create secret generic entra-obo-client-secret \
-  -n kagent \
-  --from-literal=client_secret="${KAGENT_BACKEND_CLIENT_SECRET}"
 ```
 
-## Step 4: Install kagent-enterprise with Entra OIDC
+## Step 4: Install Solo Enterprise for kagent and the kagent Runtime with Entra OIDC
+
+Create `management.yaml`:
+
+```yaml
+cluster: "${MGMT_CLUSTER}"
+
+products:
+  kagent:
+    enabled: true
+  agentgateway:
+    enabled: true
+    namespace: "agentgateway-system"
+
+oidc:
+  issuer: "https://login.microsoftonline.com/${TENANT_ID}/v2.0"
+  additionalScopes:
+    - "offline_access"
+    - "api://${KAGENT_BACKEND_CLIENT_ID}/kagent-backend"
+
+ui:
+  backend:
+    oidc:
+      clientId: "${KAGENT_BACKEND_CLIENT_ID}"
+      secretRef: "kagent-enterprise-oidc-secret"
+      secretKey: "clientSecret"
+  frontend:
+    oidc:
+      clientId: "${KAGENT_FRONTEND_CLIENT_ID}"
+
+service:
+  type: LoadBalancer
+```
 
 Create `kagent-values.yaml`:
 
@@ -169,7 +181,7 @@ oidc:
 
 rbac:
   roleMapping:
-    roleMapper: "claims.Groups.transformList(i, v, v in rolesMap, rolesMap[v])"
+    roleMapper: "claims.groups.transformList(i, v, v in rolesMap, rolesMap[v])"
     roleMappings:
       "${K8S_TOKEN_PASSTHROUGH_GROUP_ID}": "global.Admin"
 
@@ -182,41 +194,54 @@ providers:
     apiKeySecretKey: ANTHROPIC_API_KEY
 
 ui:
-  enabled: true
-  service:
-    type: LoadBalancer
+  enabled: false
 
 licensing:
   createSecret: false
   secretName: "enterprise-kagent-license"
 ```
 
-`oidc.clientId` is the backend or middle-tier Entra application that kagent uses for token validation and OBO-related claims handling. The UI Service defaults to `ClusterIP`, so the example above switches it to `LoadBalancer` to match the external-IP workflow in the next step.
+`management.yaml` installs the Solo Enterprise management plane with Microsoft Entra as the OIDC issuer. The UI frontend uses `KAGENT_FRONTEND_CLIENT_ID` for browser login, the UI backend validates tokens with `KAGENT_BACKEND_CLIENT_ID`, and `oidc.additionalScopes` requests both the delegated backend scope and `offline_access`. `kagent-values.yaml` installs the Solo-built kagent runtime, disables the standalone `kagent-ui`, and points the runtime controller at the same Entra issuer with the backend client ID.
 
 Replace the `${...}` placeholders with your actual values, then install:
 
 ```bash
+helm upgrade --install kagent-mgmt \
+  oci://us-docker.pkg.dev/solo-public/solo-enterprise-helm/charts/management \
+  --version ${KAGENT_ENT_VERSION} \
+  -n kagent \
+  --create-namespace \
+  -f management.yaml
+
+helm upgrade --install kagent-crds \
+  oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise-crds \
+  --version ${KAGENT_ENT_VERSION} \
+  -n kagent
+
 helm upgrade --install kagent \
   oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise \
+  --version ${KAGENT_ENT_VERSION} \
   -n kagent \
   -f kagent-values.yaml
 ```
 
 ## Step 5: Expose the UI and Configure Redirect URIs
 
-After the kagent UI Service is up, get the external IP:
+After the Solo Enterprise UI Service is up, get the external IP:
 
 ```bash
-kubectl get svc kagent-ui -n kagent
+kubectl get svc solo-enterprise-ui -n kagent
 ```
 
-If your browser-facing UI uses an Entra app registration, go to the **kagent-ui** app registration > **Authentication** and add the actual callback URI exposed by the UI:
+The `solo-enterprise-ui` Service is HTTP-only. Microsoft Entra SPA redirect URIs require HTTPS on non-localhost addresses, so do **not** register the `solo-enterprise-ui` external IP as your callback URI. Instead, complete Step 7a to expose the UI through Agent Gateway over HTTPS, then register that HTTPS callback URI on the Entra frontend app registration from Step 1b.
+
+The callback URI you ultimately need looks like:
 
 ```text
-https://<EXTERNAL_IP>/callback
+https://<AGW_HTTPS_EXTERNAL_IP>/callback
 ```
 
-Do not use `/auth` as the OIDC callback. In the current enterprise UI codebase, `/auth` is a setup route, while `/callback` is the login callback path.
+Do not use `/auth` as the OIDC callback. In the current enterprise UI codebase, `/auth` is a setup route, while `/callback` is the login callback path. If you reused the backend app registration for browser login, add the same callback URI there and make sure the app is configured for browser-based PKCE login.
 
 ## Step 6: Install agentgateway-enterprise with Token Exchange
 
@@ -224,21 +249,38 @@ Before installing the agentgateway controller, make sure the required Gateway AP
 
 ```bash
 # Install the Kubernetes Gateway API CRDs
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml
 
 # Install the enterprise agentgateway CRDs chart
-helm upgrade --install agentgateway-crds \
+helm install agentgateway-crds \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway-crds \
-  -n kagent
+  --version v2.2.0 \
+  --namespace agentgateway-system \
+  --create-namespace
 ```
 
 If your cluster already has the standard Gateway API CRDs or the enterprise agentgateway CRDs installed, you can skip the corresponding command.
+
+Create the Agent Gateway enterprise license secret in the namespace that the controller will run in:
+
+```bash
+kubectl create secret generic enterprise-agentgateway-license \
+  -n agentgateway-system \
+  --from-literal=enterprise-agentgateway-license-key="${AGW_LICENSE_KEY}"
+```
 
 Create `agw-values.yaml`:
 
 ```yaml
 tokenExchange:
   enabled: true
+  issuer: "http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  subjectValidator:
+    validatorType: "k8s"
+  apiValidator:
+    validatorType: "k8s"
+  actorValidator:
+    validatorType: "k8s"
 
 controller:
   service:
@@ -250,32 +292,183 @@ licensing:
   secretName: "enterprise-agentgateway-license"
 ```
 
+The current `enterprise-agentgateway` chart requires more than `tokenExchange.enabled: true`. At minimum, the token exchange server also needs an `issuer` plus validator configuration for the subject, API, and actor tokens. The in-cluster service URL above matches the default service name that the chart creates in the `agentgateway-system` namespace.
+
 ```bash
-helm upgrade --install agentgateway \
+helm install agentgateway \
   oci://us-docker.pkg.dev/solo-public/enterprise-agentgateway/charts/enterprise-agentgateway \
-  -n kagent \
+  --version v2.2.0 \
+  --namespace agentgateway-system \
+  --create-namespace \
   -f agw-values.yaml
 ```
 
-## Step 7: Create the Entra OBO Policy
+## Step 7: Create the Gateway and Entra OBO Policy
+
+```
+kubectl apply -f- <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: anthropic-secret
+  namespace: agentgateway-system
+  labels:
+    app: agentgateway-entra-testing
+type: Opaque
+stringData:
+  Authorization: $ANTHROPIC_API_KEY
+EOF
+```
+
+```
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agentgateway-entra-testing
+  namespace: agentgateway-system
+  labels:
+    app: agentgateway-entra-testing
+spec:
+  gatewayClassName: enterprise-agentgateway
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+EOF
+```
+
+### 7a. Add HTTPS for the enterprise UI login flow
+
+To use Microsoft Entra SPA login on a non-localhost address, terminate TLS on the Agent Gateway and route the UI through that HTTPS listener.
+
+First, wait for the Gateway to get an external IP:
+
+```bash
+kubectl get gateway agentgateway-entra-testing -n agentgateway-system
+```
+
+Then generate a self-signed certificate for that IP and create the TLS Secret:
+
+```bash
+AGW_HTTPS_EXTERNAL_IP=$(kubectl get gateway agentgateway-entra-testing -n agentgateway-system -o jsonpath='{.status.addresses[0].value}')
+
+openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+  -keyout /tmp/kagent-ui-https.key \
+  -out /tmp/kagent-ui-https.crt \
+  -subj "/CN=${AGW_HTTPS_EXTERNAL_IP}" \
+  -addext "subjectAltName = IP:${AGW_HTTPS_EXTERNAL_IP}"
+
+kubectl create secret tls kagent-ui-https-tls \
+  -n agentgateway-system \
+  --cert=/tmp/kagent-ui-https.crt \
+  --key=/tmp/kagent-ui-https.key \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Apply the companion Gateway API manifest that adds an HTTPS listener, a `ReferenceGrant`, and an `HTTPRoute` for the UI:
+
+```bash
+kubectl apply -f ui-https-gateway.yaml
+```
+
+That manifest is stored next to this guide and updates the existing `agentgateway-entra-testing` Gateway to expose the UI over HTTPS through the Agent Gateway load balancer.
+
+After it is applied, verify the HTTPS endpoint:
+
+```bash
+kubectl get svc agentgateway-entra-testing -n agentgateway-system
+curl -k -I "https://${AGW_HTTPS_EXTERNAL_IP}/"
+curl -k -I "https://${AGW_HTTPS_EXTERNAL_IP}/callback"
+```
+
+Register this callback URI on the Entra frontend app registration:
+
+```text
+https://<AGW_HTTPS_EXTERNAL_IP>/callback
+```
+
+```
+kubectl apply -f - <<EOF
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  labels:
+    app: agentgateway-entra-testing
+  name: anthropic
+  namespace: agentgateway-system
+spec:
+  ai:
+    provider:
+        anthropic:
+          model: "claude-sonnet-4-6"
+  policies:
+    auth:
+      secretRef:
+        name: anthropic-secret
+EOF
+```
+
+```
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: claude
+  namespace: agentgateway-system
+  labels:
+    app: agentgateway-entra-testing
+spec:
+  parentRefs:
+    - name: agentgateway-entra-testing
+      namespace: agentgateway-system
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /anthropic
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /v1/chat/completions
+    backendRefs:
+    - name: anthropic
+      namespace: agentgateway-system
+      group: agentgateway.dev
+      kind: AgentgatewayBackend
+EOF
+```
+
+Create the Entra OBO client secret in the same namespace as the `AgentgatewayBackend` and `EnterpriseAgentgatewayPolicy`:
+
+```bash
+kubectl create secret generic entra-obo-client-secret \
+  -n agentgateway-system \
+  --from-literal=client_secret="${KAGENT_BACKEND_CLIENT_SECRET}"
+```
 
 This `EnterpriseAgentgatewayPolicy` tells the gateway to perform Entra OBO token exchange for requests targeting a specific backend service.
 
 Save as `entra-obo-policy.yaml`:
 
-```yaml
+```
+kubectl apply -f - <<EOF
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
   name: entra-obo-token-exchange
-  namespace: kagent
+  namespace: agentgateway-system
 spec:
   targetRefs:
     # Target the backend service that requires an Entra-scoped token.
-    # Change this to match your downstream service or MCP server.
-    - kind: Service
-      name: my-backend-service
-      group: ""
+    - kind: AgentgatewayBackend
+      name: anthropic
+      group: agentgateway.dev
   backend:
     tokenExchange:
       mode: ExchangeOnly
@@ -288,19 +481,31 @@ spec:
         clientSecretRef:
           name: entra-obo-client-secret
           key: client_secret
+EOF
 ```
+
+The `EnterpriseAgentgatewayPolicy`, its `targetRefs`, and the `clientSecretRef` Secret must all line up in the same namespace when you target an `AgentgatewayBackend`.
 
 Replace the `${...}` placeholders and adjust `targetRefs` to match your backend, then apply:
-
-```bash
-kubectl apply -f entra-obo-policy.yaml
-```
 
 ## Step 8: Configure the Agent for Token Propagation
 
 Set `KAGENT_PROPAGATE_TOKEN=true` on any agent that must forward the user's token to the gateway for OBO exchange.
 
-```yaml
+```
+kubectl apply -f - <<EOF
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: anthropic-model-config
+  namespace: kagent
+spec:
+  apiKeyPassthrough: true
+  model: "claude-sonnet-4-6"
+  provider: OpenAI
+  openAI:
+    baseUrl: http://agentgateway-entra-testing.agentgateway-system.svc.cluster.local:8080/anthropic
+---
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
@@ -312,7 +517,7 @@ spec:
   type: Declarative
   description: "Demo agent with Entra OBO token propagation"
   declarative:
-    modelConfig: default-model-config
+    modelConfig: anthropic-model-config
     systemMessage: |
       You are a helpful assistant. When users ask you to interact with
       backend services, use the available tools. Your requests will
@@ -321,14 +526,7 @@ spec:
       env:
         - name: KAGENT_PROPAGATE_TOKEN
           value: "true"
-```
-
-> **Note:** Do not assume the built-in Helm-installed agents set `KAGENT_PROPAGATE_TOKEN` for you. Add it explicitly to each agent that must participate in user-token propagation.
-
-Apply:
-
-```bash
-kubectl apply -f obo-demo-agent.yaml
+EOF
 ```
 
 ## Verification
@@ -345,35 +543,42 @@ Confirm `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OBO_CLAIMS_TO_PROPAGATE`, and `SKIP_OB
 
 ```bash
 # Verify the token exchange port is listening
-kubectl get svc agentgateway-enterprise-agentgateway -n kagent
+kubectl get svc enterprise-agentgateway -n agentgateway-system
 
 # Check the controller logs for token exchange startup
-kubectl logs deployment/agentgateway-enterprise-agentgateway -n kagent | grep -Ei "token exchange|AGW server"
+kubectl logs deployment/enterprise-agentgateway -n agentgateway-system | grep -Ei "token exchange|AGW server"
+```
+
+You'll see an output similar to the below:
+```
+{"time":"2026-04-02T20:56:21.553716884Z","level":"info","msg":"starting token exchange server with effective config","component":"tokenexchange","config":"{\"actorValidator\":{\"validatorType\":\"k8s\"},\"apiValidator\":{\"validatorType\":\"k8s\"},\"elicitation\":{\"secretName\":\"\"},\"enabled\":true,\"issuer\":\"http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777\",\"subjectValidator\":{\"validatorType\":\"k8s\"}}"}
+{"time":"2026-04-02T20:56:21.915446631Z","level":"info","msg":"using SQLite database for token exchange server","component":"tokenexchange","database_path":"/var/db/elicitation.db"}
+{"time":"2026-04-02T20:56:21.922221201Z","level":"info","msg":"starting token exchange server on","component":"tokenexchange","address":"0.0.0.0:7777"}
 ```
 
 ### Check the policy status
 
 ```bash
-kubectl get enterpriseagentgatewaypolicy -n kagent
-kubectl describe enterpriseagentgatewaypolicy entra-obo-token-exchange -n kagent
+kubectl get enterpriseagentgatewaypolicy -n agentgateway-system
+kubectl describe enterpriseagentgatewaypolicy entra-obo-token-exchange -n agentgateway-system
 ```
 
 ### Test the flow
 
-1. Open the kagent UI at `https://<EXTERNAL_IP>`
-2. Log in with your Microsoft account (must be a member of the `K8S_TOKEN_PASSTHROUGH_GROUP_ID` group)
+1. Open the kagent UI at `https://<AGW_HTTPS_EXTERNAL_IP>`
+2. Log in with your Microsoft account (must be a member of the Entra group whose object ID is set in `K8S_TOKEN_PASSTHROUGH_GROUP_ID`)
 3. Select the `obo-demo-agent`
 4. Send a message that triggers a tool call to the backend service
 5. In the agentgateway controller logs, confirm the OBO token exchange succeeded:
    ```bash
-   kubectl logs deployment/agentgateway-enterprise-agentgateway -n kagent | grep -i "entra"
+   kubectl logs deployment/enterprise-agentgateway -n agentgateway-system | grep -i "entra"
    ```
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| `AADSTS50011: The redirect URI does not match` | Verify the UI app registration uses the actual `https://<EXTERNAL_IP>/callback` URL |
+| `AADSTS50011: The redirect URI does not match` | Verify the UI app registration uses the actual `https://<AGW_HTTPS_EXTERNAL_IP>/callback` URL from Step 7a |
 | `AADSTS700016: Application not found in directory` | Double-check `KAGENT_BACKEND_CLIENT_ID`, `KAGENT_FRONTEND_CLIENT_ID` if used, and `TENANT_ID` |
 | `AADSTS65001: The user or administrator has not consented` | Grant admin consent for the backend API permission on the frontend app registration |
 | `AADSTS7000218: Invalid client secret` | Regenerate the secret in Entra and update the `entra-obo-client-secret` Kubernetes secret |
