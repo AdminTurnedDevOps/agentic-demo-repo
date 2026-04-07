@@ -23,7 +23,7 @@ spec:
   provider: OpenAI
   openAI:
     # Find it with: kubectl get svc -n llmd-workshop
-    baseUrl: http://20.66.113.50/v1
+    baseUrl: http://20.245.68.222/v1
 ---
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
