@@ -86,7 +86,7 @@ From the Azure Portal:
 ```bash
 # Enterprise license keys
 KAGENT_LICENSE_KEY=<enterprise kagent license key>
-KAGENT_FRONTEND_CLIENT_ID=72714acf-cb3e-4a6c-9134-bddfbc73512f
+KAGENT_FRONTEND_CLIENT_ID=
 AGW_LICENSE_KEY=<enterprise AGW license key>
 ANTHROPIC_API_KEY=<api key for kagent>
 KAGENT_BACKEND_CLIENT_ID=<uuid of Entra kagent-backend app>
