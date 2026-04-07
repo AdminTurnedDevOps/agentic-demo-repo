@@ -21,7 +21,7 @@ The agentgateway-enterprise controller handles this difference natively via the 
 ```mermaid
 flowchart LR
     U[User] -->|1. Login via Entra OIDC| UI[kagent UI]
-    UI --> AGW[Agent Gateway]
+    UI --> AGW[agentgateway]
     AGW -->|3. OBO exchange| ENTRA[Microsoft Entra token endpoint]
     ENTRA -->|4. Exchanged token for proxy API| AGW
     AGW -->|5. Forward bearer token| PROXY[llm-obo-proxy Service]
@@ -32,8 +32,8 @@ flowchart LR
 
 1. User authenticates to the kagent UI via Entra OIDC
 2. The user's token is propagated through the agent (via `KAGENT_PROPAGATE_TOKEN`)
-3. When the agent calls the `/llm` route, Agent Gateway performs OBO token exchange with Entra
-4. Agent Gateway forwards the exchanged bearer token to the in-cluster `llm-obo-proxy` Service
+3. When the agent calls the `/llm` route, agentgateway performs OBO token exchange with Entra
+4. Agentgateway forwards the exchanged bearer token to the in-cluster `llm-obo-proxy` Service
 5. The proxy validates the Entra token audience and then calls Anthropic with the provider API key
 
 ## Prerequisites
@@ -176,10 +176,10 @@ oidc:
     - oid
     - tid
     - upn
-  # skipOBO must be true when Agent Gateway handles OBO instead of kagent.
+  # skipOBO must be true agentgateway handles OBO instead of kagent.
   # When false, the kagent controller mints its own JWT (signed with its own key)
   # and passes that to the agent instead of the raw Entra access token.
-  # Agent Gateway's STS cannot validate that kagent-issued token against the
+  # agentgateways STS cannot validate that kagent-issued token against the
   # Entra JWKS, so the token exchange fails.
   skipOBO: true
 
@@ -237,7 +237,7 @@ After the Solo Enterprise UI Service is up, get the external IP:
 kubectl get svc solo-enterprise-ui -n kagent
 ```
 
-The `solo-enterprise-ui` Service is HTTP-only. Microsoft Entra SPA redirect URIs require HTTPS on non-localhost addresses, so do **not** register the `solo-enterprise-ui` external IP as your callback URI. Instead, complete Step 7a to expose the UI through Agent Gateway over HTTPS, then register that HTTPS callback URI on the Entra frontend app registration from Step 1b.
+The `solo-enterprise-ui` Service is HTTP-only. Microsoft Entra SPA redirect URIs require HTTPS on non-localhost addresses, so do **not** register the `solo-enterprise-ui` external IP as your callback URI. Instead, complete Step 7a to expose the UI through agentgateway over HTTPS, then register that HTTPS callback URI on the Entra frontend app registration from Step 1b.
 
 The callback URI you ultimately need looks like:
 
@@ -265,7 +265,7 @@ helm install agentgateway-crds \
 
 If your cluster already has the standard Gateway API CRDs or the enterprise agentgateway CRDs installed, you can skip the corresponding command.
 
-Create the Agent Gateway enterprise license secret in the namespace that the controller will run in:
+Create the agentgateway enterprise license secret in the namespace that the controller will run in:
 
 ```bash
 kubectl create secret generic enterprise-agentgateway-license \
@@ -309,7 +309,7 @@ helm install agentgateway \
   -f agw-values.yaml
 ```
 
-After the controller is installed, configure the Agent Gateway dataplane with the STS endpoint so proxy instances can call the token exchange server:
+After the controller is installed, configure the agentgateway dataplane with the STS endpoint so proxy instances can call the token exchange server:
 
 ```bash
 kubectl apply -f - <<EOF
