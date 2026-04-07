@@ -376,7 +376,7 @@ EOF
 
 ### 7a. Add HTTPS for the enterprise UI login flow
 
-To use Microsoft Entra SPA login on a non-localhost address, terminate TLS on the Agent Gateway and route the UI through that HTTPS listener.
+To use Microsoft Entra SPA login on a non-localhost address, terminate TLS on the agentgateway and route the UI through that HTTPS listener.
 
 First, wait for the Gateway to get an external IP:
 
@@ -408,7 +408,7 @@ Apply the companion Gateway API manifest that adds an HTTPS listener, a `Referen
 kubectl apply -f ui-https-gateway.yaml
 ```
 
-That manifest is stored next to this guide and updates the existing `agentgateway-entra-testing` Gateway to expose the UI over HTTPS through the Agent Gateway load balancer.
+That manifest is stored next to this guide and updates the existing `agentgateway-entra-testing` Gateway to expose the UI over HTTPS through the agentgateway load balancer.
 
 After it is applied, verify the HTTPS endpoint:
 
@@ -456,7 +456,7 @@ kubectl get svc llm-obo-proxy -n agentgateway-system
 kubectl logs deployment/llm-obo-proxy -n agentgateway-system
 ```
 
-Create an `HTTPRoute` that sends `/llm` traffic from Agent Gateway to the proxy `Service`:
+Create an `HTTPRoute` that sends `/llm` traffic from agentgateway to the proxy `Service`:
 
 ```bash
 kubectl apply -f - <<EOF
@@ -499,7 +499,7 @@ kubectl create secret generic entra-obo-client-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-Attach an `EnterpriseAgentgatewayPolicy` to the proxy `Service` so Agent Gateway performs Entra OBO before forwarding to the service:
+Attach an `EnterpriseAgentgatewayPolicy` to the proxy `Service` so agentgateway performs Entra OBO before forwarding to the service:
 
 ```bash
 kubectl apply -f - <<EOF
@@ -526,13 +526,13 @@ spec:
 EOF
 ```
 
-At this point the OBO target is the `llm-obo-proxy` Kubernetes `Service`, not Anthropic directly. Agent Gateway exchanges the incoming user token for a new token scoped to the Entra audience configured above, forwards that bearer token to the proxy, and the proxy calls Anthropic with the provider API key.
+At this point the OBO target is the `llm-obo-proxy` Kubernetes `Service`, not Anthropic directly. Agentgateway exchanges the incoming user token for a new token scoped to the Entra audience configured above, forwards that bearer token to the proxy, and the proxy calls Anthropic with the provider API key.
 
 ### 7c. Reference: direct-to-provider path (not suitable for OBO)
 
-> **Do not apply this section for the OBO demo.** These manifests are included only as a reference for the non-OBO pattern (plain API key auth through Agent Gateway). If you apply the `EnterpriseAgentgatewayPolicy` below, it will **overwrite** the working policy from Step 7b because Kubernetes resource names must be unique within a namespace, and the OBO flow will break.
+> **Do not apply this section for the OBO demo.** These manifests are included only as a reference for the non-OBO pattern (plain API key auth through agentgateway). If you apply the `EnterpriseAgentgatewayPolicy` below, it will **overwrite** the working policy from Step 7b because Kubernetes resource names must be unique within a namespace, and the OBO flow will break.
 
-The previous pattern of targeting an `AgentgatewayBackend` for Anthropic with `policies.auth.secretRef` is still fine for plain provider API key auth through Agent Gateway, but it is not a valid end-to-end Entra OBO backend because the public provider API does not consume the exchanged Entra token.
+The previous pattern of targeting an `AgentgatewayBackend` for Anthropic with `policies.auth.secretRef` is still fine for plain provider API key auth through agentgateway, but it is not a valid end-to-end Entra OBO backend because the public provider API does not consume the exchanged Entra token.
 
 ```yaml
 # Reference only — do not apply for OBO
@@ -701,8 +701,8 @@ kubectl describe enterpriseagentgatewaypolicy entra-obo-token-exchange -n agentg
 1. Open the kagent UI at `https://<AGW_HTTPS_EXTERNAL_IP>`
 2. Log in with your Microsoft account (must be a member of the Entra group whose object ID is set in `K8S_TOKEN_PASSTHROUGH_GROUP_ID`)
 3. Select the `obo-demo-agent`
-4. Send a prompt to the agent so it triggers a model call through Agent Gateway to `/llm/chat/completions`
-5. In the Agent Gateway dataplane logs, confirm both the token exchange debug path and the proxied LLM request:
+4. Send a prompt to the agent so it triggers a model call through agentgateway to `/llm/chat/completions`
+5. In the agentgateway dataplane logs, confirm both the token exchange debug path and the proxied LLM request:
    ```bash
    kubectl logs deployment/agentgateway-entra-testing -n agentgateway-system | grep -E "exchanging token|calling token exchange service|token exchange response|/llm/chat/completions"
    ```
