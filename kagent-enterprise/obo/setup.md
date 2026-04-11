@@ -18,32 +18,23 @@ The agentgateway-enterprise controller handles this difference natively via the 
 
 ## Architecture
 
-```
-                                    Microsoft Entra ID
-                                   ┌──────────────────┐
-                                   │  Token Endpoint   │
-                                   │  /oauth2/v2.0/    │
-                                   │     token         │
-                                   └────────▲──────────┘
-                                            │ 3. OBO exchange
-                                            │    (jwt-bearer grant)
-                                            │
-User ──► kagent UI ──► agentgateway ────────┘
-  │       (OIDC)        (enterprise)
-  │                         │
-  │  1. User logs in        │ 4. Forwards request with
-  │     via Entra OIDC      │    exchanged token
-  │                         ▼
-  │                    Backend Service / MCP Server
-  │
-  └─► 2. User token propagated through agent
-        (KAGENT_PROPAGATE_TOKEN=true)
+```mermaid
+flowchart LR
+    U[User] -->|1. Login via Entra OIDC| UI[kagent UI]
+    UI --> AGW[agentgateway]
+    AGW -->|3. OBO exchange| ENTRA[Microsoft Entra token endpoint]
+    ENTRA -->|4. Exchanged token for proxy API| AGW
+    AGW -->|5. Forward bearer token| PROXY[llm-obo-proxy Service]
+    PROXY -->|6. Provider API key auth| LLM[Anthropic API]
+    UI -->|2. User token propagated through agent| AGENT[obo-demo-agent]
+    AGENT --> AGW
 ```
 
 1. User authenticates to the kagent UI via Entra OIDC
 2. The user's token is propagated through the agent (via `KAGENT_PROPAGATE_TOKEN`)
-3. When the agent calls a backend, agentgateway intercepts and performs OBO token exchange with Entra
-4. The backend receives a new token scoped to its API, but the user identity is preserved
+3. When the agent calls the `/llm` route, agentgateway performs OBO token exchange with Entra
+4. Agentgateway forwards the exchanged bearer token to the in-cluster `llm-obo-proxy` Service
+5. The proxy validates the Entra token audience and then calls Anthropic with the provider API key
 
 ## Prerequisites
 
@@ -95,7 +86,7 @@ From the Azure Portal:
 ```bash
 # Enterprise license keys
 KAGENT_LICENSE_KEY=<enterprise kagent license key>
-KAGENT_FRONTEND_CLIENT_ID=72714acf-cb3e-4a6c-9134-bddfbc73512f
+KAGENT_FRONTEND_CLIENT_ID=
 AGW_LICENSE_KEY=<enterprise AGW license key>
 ANTHROPIC_API_KEY=<api key for kagent>
 KAGENT_BACKEND_CLIENT_ID=<uuid of Entra kagent-backend app>
@@ -158,6 +149,12 @@ ui:
     oidc:
       clientId: "${KAGENT_FRONTEND_CLIENT_ID}"
 
+rbac:
+  roleMapping:
+    roleMapper: "claims.groups.transformList(i, v, v in rolesMap, rolesMap[v])"
+    roleMappings:
+      "${K8S_TOKEN_PASSTHROUGH_GROUP_ID}": "global.Admin"
+
 service:
   type: LoadBalancer
 ```
@@ -171,13 +168,20 @@ oidc:
   secretRef: "kagent-enterprise-oidc-secret"
   secretKey: "clientSecret"
   # Claims from the Entra token to propagate into OBO tokens
+  # oboClaimsToPropagate only applies when skipOBO is false (kagent mints its own JWT).
+  # Kept here for reference but has no effect when skipOBO is true.
   oboClaimsToPropagate:
     - email
     - groups
     - oid
     - tid
     - upn
-  skipOBO: false
+  # skipOBO must be true agentgateway handles OBO instead of kagent.
+  # When false, the kagent controller mints its own JWT (signed with its own key)
+  # and passes that to the agent instead of the raw Entra access token.
+  # agentgateways STS cannot validate that kagent-issued token against the
+  # Entra JWKS, so the token exchange fails.
+  skipOBO: true
 
 rbac:
   roleMapping:
@@ -233,7 +237,7 @@ After the Solo Enterprise UI Service is up, get the external IP:
 kubectl get svc solo-enterprise-ui -n kagent
 ```
 
-The `solo-enterprise-ui` Service is HTTP-only. Microsoft Entra SPA redirect URIs require HTTPS on non-localhost addresses, so do **not** register the `solo-enterprise-ui` external IP as your callback URI. Instead, complete Step 7a to expose the UI through Agent Gateway over HTTPS, then register that HTTPS callback URI on the Entra frontend app registration from Step 1b.
+The `solo-enterprise-ui` Service is HTTP-only. Microsoft Entra SPA redirect URIs require HTTPS on non-localhost addresses, so do **not** register the `solo-enterprise-ui` external IP as your callback URI. Instead, complete Step 7a to expose the UI through agentgateway over HTTPS, then register that HTTPS callback URI on the Entra frontend app registration from Step 1b.
 
 The callback URI you ultimately need looks like:
 
@@ -261,7 +265,7 @@ helm install agentgateway-crds \
 
 If your cluster already has the standard Gateway API CRDs or the enterprise agentgateway CRDs installed, you can skip the corresponding command.
 
-Create the Agent Gateway enterprise license secret in the namespace that the controller will run in:
+Create the agentgateway enterprise license secret in the namespace that the controller will run in:
 
 ```bash
 kubectl create secret generic enterprise-agentgateway-license \
@@ -276,7 +280,9 @@ tokenExchange:
   enabled: true
   issuer: "http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
   subjectValidator:
-    validatorType: "k8s"
+    validatorType: "remote"
+    remoteConfig:
+      url: "https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys"
   apiValidator:
     validatorType: "k8s"
   actorValidator:
@@ -292,7 +298,7 @@ licensing:
   secretName: "enterprise-agentgateway-license"
 ```
 
-The current `enterprise-agentgateway` chart requires more than `tokenExchange.enabled: true`. At minimum, the token exchange server also needs an `issuer` plus validator configuration for the subject, API, and actor tokens. The in-cluster service URL above matches the default service name that the chart creates in the `agentgateway-system` namespace.
+The current `enterprise-agentgateway` chart requires more than `tokenExchange.enabled: true`. At minimum, the token exchange server also needs an `issuer` plus validator configuration for the subject, API, and actor tokens. For Entra OBO, the subject token is the user's Entra access token, so the subject validator must use the Entra JWKS endpoint rather than the Kubernetes API server JWKS. The in-cluster service URL above matches the default service name that the chart creates in the `agentgateway-system` namespace.
 
 ```bash
 helm install agentgateway \
@@ -303,7 +309,29 @@ helm install agentgateway \
   -f agw-values.yaml
 ```
 
-## Step 7: Create the Gateway and Entra OBO Policy
+After the controller is installed, configure the agentgateway dataplane with the STS endpoint so proxy instances can call the token exchange server:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: agentgateway-entra-testing-enterprise
+  namespace: agentgateway-system
+spec:
+  logging:
+    level: debug
+  env:
+    - name: STS_URI
+      value: "http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777/token"
+    - name: STS_AUTH_TOKEN
+      value: "/var/run/secrets/xds-tokens/xds-token"
+EOF
+```
+
+When you create the Gateway in Step 7, set `spec.infrastructure.parametersRef` to that `EnterpriseAgentgatewayParameters` object so the dataplane pods receive `STS_URI` and `STS_AUTH_TOKEN`.
+
+## Step 7: Create the Gateway, Deploy an In-Cluster LLM Proxy, and Attach the Entra OBO Policy
 
 ```
 kubectl apply -f- <<EOF
@@ -331,6 +359,11 @@ metadata:
     app: agentgateway-entra-testing
 spec:
   gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: agentgateway-entra-testing-enterprise
   listeners:
     - name: http
       port: 8080
@@ -343,7 +376,7 @@ EOF
 
 ### 7a. Add HTTPS for the enterprise UI login flow
 
-To use Microsoft Entra SPA login on a non-localhost address, terminate TLS on the Agent Gateway and route the UI through that HTTPS listener.
+To use Microsoft Entra SPA login on a non-localhost address, terminate TLS on the agentgateway and route the UI through that HTTPS listener.
 
 First, wait for the Gateway to get an external IP:
 
@@ -375,7 +408,7 @@ Apply the companion Gateway API manifest that adds an HTTPS listener, a `Referen
 kubectl apply -f ui-https-gateway.yaml
 ```
 
-That manifest is stored next to this guide and updates the existing `agentgateway-entra-testing` Gateway to expose the UI over HTTPS through the Agent Gateway load balancer.
+That manifest is stored next to this guide and updates the existing `agentgateway-entra-testing` Gateway to expose the UI over HTTPS through the agentgateway load balancer.
 
 After it is applied, verify the HTTPS endpoint:
 
@@ -391,8 +424,118 @@ Register this callback URI on the Entra frontend app registration:
 https://<AGW_HTTPS_EXTERNAL_IP>/callback
 ```
 
+### 7b. Deploy the in-cluster LLM proxy Service
+
+Direct OBO to `api.anthropic.com` is not the right architecture because the public Anthropic API expects provider-native API key authentication, not an Entra bearer token. Instead, route OBO to an in-cluster proxy `Service` that validates the exchanged Entra token and then calls Anthropic with the API key.
+
+For this demo, the proxy reuses the existing `kagent-backend` Entra app registration as the protected audience. For a production setup, use a dedicated Entra app registration and delegated scope for the proxy service.
+
+Create a `ConfigMap` from the proxy source that lives next to this guide:
+
+```bash
+kubectl create configmap llm-obo-proxy-code \
+  -n agentgateway-system \
+  --from-file=app.py=llm-obo-proxy/app.py \
+  --from-file=requirements.txt=llm-obo-proxy/requirements.txt \
+  --dry-run=client -o yaml | kubectl apply -f -
 ```
+
+Deploy the proxy `Deployment` and `Service`:
+
+```bash
+cat llm-obo-proxy/deployment.yaml \
+  | sed "s/\${TENANT_ID}/${TENANT_ID}/g; s/\${KAGENT_BACKEND_CLIENT_ID}/${KAGENT_BACKEND_CLIENT_ID}/g" \
+  | kubectl apply -f -
+```
+
+Verify the proxy is up:
+
+```bash
+kubectl rollout status deployment/llm-obo-proxy -n agentgateway-system
+kubectl get svc llm-obo-proxy -n agentgateway-system
+kubectl logs deployment/llm-obo-proxy -n agentgateway-system
+```
+
+Create an `HTTPRoute` that sends `/llm` traffic from agentgateway to the proxy `Service`:
+
+```bash
 kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-obo-proxy
+  namespace: agentgateway-system
+  labels:
+    app: agentgateway-entra-testing
+spec:
+  parentRefs:
+    - name: agentgateway-entra-testing
+      namespace: agentgateway-system
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /llm
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /v1
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: llm-obo-proxy
+      port: 8080
+EOF
+```
+
+Create the Entra OBO client secret in the same namespace as the `Service` and `EnterpriseAgentgatewayPolicy`:
+
+```bash
+kubectl create secret generic entra-obo-client-secret \
+  -n agentgateway-system \
+  --from-literal=client_secret="${KAGENT_BACKEND_CLIENT_SECRET}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Attach an `EnterpriseAgentgatewayPolicy` to the proxy `Service` so agentgateway performs Entra OBO before forwarding to the service:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: entra-obo-token-exchange
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+    - kind: Service
+      name: llm-obo-proxy
+      group: ""
+  backend:
+    tokenExchange:
+      mode: ExchangeOnly
+      entra:
+        tenantId: "${TENANT_ID}"
+        clientId: "${KAGENT_BACKEND_CLIENT_ID}"
+        scope: "api://${KAGENT_BACKEND_CLIENT_ID}/kagent-backend"
+        clientSecretRef:
+          name: entra-obo-client-secret
+          key: client_secret
+EOF
+```
+
+At this point the OBO target is the `llm-obo-proxy` Kubernetes `Service`, not Anthropic directly. Agentgateway exchanges the incoming user token for a new token scoped to the Entra audience configured above, forwards that bearer token to the proxy, and the proxy calls Anthropic with the provider API key.
+
+### 7c. Reference: direct-to-provider path (not suitable for OBO)
+
+> **Do not apply this section for the OBO demo.** These manifests are included only as a reference for the non-OBO pattern (plain API key auth through agentgateway). If you apply the `EnterpriseAgentgatewayPolicy` below, it will **overwrite** the working policy from Step 7b because Kubernetes resource names must be unique within a namespace, and the OBO flow will break.
+
+The previous pattern of targeting an `AgentgatewayBackend` for Anthropic with `policies.auth.secretRef` is still fine for plain provider API key auth through agentgateway, but it is not a valid end-to-end Entra OBO backend because the public provider API does not consume the exchanged Entra token.
+
+```yaml
+# Reference only — do not apply for OBO
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayBackend
 metadata:
@@ -409,11 +552,7 @@ spec:
     auth:
       secretRef:
         name: anthropic-secret
-EOF
-```
-
-```
-kubectl apply -f - <<EOF
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -441,31 +580,19 @@ spec:
       namespace: agentgateway-system
       group: agentgateway.dev
       kind: AgentgatewayBackend
-EOF
 ```
 
-Create the Entra OBO client secret in the same namespace as the `AgentgatewayBackend` and `EnterpriseAgentgatewayPolicy`:
+If you wanted to attach an OBO policy to a direct backend instead of the proxy `Service`, the policy would look like the example below. Note the different name (`entra-obo-direct-backend`) to avoid colliding with the proxy policy from Step 7b:
 
-```bash
-kubectl create secret generic entra-obo-client-secret \
-  -n agentgateway-system \
-  --from-literal=client_secret="${KAGENT_BACKEND_CLIENT_SECRET}"
-```
-
-This `EnterpriseAgentgatewayPolicy` tells the gateway to perform Entra OBO token exchange for requests targeting a specific backend service.
-
-Save as `entra-obo-policy.yaml`:
-
-```
-kubectl apply -f - <<EOF
+```yaml
+# Reference only — do not apply for OBO
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
-  name: entra-obo-token-exchange
+  name: entra-obo-direct-backend
   namespace: agentgateway-system
 spec:
   targetRefs:
-    # Target the backend service that requires an Entra-scoped token.
     - kind: AgentgatewayBackend
       name: anthropic
       group: agentgateway.dev
@@ -475,18 +602,13 @@ spec:
       entra:
         tenantId: "${TENANT_ID}"
         clientId: "${KAGENT_BACKEND_CLIENT_ID}"
-        # Scope for the downstream API.
-        # .default requests all statically consented permissions.
         scope: "api://${KAGENT_BACKEND_CLIENT_ID}/.default"
         clientSecretRef:
           name: entra-obo-client-secret
           key: client_secret
-EOF
 ```
 
-The `EnterpriseAgentgatewayPolicy`, its `targetRefs`, and the `clientSecretRef` Secret must all line up in the same namespace when you target an `AgentgatewayBackend`.
-
-Replace the `${...}` placeholders and adjust `targetRefs` to match your backend, then apply:
+The `EnterpriseAgentgatewayPolicy`, its `targetRefs`, and the `clientSecretRef` Secret must all line up in the same namespace when you target an `AgentgatewayBackend`. This pattern does not work end-to-end for Entra OBO because the public Anthropic API does not accept Entra bearer tokens.
 
 ## Step 8: Configure the Agent for Token Propagation
 
@@ -501,10 +623,10 @@ metadata:
   namespace: kagent
 spec:
   apiKeyPassthrough: true
-  model: "claude-sonnet-4-6"
+  model: "claude-haiku-4-5-20251001"
   provider: OpenAI
   openAI:
-    baseUrl: http://agentgateway-entra-testing.agentgateway-system.svc.cluster.local:8080/anthropic
+    baseUrl: http://agentgateway-entra-testing.agentgateway-system.svc.cluster.local:8080/llm
 ---
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
@@ -547,13 +669,24 @@ kubectl get svc enterprise-agentgateway -n agentgateway-system
 
 # Check the controller logs for token exchange startup
 kubectl logs deployment/enterprise-agentgateway -n agentgateway-system | grep -Ei "token exchange|AGW server"
+
+# Confirm the dataplane received the STS settings
+kubectl get deployment agentgateway-entra-testing -n agentgateway-system -o jsonpath='{range .spec.template.spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}' | grep -E "STS_URI|STS_AUTH_TOKEN"
 ```
 
 You'll see an output similar to the below:
 ```
-{"time":"2026-04-02T20:56:21.553716884Z","level":"info","msg":"starting token exchange server with effective config","component":"tokenexchange","config":"{\"actorValidator\":{\"validatorType\":\"k8s\"},\"apiValidator\":{\"validatorType\":\"k8s\"},\"elicitation\":{\"secretName\":\"\"},\"enabled\":true,\"issuer\":\"http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777\",\"subjectValidator\":{\"validatorType\":\"k8s\"}}"}
-{"time":"2026-04-02T20:56:21.915446631Z","level":"info","msg":"using SQLite database for token exchange server","component":"tokenexchange","database_path":"/var/db/elicitation.db"}
-{"time":"2026-04-02T20:56:21.922221201Z","level":"info","msg":"starting token exchange server on","component":"tokenexchange","address":"0.0.0.0:7777"}
+kubectl logs deployment/enterprise-agentgateway -n agentgateway-system
+
+{"time":"2026-04-07T20:11:52.471505653Z","level":"info","msg":"push response","component":"krtxds","type":"WDS","reason":"","node":"agentgateway~10.124.2.29~agentgateway-entra-testing-79dc988b58-ntg7t.agentgateway-system~agentgateway-system.svc.cluster.local","resources":0,"removed":1,"size":"0B"}
+{"time":"2026-04-07T20:12:02.158470916Z","level":"info","msg":"request","component":"request","method":"POST","path":"/token","StatusCode":200,"latency":499350291,"clientIP":"10.124.2.29"
+
+kubectl logs deployment/llm-obo-proxy -n agentgateway-system
+
+INFO:llm-obo-proxy:validated token for oid=9716f8d3-e182-4f39-aa9a-bcbe8f1488d8 aud=d6957938-c281-4312-97d2-eefbfc44f468 scp=kagent-backend
+INFO:     10.124.2.1:43056 - "GET /healthz HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     10.124.2.29:58228 - "POST /v1/chat/completions HTTP/1.1" 200 OK
 ```
 
 ### Check the policy status
@@ -568,22 +701,12 @@ kubectl describe enterpriseagentgatewaypolicy entra-obo-token-exchange -n agentg
 1. Open the kagent UI at `https://<AGW_HTTPS_EXTERNAL_IP>`
 2. Log in with your Microsoft account (must be a member of the Entra group whose object ID is set in `K8S_TOKEN_PASSTHROUGH_GROUP_ID`)
 3. Select the `obo-demo-agent`
-4. Send a message that triggers a tool call to the backend service
-5. In the agentgateway controller logs, confirm the OBO token exchange succeeded:
+4. Send a prompt to the agent so it triggers a model call through agentgateway to `/llm/chat/completions`
+5. In the agentgateway dataplane logs, confirm both the token exchange debug path and the proxied LLM request:
    ```bash
-   kubectl logs deployment/enterprise-agentgateway -n agentgateway-system | grep -i "entra"
+   kubectl logs deployment/agentgateway-entra-testing -n agentgateway-system | grep -E "exchanging token|calling token exchange service|token exchange response|/llm/chat/completions"
    ```
-
-## Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| `AADSTS50011: The redirect URI does not match` | Verify the UI app registration uses the actual `https://<AGW_HTTPS_EXTERNAL_IP>/callback` URL from Step 7a |
-| `AADSTS700016: Application not found in directory` | Double-check `KAGENT_BACKEND_CLIENT_ID`, `KAGENT_FRONTEND_CLIENT_ID` if used, and `TENANT_ID` |
-| `AADSTS65001: The user or administrator has not consented` | Grant admin consent for the backend API permission on the frontend app registration |
-| `AADSTS7000218: Invalid client secret` | Regenerate the secret in Entra and update the `entra-obo-client-secret` Kubernetes secret |
-| Token exchange returns 400 | Verify the `scope` in the policy matches what's exposed on the backend app registration (`api://<client-id>/.default`) |
-| Agent requests don't carry user token | Confirm `KAGENT_PROPAGATE_TOKEN=true` is set on the agent pod: `kubectl get pod <agent-pod> -n kagent -o jsonpath='{.spec.containers[*].env}'` |
-| `OBO_CLAIMS_TO_PROPAGATE` is empty | Check `kagent-values.yaml` has the `oboClaimsToPropagate` list and re-run `helm upgrade` |
-| JWKS validation fails | Verify `kubernetes.jwksUrl` is correct for your cluster, or leave it empty for auto-discovery |
-| UI login loop / no redirect | Ensure the Entra app has `openid`, `profile`, and `offline_access` in its API permissions |
+6. In the proxy logs, confirm the exchanged token was accepted and the provider call completed:
+   ```bash
+   kubectl logs deployment/llm-obo-proxy -n agentgateway-system
+   ```
