@@ -35,12 +35,12 @@ Here's the flow:
 - Has a /health endpoint and /v1/completions endpoint
 - InferencePool (Step 4, lines 179-186)
 - Logical grouping of model servers
-- Uses label selectors to find pods: `app=vllm-llama3-8b-instruct`
+- Uses label selectors to find pods: `app=vllm-qwen25-15b-instruct`
 - Handles load balancing across multiple model server replicas
 - Gateway + HTTPRoute (Step 5, lines 191-223)
 - Gateway: Entry point for external traffic (listens on port 80)
 - HTTPRoute: Routes requests from the Gateway to the InferencePool
-- Path prefix / routes to the InferencePool named vllm-llama3-8b-instruct
+- Path prefix / routes to the InferencePool named vllm-qwen25-15b-instruct
 - The Test Request (Step 6, lines 226-237):
 
 The testing occurs via the `curl` in step 6. The Request Flow is:
@@ -70,26 +70,26 @@ So you're testing the whole platform, not just the model itself.
 
 ## Install & Config
 
-1. Deploy the `Deployment` object which uses a vLLM container image specifically for testing against CPU instead of GPU. It uses Ollama/Llama
+1. Deploy the `Deployment` object which uses a vLLM container image specifically for testing against CPU instead of GPU.
 ```
 kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-llama3-8b-instruct
+  name: vllm-qwen25-15b-instruct
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: vllm-llama3-8b-instruct
+      app: vllm-qwen25-15b-instruct
   template:
     metadata:
       labels:
-        app: vllm-llama3-8b-instruct
+        app: vllm-qwen25-15b-instruct
     spec:
       containers:
-        - name: lora
-          image: "public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:v0.10.2" # formal images can be found in https://gallery.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
+        - name: vllm
+          image: "vllm/vllm-openai-cpu:v0.18.0" # official vLLM CPU image from Docker Hub; pin a concrete tag to avoid drift from latest
           imagePullPolicy: IfNotPresent
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:
@@ -97,17 +97,9 @@ spec:
           - "Qwen/Qwen2.5-1.5B-Instruct"
           - "--port"
           - "8000"
-          - "--enable-lora"
-          - "--max-loras"
-          - "4"
-          - "--lora-modules"
-          - '{"name": "food-review-0", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
-          - '{"name": "food-review-1", "path": "SriSanth2345/Qwen-1.5B-Tweet-Generations", "base_model_name": "Qwen/Qwen2.5-1.5B"}'
           env:
             - name: PORT
               value: "8000"
-            - name: VLLM_ALLOW_RUNTIME_LORA_UPDATING
-              value: "true"
             - name: VLLM_CPU_KVCACHE_SPACE
               value: "4"
           ports:
@@ -146,21 +138,6 @@ spec:
               name: data
             - mountPath: /dev/shm
               name: shm
-            - name: adapters
-              mountPath: "/adapters"
-      initContainers:
-        - name: lora-adapter-syncer
-          tty: true
-          stdin: true
-          image: registry.k8s.io/gateway-api-inference-extension/lora-syncer:v1.1.0-rc.1
-          restartPolicy: Always
-          imagePullPolicy: Always
-          env:
-            - name: DYNAMIC_LORA_ROLLOUT_CONFIG
-              value: "/config/configmap.yaml"
-          volumeMounts: # DO NOT USE subPath, dynamic configmap updates don't work on subPaths
-          - name: config-volume
-            mountPath:  /config
       restartPolicy: Always
       schedulerName: default-scheduler
       terminationGracePeriodSeconds: 30
@@ -170,67 +147,50 @@ spec:
         - name: shm
           emptyDir:
             medium: Memory
-        - name: adapters
-          emptyDir: {}
-        - name: config-volume
-          configMap:
-            name: vllm-qwen-adapters
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vllm-qwen-adapters
-data:
-  configmap.yaml: |
-      vLLMLoRAConfig:
-        name: vllm-llama3-8b-instruct
-        port: 8000
-        ensureExist:
-          models:
-          - base-model: Qwen/Qwen2.5-1.5B
-            id: food-review
-            source: SriSanth2345/Qwen-1.5B-Tweet-Generations
-          - base-model: Qwen/Qwen2.5-1.5B
-            id: cad-fabricator
-            source: SriSanth2345/Qwen-1.5B-Tweet-Generations
 EOF
 ```
 
 You'll need to give it about 2-3 minutes for the Model to download and then you can confirm the Pod is running with the following command:
 ```
-kubectl get Pods
+kubectl get pods
 ```
 
 2. Install the CRDs for Inference
 ```
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.1.0/manifests.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.4.0/manifests.yaml
 ```
 
-3. Install a Gateway and the Gateway CRDs. In this case, you'll use kgateway/agentgateway
+3. Install Kubernetes Gateway API CRDs, agentgateway, and the agentgateway CRDs. In this case, you'll use agentgateway
 ```
-helm upgrade -i --create-namespace --namespace kgateway-system --version v2.2.0-main kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml
+```
 
-helm upgrade -i --namespace kgateway-system \
---version v2.2.0-main kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+```
+helm upgrade -i --create-namespace \
+  --namespace agentgateway-system \
+  --version v1.1.0 agentgateway-crds oci://cr.agentgateway.dev/charts/agentgateway-crds
+
+helm upgrade -i -n agentgateway-system agentgateway oci://cr.agentgateway.dev/charts/agentgateway \
+--version v1.1.0 \
 --set inferenceExtension.enabled=true
 ```
 
 4. Deploy the below Helm chart which does the following:
 - Installs an `InferencePool` resource/object that acts as a logical grouping of AI model servers for load balancing and routing inference requests
-- Installs the Endpoint-picker extension, which is an ntelligent selection among available model servers for load balancing
+- Installs the Endpoint-picker extension (epp/llm-d), which is an intelligent selection among available model servers for load balancing
 
 ```
 export IGW_CHART_VERSION=v1.1.0
 export GATEWAY_PROVIDER=none
 
-helm install vllm-llama3-8b-instruct \
---set inferencePool.modelServers.matchLabels.app=vllm-llama3-8b-instruct \
+helm install vllm-qwen25-15b-instruct \
+--set inferencePool.modelServers.matchLabels.app=vllm-qwen25-15b-instruct \
 --set provider.name=$GATEWAY_PROVIDER \
 --version $IGW_CHART_VERSION \
 oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
 ```
 
-5. Deploy a `Gateway` and `HTTPRoute` object for Inference. This will route to the `InferencePool` that was created in the previous step via the Helm Chart. This piece (`inferencePool.modelServers.matchLabels.app) matches any app running the `vllm-llama3-8b-instruct` label, which was deployed in step 1 (the `Deployment` object)
+5. Deploy a `Gateway` and `HTTPRoute` object for Inference. This will route to the `InferencePool` that was created in the previous step via the Helm Chart. This piece (`inferencePool.modelServers.matchLabels.app) matches any app running the `vllm-qwen25-15b-instruct` label, which was deployed in step 1 (the `Deployment` object)
 ```
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -257,7 +217,7 @@ spec:
   - backendRefs:
     - group: inference.networking.k8s.io
       kind: InferencePool
-      name: vllm-llama3-8b-instruct
+      name: vllm-qwen25-15b-instruct
     matches:
     - path:
         type: PathPrefix
