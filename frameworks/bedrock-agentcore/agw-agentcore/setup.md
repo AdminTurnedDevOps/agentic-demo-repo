@@ -21,10 +21,12 @@ pip install openai bedrock-agentcore strands-agents bedrock-agentcore-starter-to
 agentcore create
 ```
 
+Throughout this `setup.md`, you'll see **testagw** used. That's the name that I gave my agentcore configuration when running `agentcore create`, so if you don't use the same name, you'll have to change **testagw** to whatever name you choose to use.
+
 You'll see an agent created with a templated file/folder structure like in the screenshots below:
 
 ![](images/1.png)
-![](images/2.pnd)
+![](images/2.png)
 
 ## Gateway Setup
 
