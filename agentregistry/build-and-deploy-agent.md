@@ -17,4 +17,4 @@ arctl agent publish . --overwrite --registry-url http://YOUR_AGR_ENDPOINT:12121/
 ```
 
 Log into the UI and you will see it available:
-![](images/deployedagent.jpg)
+![](images/deployedagent.png)
