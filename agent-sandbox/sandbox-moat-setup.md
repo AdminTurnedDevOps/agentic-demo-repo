@@ -151,3 +151,5 @@ cargo build -p moat-mcp
 ```text
 List the tools available in the moat MCP server
 ```
+
+![](images/3.png)
