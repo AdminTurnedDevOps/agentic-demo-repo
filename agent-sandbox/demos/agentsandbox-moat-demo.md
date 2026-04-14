@@ -337,7 +337,7 @@ EOF
 
 3. Start moat with the config:
 ```bash
-moat serve --config moat-config.json
+moatctl serve --config moat-config.json
 ```
 
 ### Demo Script
@@ -447,13 +447,25 @@ This demo shows how to run Claude Code (the AI coding agent) inside a moat sandb
 │   │   - All operations contained within sandbox             │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
-│   Network: Only claude.ai + api.anthropic.com allowed           │
+│   Network: api.anthropic.com only                               │
 │   Credentials: API key injected by host proxy                   │
 │   Filesystem: /workspace (persistent via snapshots)             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Prerequisites
+
+**Important:** The default moat rootfs uses Alpine Linux (musl libc). Claude Code's native binary requires glibc. You must pre-install Claude Code in the rootfs using npm.
+
+**One-time rootfs setup:**
+```bash
+# Add Node.js and Claude Code to the rootfs
+docker run --rm --platform linux/arm64 \
+  -v ~/.local/state/moat/krun-rootfs:/rootfs \
+  node:20-alpine \
+  sh -c "apk --root /rootfs add --no-cache nodejs npm && \
+         npm install -g @anthropic-ai/claude-code --prefix /rootfs/usr"
+```
 
 1. Set your Anthropic API key:
 ```bash
@@ -468,10 +480,6 @@ cat > moat-claude-config.json << 'EOF'
   "slots": 12,
   "egress": {
     "hosts": [
-      {
-        "host": "claude.ai",
-        "ports": [443]
-      },
       {
         "host": "api.anthropic.com",
         "ports": [443],
@@ -502,7 +510,6 @@ SANDBOX_ID=$(echo '{
   "session": "claude-sandbox",
   "network": {
     "hosts": [
-      {"host": "claude.ai", "ports": [443]},
       {"host": "api.anthropic.com", "ports": [443]}
     ]
   }
@@ -510,13 +517,12 @@ SANDBOX_ID=$(echo '{
 echo "Created sandbox: $SANDBOX_ID"
 ```
 
-**Step 2: Install Claude Code using the native installer**
+**Step 2: Verify Claude Code is available**
 
-The native installer requires no Node.js or npm — just curl:
+Claude Code was pre-installed in the rootfs during the one-time setup:
 
 ```bash
-moatctl sandbox exec $SANDBOX_ID -- \
-  sh -c 'curl -fsSL https://claude.ai/install.sh | sh'
+moatctl sandbox exec $SANDBOX_ID -- claude --version
 ```
 
 **Step 3: Run Claude Code interactively via SSH**
@@ -569,7 +575,7 @@ moatctl sandbox ssh $NEW_ID
 |---------|----------------------|
 | **Malicious code execution** | Sandbox is isolated — cannot access host filesystem, network, or other sandboxes |
 | **API key theft** | Key is injected by host proxy; sandbox never sees it |
-| **Network exfiltration** | Only explicitly allowed hosts (claude.ai, api.anthropic.com) are reachable |
+| **Network exfiltration** | Only explicitly allowed hosts (api.anthropic.com) are reachable |
 | **Persistent compromise** | Restore from a known-good snapshot to reset the environment |
 | **Resource exhaustion** | Sandbox has memory/CPU/disk limits enforced by moat |
 
