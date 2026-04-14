@@ -455,17 +455,41 @@ This demo shows how to run Claude Code (the AI coding agent) inside a moat sandb
 
 ### Prerequisites
 
-**Important:** The default moat rootfs uses Alpine Linux (musl libc). Claude Code's native binary requires glibc. You must pre-install Claude Code in the rootfs using npm.
+**Important:** Claude Code's native binary requires glibc, but the default moat rootfs uses Alpine Linux (musl libc). You must pre-install Claude Code using npm. The setup differs by backend:
 
-**One-time rootfs setup:**
+#### libkrun (macOS)
+
+One-time rootfs setup — run this once, then all future sandboxes will have Claude Code:
+
 ```bash
-# Add Node.js and Claude Code to the rootfs
 docker run --rm --platform linux/arm64 \
   -v ~/.local/state/moat/krun-rootfs:/rootfs \
   node:20-alpine \
-  sh -c "apk --root /rootfs add --no-cache nodejs npm && \
+  sh -c "apk --root /rootfs --initdb add --no-cache nodejs npm && \
          npm install -g @anthropic-ai/claude-code --prefix /rootfs/usr"
 ```
+
+#### Firecracker (Linux)
+
+Add to your Firecracker rootfs build process. If using the moat scripts:
+
+```bash
+# In the rootfs build, add:
+apk add --no-cache nodejs npm
+npm install -g @anthropic-ai/claude-code
+```
+
+Or modify `scripts/build-firecracker-rootfs.sh` to include these packages.
+
+#### Bubblewrap (Linux)
+
+Bubblewrap uses the host filesystem. Install Claude Code directly on the host:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+The `claude` binary will be available inside sandboxes automatically.
 
 1. Set your Anthropic API key:
 ```bash
