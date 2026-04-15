@@ -140,7 +140,7 @@ sudo ./scripts/build-rootfs.sh /var/lib/moat/rootfs.ext4
 
 # Download kernel (if not present)
 sudo mkdir -p /var/lib/moat
-curl -L -o /tmp/vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.6/x86_64/vmlinux-5.10.186
+curl -fsSL -o /tmp/vmlinux.bin "https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.5/x86_64/vmlinux-5.10.186"
 sudo mv /tmp/vmlinux.bin /var/lib/moat/vmlinux
 ```
 
