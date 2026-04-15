@@ -129,7 +129,19 @@ sudo cp target/release/moat-worker /usr/local/bin/
 
 **Build Firecracker rootfs:**
 ```bash
-./scripts/build-firecracker-rootfs.sh ~/.local/state/moat/firecracker-rootfs
+# Install musl target for static linking
+rustup target add x86_64-unknown-linux-musl
+
+# Rebuild moat-worker with musl (static binary for VM)
+cargo build --release -p moat-worker --target x86_64-unknown-linux-musl
+
+# Build rootfs (requires sudo for loop mount)
+sudo ./scripts/build-rootfs.sh /var/lib/moat/rootfs.ext4
+
+# Download kernel (if not present)
+sudo mkdir -p /var/lib/moat
+curl -L -o /tmp/vmlinux.bin https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.6/x86_64/vmlinux-5.10.186
+sudo mv /tmp/vmlinux.bin /var/lib/moat/vmlinux
 ```
 
 ---
