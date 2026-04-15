@@ -4,35 +4,8 @@ This demo shows the "insane" performance characteristics of moat with Firecracke
 
 **What it demonstrates:** Firecracker microVMs enable sub-second sandbox creation, 3x+ memory oversubscription via suspend/resume, and automatic failover across hosts.
 
-### Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Fleet VM (Ubuntu)                                                       │
-│ └── moat-fleet (Fleet Controller)                                       │
-│       - Coordinates sandboxes across hosts                              │
-│       - Health checks, failover, rescheduling                           │
-└─────────────────────────────────────────────────────────────────────────┘
-                    │
-        ┌───────────┴───────────┐
-        ▼                       ▼
-┌─────────────────────┐ ┌─────────────────────┐
-│ Moat Host VM 1      │ │ Moat Host VM 2      │
-│ (Ubuntu + KVM)      │ │ (Ubuntu + KVM)      │
-│                     │ │                     │
-│ moat serve          │ │ moat serve          │
-│ --backend firecracker│ │ --backend firecracker│
-│                     │ │                     │
-│ Firecracker microVMs:│ │ Firecracker microVMs:│
-│ ├── sandbox 1       │ │ ├── sandbox 6       │
-│ ├── sandbox 2       │ │ ├── sandbox 7       │
-│ ├── sandbox 3       │ │ ├── sandbox 8       │
-│ ├── sandbox 4       │ │ ├── sandbox 9       │
-│ └── sandbox 5       │ │ └── sandbox 10      │
-└─────────────────────┘ └─────────────────────┘
-```
-
-### Firecracker: Wild At Scale
+### Firecracker At Scale
 
 | Feature | Demo Scale | Production Scale |
 |---------|------------|------------------|
