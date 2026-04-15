@@ -146,6 +146,27 @@ sudo mv /tmp/vmlinux.bin /var/lib/moat/vmlinux
 
 ---
 
+### Install Fleet Controller (on Fleet VM only)
+
+**Install Go:**
+```bash
+GO_VERSION="1.22.2"
+curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz
+sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+export PATH=$PATH:/usr/local/go/bin
+```
+
+**Build moat-fleet:**
+```bash
+git clone https://github.com/anthropics/moat.git
+cd moat/fleet
+go build -o moat-fleet ./cmd/moat-fleet/
+sudo mv moat-fleet /usr/local/bin/
+```
+
+---
+
 ### Demo 1: Burst Creation (Warm Pool)
 
 **Goal:** Create 10 sandboxes in < 100ms using warm pool cloning.
