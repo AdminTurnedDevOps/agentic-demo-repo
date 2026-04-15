@@ -15,12 +15,72 @@ This demo shows the "insane" performance characteristics of moat with Firecracke
 | **Memory Overhead** | ~5MB per microVM | Same |
 | **Failover** | 5 sandboxes reschedule in < 1s | 500 sandboxes reschedule |
 
-### Prerequisites
+---
 
-**Hardware Requirements:**
-- Linux VM with KVM support (nested virtualization enabled)
-- 8GB+ RAM recommended
-- Ubuntu 22.04 or later
+### Azure Setup
+
+Create 3 VMs with nested virtualization support:
+
+```bash
+# Create resource group
+az group create --name moat-demo --location eastus
+
+# Create VNet
+az network vnet create \
+  --resource-group moat-demo \
+  --name moat-vnet \
+  --subnet-name default
+
+# Create Fleet VM (smaller - just runs controller)
+az vm create \
+  --resource-group moat-demo \
+  --name moat-fleet \
+  --image Ubuntu2204 \
+  --size Standard_D2s_v5 \
+  --admin-username azureuser \
+  --admin-password 'Password12!@' \
+  --authentication-type password \
+  --vnet-name moat-vnet \
+  --subnet default \
+  --public-ip-sku Standard
+
+# Create Host VMs (larger - run Firecracker microVMs)
+for host in host1 host2; do
+  az vm create \
+    --resource-group moat-demo \
+    --name moat-$host \
+    --image Ubuntu2204 \
+    --size Standard_D4s_v5 \
+    --admin-username azureuser \
+    --admin-password 'Password12!@' \
+    --authentication-type password \
+    --vnet-name moat-vnet \
+    --subnet default \
+    --public-ip-sku Standard
+done
+
+# Get VM IPs
+az vm list-ip-addresses --resource-group moat-demo --output table
+```
+
+**Verify KVM works (SSH into each host VM):**
+```bash
+sudo apt update && sudo apt install -y cpu-checker
+kvm-ok
+# Should say: "KVM acceleration can be used"
+```
+
+**VM Summary:**
+
+| VM | Size | Purpose |
+|----|------|---------|
+| moat-fleet | Standard_D2s_v5 (2 vCPU, 8GB) | Fleet controller |
+| moat-host1 | Standard_D4s_v5 (4 vCPU, 16GB) | moat + Firecracker |
+| moat-host2 | Standard_D4s_v5 (4 vCPU, 16GB) | moat + Firecracker |
+
+---
+
+### Install Firecracker (on each host VM)
 
 **Install Firecracker:**
 ```bash
@@ -193,15 +253,15 @@ cat > fleet-config.json << 'EOF'
 {
   "listen": "0.0.0.0:9090",
   "store": {
-    "postgres": {
-      "url": "postgres://moat:moat@localhost/moat"
-    }
+    "memory": {}
   }
 }
 EOF
 
 moat-fleet serve --config fleet-config.json
 ```
+
+Note: Using in-memory store for the demo. For production, use PostgreSQL.
 
 **Step 2: Start moat hosts (on each host VM)**
 
@@ -276,3 +336,13 @@ moatctl --url http://fleet-vm:9090 sandbox exec $SANDBOX_ID -- echo "Still alive
 - **Suspend/resume = infinite scale** — Physical capacity limits don't limit logical capacity
 - **Fleet failover = reliability** — Host dies, sandboxes survive
 - **The numbers scale linearly** — 10 in demo = 1000 in production, same mechanisms
+
+---
+
+### Cleanup (Azure)
+
+Delete all resources when done:
+
+```bash
+az group delete --name moat-demo --yes --no-wait
+```
