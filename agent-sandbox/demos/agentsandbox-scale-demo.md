@@ -36,7 +36,7 @@ az vm create \
   --resource-group moat-demo \
   --name moat-fleet \
   --image Ubuntu2204 \
-  --size Standard_D2s_v5 \
+  --size Standard_D2s_v3 \
   --admin-username azureuser \
   --admin-password 'Password12!@' \
   --authentication-type password \
@@ -50,7 +50,7 @@ for host in host1 host2; do
     --resource-group moat-demo \
     --name moat-$host \
     --image Ubuntu2204 \
-    --size Standard_D4s_v5 \
+    --size Standard_D4s_v3 \
     --admin-username azureuser \
     --admin-password 'Password12!@' \
     --authentication-type password \
@@ -74,9 +74,11 @@ kvm-ok
 
 | VM | Size | Purpose |
 |----|------|---------|
-| moat-fleet | Standard_D2s_v5 (2 vCPU, 8GB) | Fleet controller |
-| moat-host1 | Standard_D4s_v5 (4 vCPU, 16GB) | moat + Firecracker |
-| moat-host2 | Standard_D4s_v5 (4 vCPU, 16GB) | moat + Firecracker |
+| moat-fleet | Standard_D2s_v3 (2 vCPU, 8GB) | Fleet controller |
+| moat-host1 | Standard_D4s_v3 (4 vCPU, 16GB) | moat + Firecracker |
+| moat-host2 | Standard_D4s_v3 (4 vCPU, 16GB) | moat + Firecracker |
+
+> **Note:** Dv3 series supports nested virtualization. If you have quota for Dv5 series, those work too.
 
 ---
 
@@ -96,6 +98,22 @@ sudo mv release-v${FIRECRACKER_VERSION}-x86_64/jailer-v${FIRECRACKER_VERSION}-x8
 firecracker --version
 ```
 
+**Install build dependencies:**
+```bash
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+
+# Install build tools
+sudo apt-get install -y build-essential pkg-config libssl-dev git unzip
+
+# Install protoc (need v25+ for proto3 optional fields)
+PROTOC_VERSION="25.1"
+curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+sudo unzip -o protoc-${PROTOC_VERSION}-linux-x86_64.zip -d /usr/local
+rm protoc-${PROTOC_VERSION}-linux-x86_64.zip
+```
+
 **Install moat:**
 ```bash
 # Clone and build
@@ -104,8 +122,9 @@ cd moat
 make build
 make build-worker
 
-# Add to PATH
-export PATH="$PWD/target/release:$PATH"
+# Install binaries
+sudo cp target/release/moat /usr/local/bin/
+sudo cp target/release/moat-worker /usr/local/bin/
 ```
 
 **Build Firecracker rootfs:**
