@@ -15,6 +15,22 @@ If you want the highest-probability cloud path for nested virtualization with `m
 
 ---
 
+### Before You Start
+
+Run [agentsandbox-aws-ec2-infra-setup.md](/Users/michaellevan/gitrepos/agentic-demo-repo/agent-sandbox/demos/agentsandbox-aws-ec2-infra-setup.md) first.
+
+This demo file assumes all of the following already exist:
+
+- the three EC2 instances
+- the SSH key pair and security group
+- exported `FLEET_PUBLIC_IP`, `FLEET_PRIVATE_IP`, `HOST1_PUBLIC_IP`, `HOST1_PRIVATE_IP`, `HOST2_PUBLIC_IP`, and `HOST2_PRIVATE_IP`
+- installed `moat`, `moatctl`, `moat-worker`, `moat-fleet`, `firecracker`, `vmlinux`, and `rootfs.ext4`
+- the dedicated EBS volume mounted at `/var/lib/moat` on both hosts
+
+If you open a new local shell before running Demo 3, re-export the private IP variables first.
+
+---
+
 ### What This Runbook Covers
 
 1. Prepare host storage on AWS
@@ -48,6 +64,18 @@ Before running the demos, make sure:
 - `jq` is installed on the fleet and host VMs
 
 All configs below assume `/var/lib/moat` is backed by a dedicated EBS volume.
+
+---
+
+### Terminal Layout
+
+Use separate SSH sessions while running the demos:
+
+- one session to `moat-fleet`
+- one session to `moat-host1`
+- one session to `moat-host2`
+
+When a step starts `moat` or `moat-fleet` in the foreground, leave that process running in its current SSH session and open another SSH session to the same machine for the next commands.
 
 ---
 

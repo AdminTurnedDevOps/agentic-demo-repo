@@ -163,19 +163,63 @@ aws ec2 describe-instances \
 Export the public and private IPs you will use later:
 
 ```bash
-export FLEET_PUBLIC_IP=...
-export FLEET_PRIVATE_IP=...
-export HOST1_PUBLIC_IP=...
-export HOST1_PRIVATE_IP=...
-export HOST2_PUBLIC_IP=...
-export HOST2_PRIVATE_IP=...
+export FLEET_PUBLIC_IP=$(aws ec2 describe-instances \
+  --region "$AWS_REGION" \
+  --filters "Name=tag:Name,Values=moat-fleet" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].PublicIpAddress' \
+  --output text)
+
+export FLEET_PRIVATE_IP=$(aws ec2 describe-instances \
+  --region "$AWS_REGION" \
+  --filters "Name=tag:Name,Values=moat-fleet" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].PrivateIpAddress' \
+  --output text)
+
+export HOST1_PUBLIC_IP=$(aws ec2 describe-instances \
+  --region "$AWS_REGION" \
+  --filters "Name=tag:Name,Values=moat-host1" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].PublicIpAddress' \
+  --output text)
+
+export HOST1_PRIVATE_IP=$(aws ec2 describe-instances \
+  --region "$AWS_REGION" \
+  --filters "Name=tag:Name,Values=moat-host1" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].PrivateIpAddress' \
+  --output text)
+
+export HOST2_PUBLIC_IP=$(aws ec2 describe-instances \
+  --region "$AWS_REGION" \
+  --filters "Name=tag:Name,Values=moat-host2" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].PublicIpAddress' \
+  --output text)
+
+export HOST2_PRIVATE_IP=$(aws ec2 describe-instances \
+  --region "$AWS_REGION" \
+  --filters "Name=tag:Name,Values=moat-host2" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].PrivateIpAddress' \
+  --output text)
 ```
 
-SSH pattern:
+Print the values to verify them:
 
 ```bash
-ssh -i "${DEMO_NAME}.pem" ubuntu@"$HOST1_PUBLIC_IP"
+printf 'FLEET_PUBLIC_IP=%s\n' "$FLEET_PUBLIC_IP"
+printf 'FLEET_PRIVATE_IP=%s\n' "$FLEET_PRIVATE_IP"
+printf 'HOST1_PUBLIC_IP=%s\n' "$HOST1_PUBLIC_IP"
+printf 'HOST1_PRIVATE_IP=%s\n' "$HOST1_PRIVATE_IP"
+printf 'HOST2_PUBLIC_IP=%s\n' "$HOST2_PUBLIC_IP"
+printf 'HOST2_PRIVATE_IP=%s\n' "$HOST2_PRIVATE_IP"
 ```
+
+Open one SSH session to each machine:
+
+```bash
+ssh -i "${DEMO_NAME}.pem" ubuntu@"$FLEET_PUBLIC_IP"
+ssh -i "${DEMO_NAME}.pem" ubuntu@"$HOST1_PUBLIC_IP"
+ssh -i "${DEMO_NAME}.pem" ubuntu@"$HOST2_PUBLIC_IP"
+```
+
+Keep these exported values in your local shell. The demo runbook uses the private IPs later for the fleet configs.
 
 ---
 
