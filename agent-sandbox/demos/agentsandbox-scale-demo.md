@@ -2,26 +2,26 @@
 
 This is an AWS-first runbook for running `moat` with the Firecracker backend at demo scale.
 
-The goal is to get a real setup running with the current repo layout and current CLI/config surface:
+This version reflects the working path we verified on AWS on April 16, 2026:
 
-- 1 fleet controller VM
-- 2 `moat` host VMs
-- Firecracker-backed sandboxes on the hosts
-- optional fleet failover across both hosts
+- `moat-fleet`: `t3.large`
+- `moat-host1`: `m8i.2xlarge`
+- `moat-host2`: `m8i.2xlarge`
+- dedicated `30 GiB` gp3 EBS volume on each host mounted at `/var/lib/moat`
+- Firecracker configs using `workspace_storage: "block"`
+- `data_dir` and `base_dir` moved onto the EBS volume
 
-If you want the highest-probability path, use AWS bare metal for the two `moat` hosts. If you want a cheaper demo, AWS now supports nested virtualization on `C8i`, `M8i`, and `R8i`; the runbook below uses those families.
+If you want the highest-probability cloud path for nested virtualization with `moat`, AWS is the best first target.
 
 ---
 
-### What This Demo Covers
+### What This Runbook Covers
 
-1. Provision 3 EC2 instances on AWS
-2. Build and install current `moat`, `moatctl`, `moat-worker`, and `moat-fleet`
-3. Build a Firecracker rootfs and install the Firecracker kernel/binary
-4. Run a single-host Firecracker demo
-5. Run a two-host fleet demo
-
-This document intentionally avoids the stale config fields and flags from older versions of `moat`.
+1. Prepare host storage on AWS
+2. Run a single-host Firecracker demo
+3. Run a single-host oversubscription demo
+4. Run a two-host fleet demo
+5. Clean up each demo after testing
 
 ---
 
@@ -33,266 +33,21 @@ This document intentionally avoids the stale config fields and flags from older 
 | `moat-host1` | `m8i.2xlarge` or larger | `moat` + Firecracker |
 | `moat-host2` | `m8i.2xlarge` or larger | `moat` + Firecracker |
 
-Use M8i, C8i, or R8i instances for the hosts — these support nested virtualization (KVM) by default. For maximum confidence, use bare-metal EC2.
+Use `M8i`, `C8i`, or `R8i` instances for the hosts. For maximum confidence, use bare-metal EC2.
 
 ---
 
-### AWS Prerequisites
+### Prerequisites
 
-- AWS CLI configured for the target account and region
-- A default VPC/subnet, or an existing VPC/subnet you want to reuse
-- An Ubuntu x86_64 AMI ID for your region
+Before running the demos, make sure:
 
-Set a few variables locally before creating instances:
+- the three EC2 instances exist and are reachable over SSH
+- current `moat`, `moatctl`, `moat-worker`, and `moat-fleet` binaries are installed
+- `firecracker` is installed on both host VMs
+- `/var/lib/moat/vmlinux` and `/var/lib/moat/rootfs.ext4` exist on both host VMs
+- `jq` is installed on the fleet and host VMs
 
-```bash
-export AWS_REGION=us-east-1
-export AMI_ID=ami-xxxxxxxxxxxxxxxxx   # Ubuntu 22.04 x86_64 for your region
-export DEMO_NAME=moat-demo
-```
-
-If you want to use the default VPC:
-
-```bash
-export VPC_ID=$(aws ec2 describe-vpcs \
-  --region "$AWS_REGION" \
-  --filters Name=isDefault,Values=true \
-  --query 'Vpcs[0].VpcId' \
-  --output text)
-
-export SUBNET_ID=$(aws ec2 describe-subnets \
-  --region "$AWS_REGION" \
-  --filters Name=vpc-id,Values="$VPC_ID" Name=default-for-az,Values=true \
-  --query 'Subnets[0].SubnetId' \
-  --output text)
-```
-
----
-
-### Create Key Pair, Security Group, and Instance Profile
-
-Create an SSH key pair:
-
-```bash
-aws ec2 create-key-pair \
-  --region "$AWS_REGION" \
-  --key-name "$DEMO_NAME-key" \
-  --query 'KeyMaterial' \
-  --output text > "${DEMO_NAME}.pem"
-
-chmod 600 "${DEMO_NAME}.pem"
-```
-
-Create a security group:
-
-```bash
-export SG_ID=$(aws ec2 create-security-group \
-  --region "$AWS_REGION" \
-  --group-name "$DEMO_NAME-sg" \
-  --description "moat Firecracker demo" \
-  --vpc-id "$VPC_ID" \
-  --query 'GroupId' \
-  --output text)
-```
-
-Allow SSH from anywhere and allow east-west traffic between all demo nodes:
-
-```bash
-aws ec2 authorize-security-group-ingress \
-  --region "$AWS_REGION" \
-  --group-id "$SG_ID" \
-  --protocol tcp \
-  --port 22 \
-  --cidr "0.0.0.0/0"
-
-aws ec2 authorize-security-group-ingress \
-  --region "$AWS_REGION" \
-  --group-id "$SG_ID" \
-  --protocol -1 \
-  --source-group "$SG_ID"
-```
-
-Create an instance profile for the two `moat` hosts. This gives them AWS credentials so the fleet controller can authenticate them with the AWS provider:
-
-```bash
-cat > trust-policy.json <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": { "Service": "ec2.amazonaws.com" },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-EOF
-
-aws iam create-role \
-  --role-name "${DEMO_NAME}-host-role" \
-  --assume-role-policy-document file://trust-policy.json
-
-aws iam create-instance-profile \
-  --instance-profile-name "${DEMO_NAME}-host-profile"
-
-aws iam add-role-to-instance-profile \
-  --instance-profile-name "${DEMO_NAME}-host-profile" \
-  --role-name "${DEMO_NAME}-host-role"
-```
-
----
-
-### Launch the Fleet VM
-
-```bash
-aws ec2 run-instances \
-  --region "$AWS_REGION" \
-  --image-id "$AMI_ID" \
-  --instance-type t3.large \
-  --key-name "$DEMO_NAME-key" \
-  --security-group-ids "$SG_ID" \
-  --subnet-id "$SUBNET_ID" \
-  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=moat-fleet}]' \
-  --count 1
-```
-
-### Launch the Two Firecracker Hosts
-
-Use M8i, C8i, or R8i instances with nested virtualization explicitly enabled:
-
-```bash
-for host in moat-host1 moat-host2; do
-  aws ec2 run-instances \
-    --region "$AWS_REGION" \
-    --image-id "$AMI_ID" \
-    --instance-type m8i.2xlarge \
-    --cpu-options NestedVirtualization=enabled \
-    --iam-instance-profile Name="${DEMO_NAME}-host-profile" \
-    --key-name "$DEMO_NAME-key" \
-    --security-group-ids "$SG_ID" \
-    --subnet-id "$SUBNET_ID" \
-    --associate-public-ip-address \
-    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$host}]" \
-    --count 1
-done
-```
-
-> **Note:** The `--cpu-options NestedVirtualization=enabled` flag requires AWS CLI v2.34.30 or newer. Run `aws --version` to check, and `brew upgrade awscli` (macOS) or `pip install --upgrade awscli` to update.
-
-Get the instance IDs and IP addresses:
-
-```bash
-aws ec2 describe-instances \
-  --region "$AWS_REGION" \
-  --filters "Name=tag:Name,Values=moat-fleet,moat-host1,moat-host2" "Name=instance-state-name,Values=running" \
-  --query 'Reservations[].Instances[].{Name:Tags[?Key==`Name`]|[0].Value,InstanceId:InstanceId,PrivateIp:PrivateIpAddress,PublicIp:PublicIpAddress,Type:InstanceType}' \
-  --output table
-```
-
-Export the public and private IPs you will use later:
-
-```bash
-export FLEET_PUBLIC_IP=...
-export FLEET_PRIVATE_IP=...
-export HOST1_PUBLIC_IP=...
-export HOST1_PRIVATE_IP=...
-export HOST2_PUBLIC_IP=...
-export HOST2_PRIVATE_IP=...
-```
-
-SSH pattern:
-
-```bash
-ssh -i "${DEMO_NAME}.pem" ubuntu@"$HOST1_PUBLIC_IP"
-```
-
----
-
-### Install Base Dependencies
-
-Run this on all three machines:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  build-essential \
-  pkg-config \
-  libssl-dev \
-  musl-tools \
-  git \
-  unzip \
-  jq \
-  curl
-```
-
-Install `protoc` 25.1 or newer on all machines where you will build Rust or Go binaries:
-
-```bash
-PROTOC_VERSION=25.1
-curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
-sudo unzip -o "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d /usr/local
-rm -f "protoc-${PROTOC_VERSION}-linux-x86_64.zip"
-```
-
----
-
-### Build and Install `moat` on the Two Firecracker Hosts
-
-Run this on `moat-host1` and `moat-host2`:
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-
-rustup target add x86_64-unknown-linux-musl
-
-git clone https://github.com/solo-io/moat.git
-cd moat
-
-cargo build --release -p moat -p moatctl
-cargo build --release -p moat-worker --target x86_64-unknown-linux-musl
-
-sudo install -m 0755 target/release/moat /usr/local/bin/moat
-sudo install -m 0755 target/release/moatctl /usr/local/bin/moatctl
-sudo install -m 0755 target/x86_64-unknown-linux-musl/release/moat-worker /usr/local/bin/moat-worker
-```
-
-Install Firecracker on the two hosts:
-
-```bash
-FIRECRACKER_VERSION=1.6.0
-curl -L -o firecracker.tgz \
-  "https://github.com/firecracker-microvm/firecracker/releases/download/v${FIRECRACKER_VERSION}/firecracker-v${FIRECRACKER_VERSION}-x86_64.tgz"
-tar -xzf firecracker.tgz
-sudo install -m 0755 "release-v${FIRECRACKER_VERSION}-x86_64/firecracker-v${FIRECRACKER_VERSION}-x86_64" /usr/local/bin/firecracker
-sudo install -m 0755 "release-v${FIRECRACKER_VERSION}-x86_64/jailer-v${FIRECRACKER_VERSION}-x86_64" /usr/local/bin/jailer
-firecracker --version
-```
-
-Build the Firecracker rootfs:
-
-```bash
-cd ~/moat
-sudo mkdir -p /var/lib/moat
-sudo ./scripts/build-rootfs.sh /var/lib/moat/rootfs.ext4
-```
-
-Install the Firecracker kernel image:
-
-```bash
-curl -fsSL -o /tmp/vmlinux.bin \
-  "https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.5/x86_64/vmlinux-5.10.186"
-sudo mv /tmp/vmlinux.bin /var/lib/moat/vmlinux
-```
-
-Load the host-side vsock modules and verify KVM:
-
-```bash
-sudo modprobe vsock
-sudo modprobe vhost_vsock
-ls -l /dev/kvm
-egrep -wo 'vmx|svm' /proc/cpuinfo | head
-```
+All configs below assume `/var/lib/moat` is backed by a dedicated EBS volume.
 
 ---
 
@@ -304,7 +59,6 @@ Run this on `moat-fleet`:
 sudo apt-get update
 sudo apt-get install -y git jq curl
 
-# Install Go 1.22
 GO_VERSION="1.22.2"
 curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | sudo tar -C /usr/local -xz
 echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
@@ -320,19 +74,29 @@ sudo install -m 0755 moat-fleet /usr/local/bin/moat-fleet
 
 ### Demo 1: Single-Host Firecracker Bring-Up
 
-Use this first on `moat-host1` before adding fleet.
+Demo 1 proves the basic Firecracker bring-up path works on a single host.
 
-Create a current Firecracker config:
+Success means:
+
+- `moat` starts with the Firecracker backend
+- the template VM boots and snapshots successfully
+- cloned sandboxes become `Running` and `ready`
+- `moatctl` can see and manage the sandboxes
+
+On `moat-host1`, create the config:
 
 ```bash
 cat > /tmp/moat-firecracker.json <<'EOF'
 {
   "port": 8080,
   "slots": 10,
+  "data_dir": "/var/lib/moat/state",
+  "base_dir": "/var/lib/moat/base",
   "backend": {
     "firecracker": {
       "kernel_image": "/var/lib/moat/vmlinux",
-      "rootfs": "/var/lib/moat/rootfs.ext4"
+      "rootfs": "/var/lib/moat/rootfs.ext4",
+      "workspace_storage": "block"
     }
   }
 }
@@ -345,22 +109,45 @@ Start `moat`:
 sudo moat serve --config /tmp/moat-firecracker.json --log-format json
 ```
 
-You want to see the host create Firecracker templates during startup. Once the server is up, create a few sandboxes from another shell on the same host:
+From another shell on the same host, create a few sandboxes:
 
 ```bash
 for i in $(seq 1 5); do
-  echo '{}' | moatctl sandbox create -q -
+  echo '{}' | moatctl --url http://localhost:8080 sandbox create -q -
 done
 
-moatctl sandbox list
-moatctl pool resources
+moatctl --url http://localhost:8080 sandbox list
+moatctl --url http://localhost:8080 pool resources
+```
+
+Expected result:
+
+- the startup log shows template creation and snapshot success
+- `moatctl sandbox list` shows the created sandboxes as `Running` and `ready`
+
+Clean up Demo 1 before moving on:
+
+```bash
+moatctl --url http://localhost:8080 --json sandbox list | jq -r '.[].id' | while read -r id; do
+  [ -n "$id" ] || continue
+  moatctl --url http://localhost:8080 sandbox delete --yes "$id"
+done
+
+sudo pkill -f 'moat serve --config /tmp/moat-firecracker.json' || true
+sudo pkill -f '/usr/local/bin/firecracker --api-sock' || true
+for m in $(mount | grep workspace_snapshot_mount | sed -E 's#.* on ([^ ]*workspace_snapshot_mount) type .*#\1#' | sort -r); do
+  sudo umount -l "$m" || true
+done
+sudo rm -rf /var/lib/moat/state/slots/* /var/lib/moat/state/sessions/*
 ```
 
 ---
 
 ### Demo 2: Single-Host Oversubscription
 
-Restart `moat` on `moat-host1` with a physical capacity limit:
+Demo 2 verifies that one host can hold more sandboxes than its configured physical capacity by suspending inactive VMs and restoring them on demand.
+
+On `moat-host1`, restart `moat` with a physical capacity limit:
 
 ```bash
 cat > /tmp/moat-oversubscribe.json <<'EOF'
@@ -368,10 +155,13 @@ cat > /tmp/moat-oversubscribe.json <<'EOF'
   "port": 8080,
   "slots": 10,
   "physical_capacity": 3,
+  "data_dir": "/var/lib/moat/state",
+  "base_dir": "/var/lib/moat/base",
   "backend": {
     "firecracker": {
       "kernel_image": "/var/lib/moat/vmlinux",
-      "rootfs": "/var/lib/moat/rootfs.ext4"
+      "rootfs": "/var/lib/moat/rootfs.ext4",
+      "workspace_storage": "block"
     }
   }
 }
@@ -380,23 +170,45 @@ EOF
 sudo moat serve --config /tmp/moat-oversubscribe.json --log-format json
 ```
 
-Create 10 sandboxes:
+Create ten sandboxes with unique sessions:
 
 ```bash
 for i in $(seq 1 10); do
-  echo "{\"session\":\"sandbox-$i\"}" | moatctl sandbox create -q -
+  echo "{\"session\":\"sandbox-$i\"}" | moatctl --url http://localhost:8080 sandbox create -q -
 done
 
-moatctl sandbox list
-moatctl pool resources
+moatctl --url http://localhost:8080 sandbox list
+moatctl --url http://localhost:8080 pool resources
 ```
 
 Wake one suspended sandbox:
 
 ```bash
-SUSPENDED_ID=$(moatctl --json sandbox list | jq -r '.[] | select(.state=="Suspended") | .id' | head -1)
-moatctl sandbox exec "$SUSPENDED_ID" -- echo "awake"
-moatctl sandbox list
+SUSPENDED_ID=$(moatctl --url http://localhost:8080 --json sandbox list | jq -r '.[] | select(.phase=="suspended") | .id' | head -1)
+moatctl --url http://localhost:8080 sandbox exec "$SUSPENDED_ID" -- echo awake
+moatctl --url http://localhost:8080 sandbox list
+```
+
+Expected result:
+
+- before the wake, only `physical_capacity` sandboxes are running and the rest are suspended
+- the `sandbox exec` wakes the suspended sandbox and prints `awake`
+- after the wake, the target sandbox becomes running and another sandbox may move back to `Suspended` to keep running capacity at `3`
+
+Clean up Demo 2 before moving on:
+
+```bash
+moatctl --url http://localhost:8080 --json sandbox list | jq -r '.[].id' | while read -r id; do
+  [ -n "$id" ] || continue
+  moatctl --url http://localhost:8080 sandbox delete --yes "$id"
+done
+
+sudo pkill -f 'moat serve --config /tmp/moat-oversubscribe.json' || true
+sudo pkill -f '/usr/local/bin/firecracker --api-sock' || true
+for m in $(mount | grep workspace_snapshot_mount | sed -E 's#.* on ([^ ]*workspace_snapshot_mount) type .*#\1#' | sort -r); do
+  sudo umount -l "$m" || true
+done
+sudo rm -rf /var/lib/moat/state/slots/* /var/lib/moat/state/sessions/*
 ```
 
 ---
@@ -441,10 +253,13 @@ cat > /tmp/moat-host1.json <<EOF
 {
   "port": 8080,
   "slots": 10,
+  "data_dir": "/var/lib/moat/state",
+  "base_dir": "/var/lib/moat/base",
   "backend": {
     "firecracker": {
       "kernel_image": "/var/lib/moat/vmlinux",
-      "rootfs": "/var/lib/moat/rootfs.ext4"
+      "rootfs": "/var/lib/moat/rootfs.ext4",
+      "workspace_storage": "block"
     }
   },
   "fleet": {
@@ -462,10 +277,13 @@ cat > /tmp/moat-host2.json <<EOF
 {
   "port": 8080,
   "slots": 10,
+  "data_dir": "/var/lib/moat/state",
+  "base_dir": "/var/lib/moat/base",
   "backend": {
     "firecracker": {
       "kernel_image": "/var/lib/moat/vmlinux",
-      "rootfs": "/var/lib/moat/rootfs.ext4"
+      "rootfs": "/var/lib/moat/rootfs.ext4",
+      "workspace_storage": "block"
     }
   },
   "fleet": {
@@ -496,29 +314,68 @@ done
 moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox list
 ```
 
-To simulate host loss, stop `moat` on one host and watch assignments rebalance:
+Expected result:
+
+- the controller assigns sandboxes across both hosts
+- `moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox list` shows controller-level assignment metadata
+- to inspect runtime state such as `Running` and `ready`, query each host directly with `moatctl --url http://localhost:8080 sandbox list`
+
+To simulate host loss, stop `moat` on one host:
 
 ```bash
-watch -n 1 "moatctl --url http://${FLEET_PRIVATE_IP}:9090 sandbox list"
+sudo pkill -f 'moat serve --config /tmp/moat-host1.json' || true
+```
+
+Then wait for the lease to expire and inspect the controller and surviving host:
+
+```bash
+moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox list
+moatctl --url http://localhost:8080 sandbox list
+```
+
+Create one more sandbox after failover:
+
+```bash
+echo "{\"session\":\"fleet-after-failover\"}" | moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox create -q -
+```
+
+Expected result after host loss:
+
+- after lease expiry and grace period, the controller marks the lost host dead
+- the controller cleans up orphaned sandboxes from the dead host
+- the surviving host keeps serving its existing sandboxes
+- new sandboxes are scheduled onto the surviving host
+
+Clean up Demo 3 after testing:
+
+```bash
+moatctl --url "http://${FLEET_PRIVATE_IP}:9090" --json sandbox list | jq -r '.[].id' | while read -r id; do
+  [ -n "$id" ] || continue
+  moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox delete --yes "$id"
+done
+```
+
+Stop the fleet controller:
+
+```bash
+pkill -f 'moat-fleet -config /tmp/fleet-config.json' || true
+```
+
+Then on each host:
+
+```bash
+sudo pkill -f 'moat serve --config /tmp/moat-host1.json' || true
+sudo pkill -f 'moat serve --config /tmp/moat-host2.json' || true
+sudo pkill -f '/usr/local/bin/firecracker --api-sock' || true
+for m in $(mount | grep workspace_snapshot_mount | sed -E 's#.* on ([^ ]*workspace_snapshot_mount) type .*#\\1#' | sort -r); do
+  sudo umount -l "$m" || true
+done
+sudo rm -rf /var/lib/moat/state/slots/* /var/lib/moat/state/sessions/*
 ```
 
 ---
 
-### Notes on Current `moat` Surface
-
-Use these names in configs and commands:
-
-- `kernel_image`, not `kernel`
-- `physical_capacity`, not `physical_slots`
-- `listen_addr`, not `listen`
-- `database_url` if you want persistent fleet storage
-- `moat-fleet -config ...`, not `moat-fleet serve --config ...`
-- host-side fleet config lives under `fleet.address`
-- `moatctl pool resources`, not `moatctl pool status`
-
----
-
-### Cleanup
+### Final Cleanup
 
 Terminate the three EC2 instances:
 
@@ -544,4 +401,16 @@ aws iam delete-role \
 aws ec2 delete-security-group \
   --region "$AWS_REGION" \
   --group-id "$SG_ID"
+```
+
+Delete the two data volumes after the instances are terminated:
+
+```bash
+aws ec2 delete-volume \
+  --region "$AWS_REGION" \
+  --volume-id "$HOST1_DATA_VOL"
+
+aws ec2 delete-volume \
+  --region "$AWS_REGION" \
+  --volume-id "$HOST2_DATA_VOL"
 ```
