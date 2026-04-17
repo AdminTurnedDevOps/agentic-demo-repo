@@ -373,7 +373,8 @@ ID                                    STATE    PHASE  MODE  NET   ERROR
 3ed821dc-2999-432e-b508-fc9be5fab666  Running  ready  Vm    true       
 b1d506dc-89c7-4a6a-a183-d2cf4fce0ffb  Running  ready  Vm    true       
 dbb2ef82-3947-4bbc-ade1-bb682782946b  Running  ready  Vm    true       
-ddee7fef-589b-4eea-b36a-f36f28daddfd  Running  ready  Vm    true       
+ddee7fef-589b-4eea-b36a-f36f28daddfd  Running  ready  Vm    true      
+ 
 ubuntu@ip-172-31-64-179:~$ moatctl --url "http://${HOST2_PRIVATE_IP}:8080" sandbox list
 ID                                    STATE    PHASE  MODE  NET   ERROR
 386b255f-2375-4251-b5e9-86f105b7487b  Running  ready  Vm    true       
