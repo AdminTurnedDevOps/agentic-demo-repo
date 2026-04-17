@@ -93,10 +93,12 @@ echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
 export PATH=$PATH:/usr/local/go/bin
 
 git clone https://github.com/solo-io/moat.git
-cd moat/fleet
-go build -o moat-fleet ./cmd/moat-fleet
+cd moat
+go build -o moat-fleet ./fleet/cmd/moat-fleet
 sudo install -m 0755 moat-fleet /usr/local/bin/moat-fleet
 ```
+
+Before running Demo 3, make sure `moatctl` is also installed on `moat-fleet`. The infra setup file includes the copy/install step that reuses the host-built `moatctl` binary.
 
 ---
 
@@ -243,6 +245,10 @@ sudo rm -rf /var/lib/moat/state/slots/* /var/lib/moat/state/sessions/*
 
 ### Demo 3: Fleet on AWS
 
+Provdes out fleeted multi-host behavior.
+
+Goal: Validate that a moat-fleet controller can manage multiple AWS moat hosts, distribute sandbox assignments across them, and continue scheduling new sandboxes when one host is lost.
+
 This uses the current fleet controller config format and current host-side `fleet.address` config.
 
 Get your AWS account ID locally:
@@ -254,13 +260,17 @@ export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output tex
 On `moat-fleet`, create the fleet config:
 
 ```bash
+export DEMO_NAME=moat-demo
+```
+
+```bash
 cat > /tmp/fleet-config.json <<EOF
 {
   "listen_addr": "0.0.0.0:9090",
   "auth": {
     "provider": "aws",
     "aws": {
-      "allowed_account_ids": ["${AWS_ACCOUNT_ID}"],
+      "allowed_account_ids": [""],
       "allowed_arn_patterns": ["arn:aws:sts::*:assumed-role/${DEMO_NAME}-host-role/*"]
     }
   }
@@ -272,6 +282,14 @@ Start the fleet controller:
 
 ```bash
 moat-fleet -config /tmp/fleet-config.json
+```
+
+In the `moat-fleet`, `moat-host1` and `moat-host2` SSH sessions, re-export the private IP variables before creating the host configs. These variables come from the infra setup file, but they are not automatically present inside a new remote shell:
+
+```bash
+export FLEET_PRIVATE_IP="..."
+export HOST1_PRIVATE_IP="..."
+export HOST2_PRIVATE_IP="..."
 ```
 
 On `moat-host1`, create the host config:
@@ -332,14 +350,38 @@ sudo moat serve --config /tmp/moat-host1.json --log-format json
 sudo moat serve --config /tmp/moat-host2.json --log-format json
 ```
 
-Create sandboxes through the fleet controller from `moat-fleet`:
+Create sandboxes through the fleet controller from `moat-fleet` using the fleet VM's local `moatctl`:
 
 ```bash
 for i in $(seq 1 10); do
   echo "{\"session\":\"fleet-$i\"}" | moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox create -q -
 done
+```
 
-moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox list
+Check that the sandboxes have been deployed across moat host 1 and moat host 2:
+
+```
+moatctl --url "http://${HOST1_PRIVATE_IP}:8080" sandbox list
+moatctl --url "http://${HOST2_PRIVATE_IP}:8080" sandbox list
+```
+
+Output will look similar to the below:
+```
+ubuntu@ip-172-31-64-179:~$  moatctl --url "http://${HOST1_PRIVATE_IP}:8080" sandbox list
+ID                                    STATE    PHASE  MODE  NET   ERROR
+575c5e82-460b-4b3a-823f-ce77a5e0b79a  Running  ready  Vm    true       
+3ed821dc-2999-432e-b508-fc9be5fab666  Running  ready  Vm    true       
+b1d506dc-89c7-4a6a-a183-d2cf4fce0ffb  Running  ready  Vm    true       
+dbb2ef82-3947-4bbc-ade1-bb682782946b  Running  ready  Vm    true       
+ddee7fef-589b-4eea-b36a-f36f28daddfd  Running  ready  Vm    true       
+ubuntu@ip-172-31-64-179:~$ moatctl --url "http://${HOST2_PRIVATE_IP}:8080" sandbox list
+ID                                    STATE    PHASE  MODE  NET   ERROR
+386b255f-2375-4251-b5e9-86f105b7487b  Running  ready  Vm    true       
+8405e09b-f888-483d-83a8-ee103e8cecdf  Running  ready  Vm    true       
+ee1294a7-f3cb-4ea9-8b71-c3c516c416f7  Running  ready  Vm    true       
+02ad636d-d501-49a7-88fe-c84488a0ef54  Running  ready  Vm    true       
+219fdcea-abb4-432b-96c5-8f3ec39db064  Running  ready  Vm    true       
+ubuntu@ip-172-31-64-179:~$ 
 ```
 
 Expected result:

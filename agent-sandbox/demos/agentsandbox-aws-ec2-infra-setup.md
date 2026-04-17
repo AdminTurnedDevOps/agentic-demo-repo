@@ -339,6 +339,27 @@ If you already downloaded `vmlinux` and `rootfs.ext4` before mounting the volume
 
 ---
 
+### Install `moatctl` on the Fleet VM
+
+For Demo 3, the fleet VM needs `moatctl` so it can create sandboxes through the fleet controller from `moat-fleet` itself.
+
+Use the `moatctl` binary already built on `moat-host1` and copy it to the fleet VM from your local machine:
+
+```bash
+scp -i "${DEMO_NAME}.pem" \
+  ubuntu@"$HOST1_PUBLIC_IP":/usr/local/bin/moatctl \
+  /tmp/moatctl
+
+scp -i "${DEMO_NAME}.pem" \
+  /tmp/moatctl \
+  ubuntu@"$FLEET_PUBLIC_IP":/tmp/moatctl
+
+ssh -i "${DEMO_NAME}.pem" ubuntu@"$FLEET_PUBLIC_IP" \
+  'sudo install -m 0755 /tmp/moatctl /usr/local/bin/moatctl && moatctl --help | head'
+```
+
+---
+
 ### Build and Install `moat` on the Two Firecracker Hosts
 
 Run this on `moat-host1` and `moat-host2`:
