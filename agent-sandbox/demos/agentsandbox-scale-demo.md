@@ -374,7 +374,7 @@ ID                                    STATE    PHASE  MODE  NET   ERROR
 b1d506dc-89c7-4a6a-a183-d2cf4fce0ffb  Running  ready  Vm    true       
 dbb2ef82-3947-4bbc-ade1-bb682782946b  Running  ready  Vm    true       
 ddee7fef-589b-4eea-b36a-f36f28daddfd  Running  ready  Vm    true      
- 
+
 ubuntu@ip-172-31-64-179:~$ moatctl --url "http://${HOST2_PRIVATE_IP}:8080" sandbox list
 ID                                    STATE    PHASE  MODE  NET   ERROR
 386b255f-2375-4251-b5e9-86f105b7487b  Running  ready  Vm    true       
@@ -395,27 +395,18 @@ To simulate host loss, stop `moat` on one host:
 
 ```bash
 sudo pkill -f 'moat serve --config /tmp/moat-host1.json' || true
-```
+``` d
 
-Then wait for the lease to expire and inspect the controller and surviving host:
-
-```bash
-moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox list
-moatctl --url http://localhost:8080 sandbox list
-```
-
-Create one more sandbox after failover:
+Create one more sandbox after failover to ensure scheduling on the surviving host:
 
 ```bash
 echo "{\"session\":\"fleet-after-failover\"}" | moatctl --url "http://${FLEET_PRIVATE_IP}:9090" sandbox create -q -
 ```
 
-Expected result after host loss:
-
-- after lease expiry and grace period, the controller marks the lost host dead
-- the controller cleans up orphaned sandboxes from the dead host
-- the surviving host keeps serving its existing sandboxes
-- new sandboxes are scheduled onto the surviving host
+Confirm that it was scheduled:
+```
+moatctl --url "http://${HOST2_PRIVATE_IP}:8080" sandbox list
+```
 
 Clean up Demo 3 after testing:
 
