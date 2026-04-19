@@ -5,7 +5,7 @@ from model.load import load_model
 app = BedrockAgentCoreApp()
 log = app.logger
 
-# Agent Gateway is used as the model endpoint, so no MCP client is registered here.
+# Agentgateway is used as the model endpoint, so no MCP client is registered here.
 mcp_clients = []
 
 # Define a collection of tools used by the model

@@ -5,7 +5,7 @@ from bedrock_agentcore.identity.auth import requires_api_key
 
 IDENTITY_PROVIDER_NAME = "testagwAnthropic"
 IDENTITY_ENV_VAR = "AGENTCORE_CREDENTIAL_TESTAGWANTHROPIC"
-GATEWAY_URL = "http://13.83.164.82:8082/anthropic"
+GATEWAY_URL = "http://20.245.132.78:8082/anthropic"
 
 
 @requires_api_key(provider_name=IDENTITY_PROVIDER_NAME)
@@ -30,7 +30,7 @@ def _get_api_key() -> str:
 
 
 def load_model() -> OpenAIModel:
-    """Get an OpenAI-compatible model client routed through Agent Gateway."""
+    """Get an OpenAI-compatible model client routed through agentgateway."""
     return OpenAIModel(
         client_args={
             "api_key": _get_api_key(),
