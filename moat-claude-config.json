@@ -1,0 +1,18 @@
+{
+  "port": 8080,
+  "slots": 12,
+  "egress": {
+    "hosts": [
+      {
+        "host": "api.anthropic.com",
+        "ports": [443],
+        "headers": [
+          {
+            "name": "x-api-key",
+            "value": "${ANTHROPIC_API_KEY}"
+          }
+        ]
+      }
+    ]
+  }
+}

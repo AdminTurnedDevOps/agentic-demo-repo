@@ -265,16 +265,16 @@ export DEMO_NAME=moat-demo
 
 ```bash
 cat > /tmp/fleet-config.json <<EOF
-{
-  "listen_addr": "0.0.0.0:9090",
-  "auth": {
-    "provider": "aws",
-    "aws": {
-      "allowed_account_ids": [""],
-      "allowed_arn_patterns": ["arn:aws:sts::*:assumed-role/${DEMO_NAME}-host-role/*"]
+  {
+    "listen_addr": "0.0.0.0:9090",
+    "auth": {
+      "provider": "aws",
+      "aws": {
+        "allowed_account_ids": [""],
+        "allowed_arn_patterns": ["arn:aws:sts::*:assumed-role/moat-demo-host-role/*"]
+      }
     }
   }
-}
 EOF
 ```
 
@@ -395,7 +395,7 @@ To simulate host loss, stop `moat` on one host:
 
 ```bash
 sudo pkill -f 'moat serve --config /tmp/moat-host1.json' || true
-``` d
+``` 
 
 Create one more sandbox after failover to ensure scheduling on the surviving host:
 
