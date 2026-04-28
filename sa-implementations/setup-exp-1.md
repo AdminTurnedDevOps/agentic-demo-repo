@@ -286,7 +286,69 @@ curl "$INGRESS_GW_ADDRESS:8082/anthropic" -H content-type:application/json -H "a
 
 ## Switching Model Providers
 
-Ability to switch providers without client change based on price/performance
+Docs: https://docs.solo.io/agentgateway/2.3.x/llm/failover/
+
+The key in the example below is the `providers` parmater. You can think of them like "first, second, third, etc.". If `gpt-4.1` fails (provider block 1), it'll fail over the `gpt-5.1` (provider block 2)
+
+```
+kubectl apply -f- <<EOF
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: model-failover
+  namespace: agentgateway-system
+spec:
+  ai:
+    groups:
+      - providers:
+          - name: openai-gpt-41
+            openai:
+              model: gpt-4.1
+            policies:
+              auth:
+                secretRef:
+                  name: openai-secret
+      - providers:
+          - name: openai-gpt-51
+            openai:
+              model: gpt-5.1
+            policies:
+              auth:
+                secretRef:
+                  name: openai-secret
+      - providers:
+          - name: openai-gpt-3-5-turbo
+            openai:
+              model: gpt-3.5-turbo
+            policies:
+              auth:
+                secretRef:
+                  name: openai-secret
+EOF
+```
+
+The way that the actual failover occurs based on things like failures and performance is with an `EnterpriseAgentgatewayPolic`. In this example, its based off of failures or rate limit responses.
+
+```
+kubectl apply -f- <<EOF
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: model-failover-health
+  namespace: agentgateway-system
+spec:
+  targetRefs:
+  - group: agentgateway.dev
+    kind: AgentgatewayBackend
+    name: model-failover
+  backend:
+    health:
+      unhealthyCondition: "response.code >= 500 || response.code == 429"
+      eviction:
+        duration: 10s
+        consecutiveFailures: 1
+EOF
+```
 
 ## Agentgateway Direct To On-Prem
 
