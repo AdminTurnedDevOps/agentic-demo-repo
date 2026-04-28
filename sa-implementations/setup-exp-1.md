@@ -32,6 +32,8 @@ export COPILOT_MODEL=claude-opus-4-7
 copilot
 ```
 
+---
+
 ## Microsoft Foundry w/ Agentgateway
 
 ```
@@ -160,6 +162,8 @@ curl "$INGRESS_GW_ADDRESS:8088/azureopenai" -v -H content-type:application/json 
 
 ![](images/route-to-foundry.png)
 
+---
+
 ## Agentgateway Direct To Anthropic
 
 ```
@@ -284,6 +288,8 @@ curl "$INGRESS_GW_ADDRESS:8082/anthropic" -H content-type:application/json -H "a
 }' | jq
 ```
 
+---
+
 ## Switching Model Providers
 
 Docs: https://docs.solo.io/agentgateway/2.3.x/llm/failover/
@@ -350,13 +356,19 @@ spec:
 EOF
 ```
 
+---
+
 ## Agentgateway Direct To On-Prem
 
 1. Llama as an example
 
+---
+
 ## Traces
 1. From agentic runtime to llm provider
 2. From agentic runtime to mcp server
+
+---
 
 ## Agentic Security
 1. Rate Limiting
@@ -365,10 +377,16 @@ EOF
 4. Prompt guards
 5. OBO (entra)
 
+---
+
 ## Performance/Benchmarks
+
+---
 
 ## Agents
 1. 1-2 business Agents
+
+---
 
 ## MCP Server & Security
 
@@ -376,11 +394,3 @@ EOF
 2. Control of MCP Server tools (which can be used, which can't be used, and which need auth)
 3. Respect existing OIDC / AD controls
 4. Need-to-know access / no leakage
-
-
-## Target Architecture
-1. Where Agentgateway sits relative to Kubernetes
-2. Where Agentgateway sits relative to firewalls
-3. Where Agentgateway sits relative to external providers
-4. Where Agentgateway sits relative to MCP servers
-5. Hybrid path across on-prem and cloud providers
