@@ -584,7 +584,7 @@ spec:
 EOF
 ```
 
-12. Test connectivity to Llama through agentgateway. Note that responses may be slower than cloud-hosted models depending on your node's compute resources.
+12. Test connectivity to Llama through agentgateway.
 
 ```
 curl "$INGRESS_GW_ADDRESS:8084/llama" -H content-type:application/json -d '{
