@@ -379,10 +379,6 @@ EOF
 
 ---
 
-## Performance/Benchmarks
-
----
-
 ## Agents
 1. 1-2 business Agents
 
@@ -394,3 +390,7 @@ EOF
 2. Control of MCP Server tools (which can be used, which can't be used, and which need auth)
 3. Respect existing OIDC / AD controls
 4. Need-to-know access / no leakage
+
+---
+
+## Performance/Benchmarks
