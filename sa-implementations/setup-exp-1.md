@@ -1,5 +1,37 @@
 ## Copilot w/ Agentgateway
 
+Per GitHub docs: 
+```
+GitHub also notes that if the proxy URL starts with https://, that proxy is not supported
+
+https://docs.github.com/copilot/how-tos/personal-settings/configuring-network-settings-for-github-copilot
+```
+
+### In VS Code
+
+1. Open **Settings** on the bottom left (the gear icon)
+2. In the left panel, go to **Application -> Proxy**
+3. Set the Proxy to your agentgateway instance (e.g - `http://AGENTGATEWAY_HOST:8080/anthropic`).
+
+![](images/copilotvscode.png)
+
+https://docs.github.com/en/copilot/how-tos/configure-personal-settings/configure-network-settings
+
+### Copilot CLI
+
+The below configuration gives an example of routing traffic through agentgateway using an Anthropic Model. The port and endpoint will be specified by the `Gateway` and `HTTPRoute` object that you create.
+
+```
+export COPILOT_PROVIDER_TYPE=anthropic
+export COPILOT_PROVIDER_BASE_URL=http://AGENTGATEWAY_HOST:8080/anthropic
+export COPILOT_PROVIDER_API_KEY=dummy
+export COPILOT_MODEL=claude-opus-4-7
+```
+
+```
+copilot
+```
+
 ## Microsoft Foundry w/ Agentgateway
 
 ```
@@ -269,7 +301,7 @@ Ability to switch providers without client change based on price/performance
 2. Audit Logging
 3. AuthN/Z
 4. Prompt guards
-5. OBO
+5. OBO (entra)
 
 ## Performance/Benchmarks
 
