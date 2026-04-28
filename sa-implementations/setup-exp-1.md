@@ -611,6 +611,8 @@ This section covers collecting and viewing traces from an MCP Server and an LLM.
 
 #### Gateway Creation
 
+This section covers an example of using the GitHub Copilot MCP Server. This same flow works regardless of what Streamable HTTP MCP Server you're using. The GitHub Copilot MCP Server was only chosen as its an easy example because all it requires is a GitHub PAT.
+
 1. Create a gateway for the MCP server you deployed
 ```
 kubectl apply -f - <<EOF
@@ -622,7 +624,7 @@ metadata:
   labels:
     app: github-mcp-server
 spec:
-  gatewayClassName: agentgateway
+  gatewayClassName: enterprise-agentgateway
   listeners:
     - name: mcp
       port: 3000
