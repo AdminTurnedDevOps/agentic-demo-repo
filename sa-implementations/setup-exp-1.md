@@ -678,6 +678,7 @@ spec:
 EOF
 ```
 
+4. Create a route
 ```
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
