@@ -360,7 +360,246 @@ EOF
 
 ## Agentgateway Direct To On-Prem
 
-1. Llama as an example
+Please note: this section is for an example of how to route traffic through an on-prem/open model. The idea of routing traffic through an on-prem/open model isn't tied to Ollama only.
+
+This section routes agentgateway to a self-hosted Llama model running on-cluster via Ollama. Because Ollama exposes an OpenAI-compatible API, agentgateway uses the `openai` provider block with a custom `host` pointing to the in-cluster Ollama service.
+
+### Deploy Ollama with Llama3
+
+1. Create the `ollama` namespace
+
+```
+kubectl create ns ollama
+```
+
+2. Deploy Ollama with an init container that pulls the Llama3 model. This step can take several minutes depending on node size and network speed.
+
+```
+kubectl apply -f- <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: ollama
+spec:
+  selector:
+    matchLabels:
+      name: ollama
+  template:
+    metadata:
+      labels:
+        name: ollama
+    spec:
+      initContainers:
+      - name: model-puller
+        image: ollama/ollama:0.6.2
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            ollama serve &
+            sleep 10
+            ollama pull llama3
+            pkill ollama
+        volumeMounts:
+        - name: ollama-data
+          mountPath: /root/.ollama
+        resources:
+          requests:
+            memory: "8Gi"
+          limits:
+            memory: "12Gi"
+      containers:
+      - name: ollama
+        image: ollama/ollama:0.6.2
+        ports:
+        - name: http
+          containerPort: 11434
+          protocol: TCP
+        volumeMounts:
+        - name: ollama-data
+          mountPath: /root/.ollama
+        resources:
+          requests:
+            memory: "8Gi"
+          limits:
+            memory: "12Gi"
+      volumes:
+      - name: ollama-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: ollama
+spec:
+  type: ClusterIP
+  selector:
+    name: ollama
+  ports:
+  - port: 80
+    name: http
+    targetPort: http
+    protocol: TCP
+EOF
+```
+
+3. Wait for the Ollama pod to be ready (the init container needs to finish downloading Llama3)
+
+```
+kubectl rollout status deployment/ollama -n ollama --timeout=600s
+```
+
+4. Confirm the model was downloaded
+
+```
+kubectl exec -n ollama deployment/ollama -- ollama list
+```
+
+You should see output similar to:
+```
+NAME             ID              SIZE      MODIFIED
+llama3:latest    365c0bd3c000    4.7 GB    About a minute ago
+```
+
+### Route Agentgateway to Ollama
+
+5. Set a placeholder API key. The OpenAI-compatible API spec requires a secret even though Ollama does not use one.
+
+```
+export OLLAMA_PLACEHOLDER_KEY="placeholder"
+```
+
+6. Create a Gateway for the on-prem Llama route
+
+```
+kubectl apply -f- <<EOF
+kind: Gateway
+apiVersion: gateway.networking.k8s.io/v1
+metadata:
+  name: agentgateway-llama-route
+  namespace: agentgateway-system
+  labels:
+    app: agentgateway-llama-route
+spec:
+  gatewayClassName: enterprise-agentgateway
+  listeners:
+  - protocol: HTTP
+    port: 8084
+    name: http
+    allowedRoutes:
+      namespaces:
+        from: All
+EOF
+```
+
+7. Capture the LB IP of the service
+
+```
+export INGRESS_GW_ADDRESS=$(kubectl get svc -n agentgateway-system agentgateway-llama-route -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
+echo $INGRESS_GW_ADDRESS
+```
+
+8. Create a placeholder secret (required by the OpenAI provider spec)
+
+```
+kubectl apply -f- <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ollama-secret
+  namespace: agentgateway-system
+  labels:
+    app: agentgateway-llama-route
+type: Opaque
+stringData:
+  Authorization: $OLLAMA_PLACEHOLDER_KEY
+EOF
+```
+
+9. Create the `AgentgatewayBackend` pointing to the in-cluster Ollama service. The `openai` provider block is used because Ollama exposes an OpenAI-compatible API.
+
+```
+kubectl apply -f- <<EOF
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  labels:
+    app: agentgateway-llama-route
+  name: llama-backend
+  namespace: agentgateway-system
+spec:
+  ai:
+    groups:
+    - providers:
+      - name: ollama-llama3
+        host: ollama.ollama.svc.cluster.local
+        port: 80
+        openai:
+          model: "llama3:latest"
+        policies:
+          auth:
+            secretRef:
+              name: ollama-secret
+EOF
+```
+
+10. Verify the backend was created
+
+```
+kubectl get agentgatewaybackend -n agentgateway-system
+```
+
+11. Create the HTTPRoute to expose the Llama endpoint
+
+```
+kubectl apply -f- <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llama
+  namespace: agentgateway-system
+  labels:
+    app: agentgateway-llama-route
+spec:
+  parentRefs:
+    - name: agentgateway-llama-route
+      namespace: agentgateway-system
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /llama
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /v1/chat/completions
+    backendRefs:
+    - name: llama-backend
+      namespace: agentgateway-system
+      group: agentgateway.dev
+      kind: AgentgatewayBackend
+EOF
+```
+
+12. Test connectivity to Llama through agentgateway. Note that responses may be slower than cloud-hosted models depending on your node's compute resources.
+
+```
+curl "$INGRESS_GW_ADDRESS:8084/llama" -H content-type:application/json -d '{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a skilled cloud-native network engineer."
+    },
+    {
+      "role": "user",
+      "content": "What is Istio Ambient Mesh?"
+    }
+  ]
+}' | jq
+```
 
 ---
 
