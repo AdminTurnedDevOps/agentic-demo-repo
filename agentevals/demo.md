@@ -1,4 +1,4 @@
-# agentevals — Three Production-Grade Demos
+# agentevals: Three Production-Grade Demos
 
 Three self-contained demos that exercise the full power of `agentevals` across two different agents (a Wikipedia-backed research agent for Demo 1, and a Kubernetes-troubleshooting agent against a real AKS cluster for Demos 2 and 3). The contrast across demos is the eval workflow, not the agent.
 
