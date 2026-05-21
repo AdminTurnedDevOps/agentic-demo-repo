@@ -1,0 +1,49 @@
+# Four evaluators, three different runtimes:
+#
+# 1. tool_trajectory_avg_score (builtin) — sanity check that the agent calls
+#    the expected tools in order.
+#
+# 2. hallucination_judge (Python LLM-as-judge) — calls OpenAI from inside the
+#    evaluator subprocess. Auto-venv kicks in because evaluators/requirements.txt
+#    sits next to the .py file.
+#
+# 3. citation_correctness (JavaScript / Node) — pure stdin/stdout JSON; no SDK
+#    needed. Demonstrates that any language with a JSON parser is supported.
+#
+# 4. tone_check (OpenAI Evals API delegation) — agentevals creates an ephemeral
+#    OpenAI Evals API eval, submits the agent's actual response, and reads back
+#    a pass/fail label. The agent's response never leaves the OpenAI stack;
+#    your local container only orchestrates.
+
+evaluators:
+  - name: tool_trajectory_avg_score
+    type: builtin
+    trajectory_match_type: IN_ORDER
+    threshold: 0.9
+
+  - name: hallucination_judge
+    type: code
+    path: ./evaluators/hallucination_judge.py
+    threshold: 0.85
+    timeout: 60
+    config:
+      judge_model: gpt-4o-mini
+
+  - name: citation_correctness
+    type: code
+    path: ./evaluators/citation_correctness.js
+    threshold: 0.7
+
+  - name: tone_check
+    type: openai_eval
+    grader:
+      type: label_model
+      model: gpt-4o-mini
+      input:
+        - role: system
+          content: "Classify the agent's response as 'professional' if it reads like a calm SRE writing a diagnosis (no exclamation marks, no anthropomorphic apologies, no hedging like 'I think'), otherwise 'unprofessional'."
+        - role: user
+          content: "{{ item.actual_response }}"
+      labels: [professional, unprofessional]
+      passing_labels: [professional]
+    threshold: 1.0

@@ -1,0 +1,54 @@
+{
+  "eval_set_id": "k8s-troubleshooter-evaluator-deepdive-v2",
+  "name": "K8s troubleshooter — evaluator deep-dive (real cluster)",
+  "description": "Same scenarios as demo 1, scored with three different custom-evaluator architectures (Python LLM judge, JavaScript stdin/stdout, OpenAI Evals API delegation) plus a built-in trajectory check. The point is to demonstrate the plugin contract across language runtimes — not to score the agent harder. Run against the real broken-workloads.yaml cluster.",
+  "eval_cases": [
+    {
+      "eval_id": "nginx-crashloop",
+      "conversation": [
+        {
+          "invocation_id": "inv-nginx-1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "The nginx pods in the prod namespace are crashlooping. What's wrong?"}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "The nginx Deployment pods are in CrashLoopBackOff because the liveness probe at /healthz returns HTTP 404 (the default nginx image does not serve a /healthz path), and the mounted nginx config in /etc/nginx/conf.d/default.conf references an upstream `backend-svc` that does not exist. Fix: either replace the liveness probe with a path nginx actually serves (e.g. `/`) or remove the bad upstream block."}]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"id": "t1", "name": "kubectl_get_pods", "args": {"namespace": "prod"}},
+              {"id": "t2", "name": "kubectl_describe_pod", "args": {"namespace": "prod"}},
+              {"id": "t3", "name": "kubectl_logs", "args": {"namespace": "prod"}}
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "api-imagepullbackoff",
+      "conversation": [
+        {
+          "invocation_id": "inv-api-1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Why can't the api Deployment's pods start in the prod namespace?"}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "The api Deployment's pods are stuck in ImagePullBackOff. The describe events show kubelet failing to pull `ghcr.io/acme/api:v1.7.3-does-not-exist` — the tag does not exist in the registry. Fix: update the image tag in the Deployment to a tag that actually exists."}]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"id": "t1", "name": "kubectl_get_pods", "args": {"namespace": "prod"}},
+              {"id": "t2", "name": "kubectl_describe_pod", "args": {"namespace": "prod"}}
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    }
+  ]
+}

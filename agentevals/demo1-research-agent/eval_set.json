@@ -1,0 +1,76 @@
+{
+  "eval_set_id": "web-research-agent-v1",
+  "name": "Web research agent — citation-aware eval set",
+  "description": "Three factual questions answerable from Wikipedia. The expected final_response is a concrete golden example; the LLM judge handles natural-language variation. Expected tool_uses reference only tool names (Wikipedia article titles are stable enough that arg matching would also work, but we keep args sparse for consistency with the k8s eval sets).",
+  "eval_cases": [
+    {
+      "eval_id": "anthropic-founders",
+      "conversation": [
+        {
+          "invocation_id": "inv-anthropic-1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Who founded Anthropic and what year was the company founded?"}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Anthropic was founded in 2021 by Dario Amodei and Daniela Amodei, both former OpenAI executives (https://en.wikipedia.org/wiki/Anthropic)."}]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"id": "t1", "name": "wikipedia_search", "args": {}},
+              {"id": "t2", "name": "wikipedia_page", "args": {}}
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "linux-kernel-origin",
+      "conversation": [
+        {
+          "invocation_id": "inv-linux-1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Who created the Linux kernel and in what year was it first released?"}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Linus Torvalds released the first version of the Linux kernel in 1991 while he was a student at the University of Helsinki (https://en.wikipedia.org/wiki/Linux_kernel)."}]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"id": "t1", "name": "wikipedia_search", "args": {}},
+              {"id": "t2", "name": "wikipedia_page", "args": {}}
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "opentelemetry-cncf",
+      "conversation": [
+        {
+          "invocation_id": "inv-otel-1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "What is OpenTelemetry and what is its current CNCF maturity level?"}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "OpenTelemetry is an open-source observability framework for generating, collecting, and exporting telemetry data (traces, metrics, and logs) from cloud-native software (https://en.wikipedia.org/wiki/OpenTelemetry). It is an incubating project under the Cloud Native Computing Foundation (https://en.wikipedia.org/wiki/Cloud_Native_Computing_Foundation)."}]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {"id": "t1", "name": "wikipedia_search", "args": {}},
+              {"id": "t2", "name": "wikipedia_page", "args": {}}
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    }
+  ]
+}

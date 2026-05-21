@@ -1,0 +1,99 @@
+# Two intentionally-broken workloads in the `prod` namespace for the
+# k8s-troubleshooter agent to diagnose. Apply once after the cluster comes up:
+#   kubectl apply -f cluster-setup/broken-workloads.yaml
+#
+# Failure modes (matched by the eval set's golden answers):
+#   - nginx Deployment: liveness probe hits /healthz (which the stock nginx
+#     image does not serve, returns 404), AND the mounted config references a
+#     non-existent upstream "backend-svc". Result: CrashLoopBackOff after the
+#     liveness probe fails enough times.
+#   - api  Deployment: image tag does not exist in the registry. Result:
+#     ImagePullBackOff.
+#
+# Both Deployments use generateName-style pod naming, so pod suffixes are
+# random per rollout. The agent's expected tool trajectory references only
+# tool names and the namespace arg — pod names come from `kubectl get pods`
+# at runtime.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-bad-upstream
+  namespace: prod
+data:
+  default.conf: |
+    upstream backend-svc {
+      server backend-svc.prod.svc.cluster.local:8080;
+    }
+    server {
+      listen 80;
+      location / {
+        proxy_pass http://backend-svc;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: prod
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27.0
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/conf.d/
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: nginx-bad-upstream
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: prod
+  labels:
+    app: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/acme/api:v1.7.3-does-not-exist
+          ports:
+            - containerPort: 8080

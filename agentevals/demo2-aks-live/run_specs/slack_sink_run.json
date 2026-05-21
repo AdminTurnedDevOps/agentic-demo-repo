@@ -1,0 +1,41 @@
+{
+  "_comment": "POST this to /api/runs against the AKS-hosted agentevals to score a trace asynchronously and have the http_webhook sink fire on phase=final and phase=error. Replace TRACE_PLACEHOLDER with an OTLP-JSON trace exported from /api/streaming/get-trace (see demo.md step 6). Replace WEBHOOK_URL with your receiver. Slack's native Incoming Webhook expects {text: '...'} so the raw envelope below won't render as a Slack message verbatim — point at webhook.site or a small transform shim to see the real payloads first.",
+  "spec": {
+    "approach": "trace_replay",
+    "target": {
+      "kind": "inline",
+      "traceFormat": "otlp-json",
+      "inline": "TRACE_PLACEHOLDER"
+    },
+    "eval_set": {
+      "_": "paste the contents of eval_set.json here, or reference via target.kind=http"
+    },
+    "eval_config": {
+      "evaluators": [
+        {
+          "name": "tool_trajectory_avg_score",
+          "type": "builtin",
+          "trajectory_match_type": "IN_ORDER",
+          "threshold": 0.9
+        },
+        {
+          "name": "final_response_match_v2",
+          "type": "builtin",
+          "threshold": 0.7,
+          "judge_model": "gpt-4o-mini"
+        }
+      ]
+    },
+    "sinks": [
+      {
+        "kind": "http_webhook",
+        "url": "WEBHOOK_URL",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "timeout_s": 10,
+        "max_attempts": 3
+      }
+    ]
+  }
+}
