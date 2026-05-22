@@ -15,7 +15,7 @@ This guide walks through installing AgentRegistry Enterprise on a Kubernetes clu
 ## 1. Install the Enterprise arctl CLI
 
 ```bash
-curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.05.0 sh
+curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION=v2026.5.3 sh
 export PATH=$HOME/.arctl/bin:$PATH
 ```
 
@@ -252,7 +252,17 @@ Create a values file. **Do not commit this file** — it contains secrets.
 ```bash
 cat > /tmp/are-values.yaml <<EOF
 image:
-  tag: v2026.05.0
+  tag: v2026.5.3
+
+# Git credentials for private repositories. Leave empty unless needed.
+global:
+  git:
+    username: ""
+    token: ""
+    secretRef:
+      name: ""
+      key: GIT_TOKEN
+      usernameKey: ""
 
 service:
   type: LoadBalancer
@@ -316,7 +326,7 @@ EOF
 ```bash
 helm upgrade --install agentregistry-enterprise \
   oci://us-docker.pkg.dev/solo-public/agentregistry-enterprise/helm/agentregistry-enterprise \
-  --version 2026.05.0 \
+  --version 2026.5.3 \
   --namespace agentregistry-system \
   -f /tmp/are-values.yaml \
   --wait --timeout 5m
@@ -802,7 +812,7 @@ If your AWS credentials change (e.g., key rotation), update the Helm values file
 ```bash
 helm upgrade agentregistry-enterprise \
   oci://us-docker.pkg.dev/solo-public/agentregistry-enterprise/helm/agentregistry-enterprise \
-  --version 2026.05.0 \
+  --version 2026.5.3 \
   --namespace agentregistry-system \
   -f /tmp/are-values.yaml \
   --wait --timeout 5m
@@ -1085,9 +1095,9 @@ az ad group delete --group "$GROUP_WRITERS"
 | Component | Value |
 |-----------|-------|
 | Chart | `oci://us-docker.pkg.dev/solo-public/agentregistry-enterprise/helm/agentregistry-enterprise` |
-| Chart Version | `2026.05.0` |
-| Image | `us-docker.pkg.dev/solo-public/agentregistry-enterprise/server:v2026.05.0` |
-| CLI Install | `curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh \| ARCTL_VERSION=v2026.05.0 sh` |
+| Chart Version | `2026.5.3` |
+| Image | `us-docker.pkg.dev/solo-public/agentregistry-enterprise/server:v2026.5.3` |
+| CLI Install | `curl -sSL https://storage.googleapis.com/agentregistry-enterprise/install.sh \| ARCTL_VERSION=v2026.5.3 sh` |
 | HTTP Port | 8080 |
 | gRPC Port | 21212 |
 | MCP Port | 31313 |
@@ -1095,4 +1105,4 @@ az ad group delete --group "$GROUP_WRITERS"
 | Entra OIDC Issuer | `https://login.microsoftonline.com/<TENANT_ID>/v2.0` |
 | Entra Device Login | `https://microsoft.com/devicelogin` |
 | Token Decoder | [jwt.ms](https://jwt.ms) |
-| GitHub Release | [v2026.05.0](https://github.com/solo-io/agentregistry-enterprise/releases/tag/v2026.05.0) |
+| GitHub Release | [v2026.5.3](https://github.com/solo-io/agentregistry-enterprise/releases/tag/v2026.5.3) |
