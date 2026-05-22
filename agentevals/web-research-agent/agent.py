@@ -22,6 +22,7 @@ import urllib.request
 from pathlib import Path
 
 from agents import Agent, Runner, function_tool
+from opentelemetry import trace
 
 
 WIKIPEDIA_USER_AGENT = "agentevals-demo/1.0 (https://github.com/agentevals-dev)"
@@ -93,7 +94,11 @@ def build_agent(model: str = "gpt-4o-mini") -> Agent:
 
 
 def run_question(agent: Agent, question: str) -> dict:
-    result = Runner.run_sync(agent, question)
+    with trace.get_tracer(__name__).start_as_current_span(
+        "research_agent.question",
+        attributes={"agentevals.question": question},
+    ):
+        result = Runner.run_sync(agent, question)
     return {"question": question, "final_response": result.final_output}
 
 

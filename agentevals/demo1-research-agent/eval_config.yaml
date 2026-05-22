@@ -22,6 +22,6 @@ evaluators:
 
   - name: citation_verification
     type: code
-    path: ./evaluators/citation_verification.py
+    path: demo1-research-agent/evaluators/citation_verification.py
     threshold: 0.8
     timeout: 90

@@ -302,16 +302,22 @@ DEMO=demo1-research-agent
 mkdir -p $DEMO/artifacts
 
 N=$(jq '.eval_cases | length' $DEMO/eval_set.json)
-SESSIONS=$(curl -fsS "http://${AGENTEVALS_IP}:8001/api/streaming/sessions" \
-  | jq -r ".data | sort_by(.updatedAt) | reverse | .[:${N}] | .[].sessionId")
 
 i=0
-for sid in $SESSIONS; do
+curl -fsS "http://${AGENTEVALS_IP}:8001/api/streaming/sessions" \
+  | jq -r ".data | map(select(.spanCount > 1)) | sort_by(.updatedAt // .startedAt) | reverse | .[:${N}] | .[].sessionId" \
+  | while IFS= read -r sid; do
   i=$((i+1))
-  curl -fsS -X POST "http://${AGENTEVALS_IP}:8001/api/streaming/get-trace" \
-    -H 'Content-Type: application/json' \
-    -d "{\"session_id\":\"$sid\"}" \
-    | jq -r '.data.traceContent' > "$DEMO/artifacts/trace_${i}.jsonl"
+  tmp="$DEMO/artifacts/trace_${i}.jsonl.tmp"
+  if curl -fsS -X POST "http://${AGENTEVALS_IP}:8001/api/streaming/get-trace" \
+      -H 'Content-Type: application/json' \
+      -d "{\"session_id\":\"$sid\"}" \
+      | jq -er '.data.traceContent | select(length > 0)' > "$tmp"; then
+    mv "$tmp" "$DEMO/artifacts/trace_${i}.jsonl"
+  else
+    rm -f "$tmp"
+    echo "Failed to export non-empty trace for session $sid" >&2
+  fi
 done
 ls -la $DEMO/artifacts/
 ```
@@ -325,12 +331,6 @@ agentevals run demo1-research-agent/artifacts/trace_*.jsonl \
   --format otlp-json \
   --output table
 ```
-
-On the first run, `citation_verification` builds an auto-venv (installs only
-the agentevals evaluator SDK — it uses urllib from stdlib for the HTTP
-fetches, no extra deps). For each invocation it logs which URLs it fetched
-and the salient-token coverage. Use `--output json | jq '.traces[].metrics[]'`
-to inspect.
 
 ### 1.4 Demoing a hallucinated-citation regression
 
@@ -383,12 +383,18 @@ Then export the latest session:
 
 ```bash
 SESSION_ID=$(curl -fsS "http://${AGENTEVALS_IP}:8001/api/streaming/sessions" \
-  | jq -r '.data | sort_by(.updatedAt) | reverse | .[0].sessionId')
+  | jq -r '.data | map(select(.spanCount > 1)) | sort_by(.updatedAt // .startedAt) | reverse | .[0].sessionId')
 
-curl -fsS -X POST "http://${AGENTEVALS_IP}:8001/api/streaming/get-trace" \
-  -H 'Content-Type: application/json' \
-  -d "{\"session_id\":\"$SESSION_ID\"}" \
-  | jq -r '.data.traceContent' > /tmp/trace.jsonl
+tmp=/tmp/trace.jsonl.tmp
+if curl -fsS -X POST "http://${AGENTEVALS_IP}:8001/api/streaming/get-trace" \
+    -H 'Content-Type: application/json' \
+    -d "{\"session_id\":\"$SESSION_ID\"}" \
+    | jq -er '.data.traceContent | select(length > 0)' > "$tmp"; then
+  mv "$tmp" /tmp/trace.jsonl
+else
+  rm -f "$tmp"
+  echo "Failed to export non-empty trace for session $SESSION_ID" >&2
+fi
 ```
 
 ### 2.2 Stand up a webhook receiver
@@ -517,15 +523,21 @@ DEMO=demo3-custom-evals
 mkdir -p $DEMO/artifacts
 
 N=$(jq '.eval_cases | length' $DEMO/eval_set.json)
-SESSIONS=$(curl -fsS "http://${AGENTEVALS_IP}:8001/api/streaming/sessions" \
-  | jq -r ".data | sort_by(.updatedAt) | reverse | .[:${N}] | .[].sessionId")
 i=0
-for sid in $SESSIONS; do
+curl -fsS "http://${AGENTEVALS_IP}:8001/api/streaming/sessions" \
+  | jq -r ".data | map(select(.spanCount > 1)) | sort_by(.updatedAt // .startedAt) | reverse | .[:${N}] | .[].sessionId" \
+  | while IFS= read -r sid; do
   i=$((i+1))
-  curl -fsS -X POST "http://${AGENTEVALS_IP}:8001/api/streaming/get-trace" \
-    -H 'Content-Type: application/json' \
-    -d "{\"session_id\":\"$sid\"}" \
-    | jq -r '.data.traceContent' > "$DEMO/artifacts/trace_${i}.jsonl"
+  tmp="$DEMO/artifacts/trace_${i}.jsonl.tmp"
+  if curl -fsS -X POST "http://${AGENTEVALS_IP}:8001/api/streaming/get-trace" \
+      -H 'Content-Type: application/json' \
+      -d "{\"session_id\":\"$sid\"}" \
+      | jq -er '.data.traceContent | select(length > 0)' > "$tmp"; then
+    mv "$tmp" "$DEMO/artifacts/trace_${i}.jsonl"
+  else
+    rm -f "$tmp"
+    echo "Failed to export non-empty trace for session $sid" >&2
+  fi
 done
 ls -la $DEMO/artifacts/
 ```

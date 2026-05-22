@@ -18,6 +18,7 @@ from pathlib import Path
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
+from opentelemetry import trace
 
 
 KUBECTL_TIMEOUT_S = 30
@@ -80,7 +81,11 @@ def build_agent(model: str = "gpt-4o-mini"):
 
 
 def run_question(agent, question: str) -> dict:
-    result = agent.invoke({"messages": [{"role": "user", "content": question}]})
+    with trace.get_tracer(__name__).start_as_current_span(
+        "k8s_troubleshooter.question",
+        attributes={"agentevals.question": question},
+    ):
+        result = agent.invoke({"messages": [{"role": "user", "content": question}]})
     final = result["messages"][-1].content
     return {"question": question, "final_response": final}
 

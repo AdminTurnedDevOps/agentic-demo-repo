@@ -23,7 +23,7 @@ evaluators:
 
   - name: hallucination_judge
     type: code
-    path: ./evaluators/hallucination_judge.py
+    path: demo3-custom-evals/evaluators/hallucination_judge.py
     threshold: 0.85
     timeout: 60
     config:
@@ -31,7 +31,7 @@ evaluators:
 
   - name: citation_correctness
     type: code
-    path: ./evaluators/citation_correctness.js
+    path: demo3-custom-evals/evaluators/citation_correctness.js
     threshold: 0.7
 
   - name: tone_check
