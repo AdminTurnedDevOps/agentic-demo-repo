@@ -351,6 +351,9 @@ diverging from the golden response.
 
 ## Demo 2 — Async run queue with webhook sinks
 
+**CICD framing:** use this flow as the async evaluation step for CICD or
+scheduled quality gates.
+
 **Story:** demos 1 and 3 use `agentevals run` (CLI, synchronous, in-process).
 Production teams want to also score traces *asynchronously* — kick off a run,
 let it score in the background against a Postgres-backed queue, and have
