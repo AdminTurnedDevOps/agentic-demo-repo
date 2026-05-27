@@ -656,7 +656,7 @@ export AWS_REGION="us-east-1"
 
 cat > /tmp/aws-provider.yaml <<EOF
 apiVersion: ar.dev/v1alpha1
-kind: Provider
+kind: Runtime
 metadata:
   name: AWS
 spec:
