@@ -5,8 +5,8 @@ description: >
   End-to-end walkthrough for standing up Agent Substrate on a GKE cluster,
   deploying the stateful counter demo, and driving an actor through its full
   create / resume / suspend / delete lifecycle.
-tags: [agent-substrate, kubernetes, gke, gvisor, actors, demo]
-author: mlevan1992@gmail.com
+tags: [agent-substrate, kubernetes, gke, gvisor, actors, workers]
+author: Michael Levan
 ---
 
 # Agent Substrate Demo (GKE)
