@@ -13,8 +13,8 @@ author: Michael Levan
 
 This guide takes you from an existing **GKE** cluster to a running, stateful
 **actor** on [Agent Substrate](https://github.com/agent-substrate/substrate).
-Provisioning is done with raw `gcloud` commands (or `tools/setup-gcp` if you're
-building a cluster from scratch); snapshots are stored in a GCS bucket.
+Provisioning is done with raw `gcloud` commands; snapshots are stored in a GCS
+bucket.
 
 > What you'll see: a counter actor that preserves its in-memory value across a
 > full **suspend → snapshot → resume** cycle, even when it lands on a different
@@ -41,15 +41,34 @@ beta APIs (see [Why GKE](#why-gke-the-pod-certificate-requirement)); Step 2a doe
 ### GCP requirements
 
 - A GCP **project** with billing enabled.
-- Authenticated for application-default credentials:
-  `gcloud auth application-default login`.
-- `setup-gcp` enables the required APIs (Service Usage, Resource Manager,
-  Container, Storage, Network Connectivity) for you.
+- Authenticated three ways — CLI login (for the `gcloud` commands), application
+  default credentials (for client libraries), and a Docker credential helper (so
+  `ko` can push to `gcr.io`):
+
+  ```bash
+  gcloud auth login
+  gcloud auth application-default login --project="$PROJECT_ID"
+  gcloud auth configure-docker gcr.io
+  ```
+
+  > If your `KO_DOCKER_REPO` is in **Artifact Registry** instead of `gcr.io`, point
+  > the helper at that host, e.g. `gcloud auth configure-docker us-docker.pkg.dev`.
+- The required APIs enabled on the project:
+
+  ```bash
+  gcloud services enable \
+    cloudresourcemanager.googleapis.com \
+    container.googleapis.com \
+    networkconnectivity.googleapis.com \
+    serviceusage.googleapis.com \
+    storage.googleapis.com \
+    --project="$PROJECT_ID"
+  ```
 
 > **gVisor / `runsc`:** Substrate sandboxes actors with gVisor and checkpoints
 > them with `runsc`. **No special node pool or `runtimeClassName` is required** —
-> `runsc` runs nested inside the worker pod, so `setup-gcp` provisions a standard
-> node pool (`substrate-node-pool`, machine type from `GVISOR_NODE_MACHINE_TYPE`).
+> `runsc` runs nested inside the worker pod, so a standard node pool is enough.
+> Use a machine type with room for the worker pods (e.g. `c3-standard-4`).
 > Checkpoint/restore currently requires a `runsc` build that supports the
 > `--allow-connected-on-save` flag (works around a networking resumption bug); this
 > is noted in `docs/architecture.md`. Checkpointing fails without it.
@@ -58,7 +77,7 @@ beta APIs (see [Why GKE](#why-gke-the-pod-certificate-requirement)); Step 2a doe
 
 | Tool | Version | Notes |
 |---|---|---|
-| Go | ≥ 1.26.3 | Matches the repo `go.mod` toolchain. Runs `setup-gcp` and builds `kubectl-ate`. |
+| Go | ≥ 1.26.3 | Matches the repo `go.mod` toolchain. Builds `kubectl-ate`. |
 | `gcloud` | recent | Authenticates the cluster, registry, and IAM operations. |
 | `kubectl` | Match your cluster's minor version | Substrate targets the latest stable Kubernetes release and the one prior. |
 | `git` | any recent | The `hack/` scripts resolve the repo root via `git rev-parse`. |
@@ -82,8 +101,9 @@ cd substrate
 
 ## Step 1: Configure environment
 
-`setup-gcp` and `hack/install-ate.sh` read configuration from an env file. Copy
-the example and edit it for your project:
+`hack/install-ate.sh` reads configuration from an env file, and the `gcloud`
+commands below reference the same variables. Copy the example and edit it for your
+project:
 
 ```bash
 cp hack/ate-dev-env.sh.example .ate-dev-env.sh
@@ -98,7 +118,7 @@ Key values to set (see `hack/ate-dev-env.sh.example`):
 | `GCE_REGION` | `us-central1` | Region for the **snapshot bucket**. |
 | `CLUSTER_LOCATION` | `us-central1-c` | Zone (or region) your cluster lives in. **This — not `GCE_REGION` — is what `gcloud container` commands take as `--location`.** |
 | `CLUSTER_NAME` | `substrate-poc` | Name of your **existing** GKE cluster. |
-| `CLUSTER_VERSION` | `1.35.0-gke.2398000` | Pinned GKE version (only used when creating a cluster via `setup-gcp`). |
+| `CLUSTER_VERSION` | `1.35.0-gke.2398000` | Present in the example file; **not used by this guide** since your cluster already exists. |
 | `GVISOR_NODE_MACHINE_TYPE` | `c3-standard-4` | Worker node machine type. |
 | `BUCKET_NAME` | `my-substrate-snapshots` | GCS bucket for snapshots. |
 | `KO_DOCKER_REPO` | `gcr.io/my-substrate-proj/ate-images` | Image registry for `ko`. |
@@ -111,17 +131,12 @@ source .ate-dev-env.sh
 
 ## Step 2 — Provision GCP resources
 
-> This guide assumes you **already have a GKE cluster** with the GCP APIs enabled
-> (see Prerequisites). The commands below are the remaining `setup-gcp` steps as
-> raw `gcloud` — the snapshot bucket, the IAM bindings, and making sure your
-> cluster carries the Pod Certificate beta APIs + Workload Identity. The IAM and
-> cluster-update steps are additive and safe to re-run; the bucket creation (2b) is
-> the exception — it errors if the bucket already exists.
->
-> **Building from scratch instead?** `go run ./tools/setup-gcp --all` does all six
-> steps for you. Do **not** run it — or `--create-cluster` — against a cluster you
-> built by hand: `tools/setup-gcp/cmd/cluster.go` will **delete and recreate** the
-> cluster if its network/subnet don't match your env file.
+> This guide assumes you **already have a GKE Standard cluster** with the GCP APIs
+> enabled (see Prerequisites). The `gcloud` commands below configure the snapshot
+> bucket, the IAM bindings, and make sure your cluster carries the Pod Certificate
+> beta APIs + Workload Identity. The IAM and cluster-update steps are additive and
+> safe to re-run; the bucket creation (2b) is the exception — it errors if the
+> bucket already exists.
 
 The env file you sourced in Step 1 already exports `PROJECT_ID`, `PROJECT_NUMBER`,
 `CLUSTER_NAME`, `GCE_REGION`, and `BUCKET_NAME`. Derive the two identities the
@@ -132,11 +147,23 @@ export ATELET_PRINCIPAL="principal://iam.googleapis.com/projects/${PROJECT_NUMBE
 export NODE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 ```
 
+> `NODE_SA` above is the **default** Compute Engine service account. GKE recommends
+> (and your existing pools may already use) a **custom** node service account — in
+> which case the image-pull bindings in Step 2d must go to *that* SA, not the
+> default. Discover the SA each relevant pool actually runs as:
+> ```bash
+> gcloud container node-pools describe <pool-name> \
+>   --cluster="$CLUSTER_NAME" --location="$CLUSTER_LOCATION" \
+>   --project="$PROJECT_ID" --format='value(config.serviceAccount)'
+> ```
+> If it returns anything other than `default`, set `NODE_SA` to that address. See
+> the [GKE node service-account docs](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/service-accounts).
+
 ### 2a. Ensure the cluster has the Pod Certificate beta APIs + Workload Identity
 
 A hand-made cluster usually lacks these, and without them the control plane
 (`ate-api-server`, `atenet-router`, `valkey`) can't start. Both are additive
-updates (this is exactly what `cmd/cluster.go` reconciles on an existing cluster):
+updates to an existing cluster:
 
 ```bash
 gcloud container clusters update "$CLUSTER_NAME" \
@@ -148,11 +175,16 @@ gcloud container clusters update "$CLUSTER_NAME" \
   --workload-pool="${PROJECT_ID}.svc.id.goog"
 ```
 
-> Enabling beta APIs changes the control plane, but **existing nodes may need to be
-> recreated** before the feature is fully usable on them. If the system pods stay
-> not-ready after install, roll the node pool (e.g. `gcloud container clusters
-> upgrade "$CLUSTER_NAME" --location="$CLUSTER_LOCATION" --node-pool=<pool-name>` to
-> the same version) so nodes pick up the change.
+> Enabling beta APIs changes the control plane, but **existing nodes only pick up
+> the newly-enabled beta APIs once they are recreated** — a same-version, in-place
+> operation does *not* apply them. Either upgrade the pool to a **later** GKE
+> version, or create a fresh node pool. To upgrade:
+> ```bash
+> gcloud container clusters upgrade "$CLUSTER_NAME" \
+>   --location="$CLUSTER_LOCATION" --project="$PROJECT_ID" \
+>   --node-pool=<pool-name> --cluster-version=<later-version>
+> ```
+> See the [GKE beta API docs](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/use-beta-apis#ensure_that_nodes_use_the_newly-enabled_beta_apis).
 
 > Node pools must run the **GKE Metadata Server** for the atelet Workload Identity
 > binding to resolve. Pools created *after* you enable `--workload-pool` get it by
@@ -379,6 +411,14 @@ Tear down the whole Substrate system and all demos:
 ```
 
 Remove the GCP resources that Step 2 created — **without deleting your cluster**.
+
+> **Run cleanup only in a dedicated demo project, or for resources you know were
+> added solely for this guide.** The teardown flags and the manual commands below
+> remove *whole* IAM bindings and **delete the bucket**. In a shared project, those
+> roles or that bucket may predate this demo or be used by unrelated workloads —
+> removing them can break those workloads. If in doubt, remove the specific
+> member/role pairs by hand instead of running `--delete-iam-policy-bindings`.
+
 `./hack/teardown.sh --all` would also run `--delete-cluster` (deletes
 `$CLUSTER_NAME`) and `--delete-gvisor-node-pool`; since you brought your own
 cluster, use the granular flags instead:
@@ -434,9 +474,10 @@ A `podCertificate` projected volume requires the apiserver to serve
 default** as of Kubernetes 1.36. The volume must mount for the pod to run, so
 without these the control plane, router, and state store never start.
 
-GKE exposes a supported knob for exactly these beta APIs (`EnableK8SBetaApis`, set
-by `tools/setup-gcp/cmd/cluster.go`). Managed AKS exposes no supported way to turn
-these gates on — the standing request ([Azure/AKS#1887](https://github.com/Azure/AKS/issues/1887))
+GKE exposes a supported knob for exactly these beta APIs — the
+`--enable-kubernetes-unstable-apis` flag you ran in Step 2a. Managed AKS exposes no
+supported way to turn these gates on — the standing request
+([Azure/AKS#1887](https://github.com/Azure/AKS/issues/1887))
 was closed without one — so the system pods can't mount their certificates there.
 To run Substrate on Azure you'd need a cluster where you control the apiserver
 flags (Cluster API / kubeadm / k3s), not stock managed AKS.
