@@ -40,7 +40,13 @@ beta APIs (see [Why GKE](#why-gke-the-pod-certificate-requirement)); Step 2a doe
 
 ### GCP requirements
 
-- A GCP **project** with billing enabled.
+- A GCP **project** with billing enabled. The commands in this section use
+  `$PROJECT_ID`; Step 1 persists it in the env file, but set it now so the commands
+  below work top-to-bottom:
+
+  ```bash
+  export PROJECT_ID=<your-project-id>
+  ```
 - Authenticated three ways — CLI login (for the `gcloud` commands), application
   default credentials (for client libraries), and a Docker credential helper (so
   `ko` can push to `gcr.io`):
@@ -81,6 +87,8 @@ beta APIs (see [Why GKE](#why-gke-the-pod-certificate-requirement)); Step 2a doe
 | `gcloud` | recent | Authenticates the cluster, registry, and IAM operations. |
 | `kubectl` | Match your cluster's minor version | Substrate targets the latest stable Kubernetes release and the one prior. |
 | `git` | any recent | The `hack/` scripts resolve the repo root via `git rev-parse`. |
+| `openssl` | any recent | `hack/install-ate.sh` uses it to convert the valkey CA cert (DER → PEM). |
+| `curl` | any recent | Drives traffic to the actor in Steps 7–8. |
 
 Images are built and pushed by `ko` (invoked by `hack/install-ate.sh`) to your `KO_DOCKER_REPO`; `valkey` (state store) is deployed for you by the install script. You do not install them manually.
 
@@ -137,6 +145,12 @@ source .ate-dev-env.sh
 > beta APIs + Workload Identity. The IAM and cluster-update steps are additive and
 > safe to re-run; the bucket creation (2b) is the exception — it errors if the
 > bucket already exists.
+>
+> **Multi-pool clusters:** `atelet` runs as a **DaemonSet** (every node) and the
+> worker pods it manages have **no node selector**, so Substrate workloads can land
+> on *any* node pool. Repeat the per-pool steps below — node-SA discovery + IAM
+> grants (2d), GKE Metadata Server (2a), and the beta-API node rollout (2a) — for
+> **every** pool where workloads may schedule, not just one.
 
 The env file you sourced in Step 1 already exports `PROJECT_ID`, `PROJECT_NUMBER`,
 `CLUSTER_NAME`, `GCE_REGION`, and `BUCKET_NAME`. Derive the two identities the
@@ -433,13 +447,35 @@ cluster, use the granular flags instead:
 > **Project-level atelet roles are not reversed by teardown.** The script removes
 > the *bucket-scoped* atelet bindings but has no reverse for the project-level
 > `objectAdmin` / `artifactregistry.reader` grants from Step 2d. Remove them by hand
-> (`--condition=None` matches how they were added):
+> (the Step 2d `add` commands create *unconditioned* bindings, so `--condition=None`
+> is what targets them on removal):
 > ```bash
 > gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
 >   --member="$ATELET_PRINCIPAL" --role=roles/storage.objectAdmin --condition=None
 > gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
 >   --member="$ATELET_PRINCIPAL" --role=roles/artifactregistry.reader --condition=None
 > ```
+
+> **Custom node SAs are not reversed either.** `--revoke-gke-node-permissions` only
+> revokes from the **default** Compute Engine SA (`hack/teardown.sh` hardcodes it).
+> If you granted the Step 2d node-SA roles to a **custom** `$NODE_SA`, remove those
+> by hand too:
+> ```bash
+> gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
+>   --member="serviceAccount:${NODE_SA}" --role=roles/storage.objectViewer --condition=None
+> gcloud projects remove-iam-policy-binding "$PROJECT_ID" \
+>   --member="serviceAccount:${NODE_SA}" --role=roles/artifactregistry.reader --condition=None
+> ```
+
+> **The Step 2a cluster changes are not rolled back.** This cleanup removes the
+> bucket and IAM only. It does **not** undo the cluster mutations from Step 2a —
+> Workload Identity, the GKE Metadata Server on your pools, the node rollout, and
+> the enabled beta APIs all remain. Per the
+> [GKE beta API docs](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/use-beta-apis),
+> **enabled beta APIs cannot be disabled** on a cluster (`gcloud` offers no
+> `--disable-kubernetes-unstable-apis`); Workload Identity can be turned off with
+> `--disable-workload-identity` if you need to. If you want a pristine cluster,
+> delete and recreate it.
 
 ---
 
@@ -462,10 +498,11 @@ Kubernetes control plane out of the request hot path.
 ## Why GKE (the Pod Certificate requirement)
 
 Substrate's `cmd/podcertcontroller` issues per-pod mTLS **Pod Certificates** for
-the core system components. **Three** pods mount a `podCertificate` projected
-volume: `ate-api-server`, `atenet-router`, and `valkey`. (The
-`pod-certificate-controller` is the *signer*; it bootstraps from plain `secret`
-CA-pool volumes, not `podCertificate` — see
+the core system workloads. Three components mount a `podCertificate` projected
+volume: `ate-api-server`, `atenet-router`, and `valkey` — and valkey is a
+6-replica `StatefulSet` plus a `valkey-cluster-init` `Job`, so that's several pods,
+not one. (The `pod-certificate-controller` is the *signer*; it bootstraps from
+plain `secret` CA-pool volumes, not `podCertificate` — see
 `manifests/ate-install/pod-certificate-controller.yaml`.)
 
 A `podCertificate` projected volume requires the apiserver to serve
@@ -475,12 +512,14 @@ default** as of Kubernetes 1.36. The volume must mount for the pod to run, so
 without these the control plane, router, and state store never start.
 
 GKE exposes a supported knob for exactly these beta APIs — the
-`--enable-kubernetes-unstable-apis` flag you ran in Step 2a. Managed AKS exposes no
-supported way to turn these gates on — the standing request
-([Azure/AKS#1887](https://github.com/Azure/AKS/issues/1887))
-was closed without one — so the system pods can't mount their certificates there.
-To run Substrate on Azure you'd need a cluster where you control the apiserver
-flags (Cluster API / kubeadm / k3s), not stock managed AKS.
+`--enable-kubernetes-unstable-apis` flag you ran in Step 2a. **GKE is the managed
+path this guide verifies.** A managed-AKS path is *not* documented or verified here;
+turning these gates on requires control over apiserver flags, which managed offerings
+typically don't expose (the standing AKS request is
+[Azure/AKS#1887](https://github.com/Azure/AKS/issues/1887)). On Azure you'd most
+likely need a cluster where you control those flags (Cluster API / kubeadm / k3s)
+rather than stock managed AKS — confirm against current provider docs before relying
+on it.
 
 > Pod Certificates secure Substrate's **own infrastructure**. Actor identity is a
 > separate mechanism: the `SessionIdentity` gRPC service (`MintJWT` / `MintCert`),
@@ -495,13 +534,21 @@ flags (Cluster API / kubeadm / k3s), not stock managed AKS.
   re-run `go install ./cmd/kubectl-ate`.
 - **System pods stuck not-ready** — check `kubectl get pods -n ate-system` and
   `kubectl describe` / `kubectl logs` the pending pod. If `ate-api-server`,
-  `atenet-router`, or `valkey` are stuck mounting a volume, confirm the cluster
-  was created with `EnableK8SBetaApis` (see [Why GKE](#why-gke-the-pod-certificate-requirement)).
-- **Image pull errors** — confirm the node service account has
-  `roles/artifactregistry.reader` (granted by `--grant-gke-node-permissions`) and
-  that `KO_DOCKER_REPO` matches where `ko` pushed the images.
-- **Snapshot read/write errors** — confirm the `atelet` workload-identity binding
-  (`--create-iam-policy-bindings`) and that `BUCKET_NAME` exists.
+  `atenet-router`, or `valkey` are stuck mounting a volume, confirm the Pod
+  Certificate beta APIs were enabled in Step 2a **and** the nodes the pods landed on
+  were rolled out so they actually serve those APIs (see [Why GKE](#why-gke-the-pod-certificate-requirement)).
+- **Image pull errors** — confirm the node service account (the one each pool
+  actually runs as — see Step 2d) has `roles/artifactregistry.reader` and that
+  `KO_DOCKER_REPO` matches where `ko` pushed the images.
+- **Snapshot read/write errors** — work through each layer the snapshot path
+  depends on:
+  - the **bucket-scoped** atelet bindings exist (Step 2c: `objectAdmin` +
+    `bucketViewer`) and `BUCKET_NAME` exists;
+  - the **project-level** atelet bindings exist (Step 2d: `objectAdmin` +
+    `artifactregistry.reader`);
+  - the atelet Workload Identity resolves — i.e. the **GKE Metadata Server is
+    enabled on the pool the atelet pod landed on** (Step 2a). On a multi-pool
+    cluster it's easy to miss a pool.
 - **Checkpoint/restore fails** — your `runsc` likely lacks
   `--allow-connected-on-save`; this requirement is documented in
   `docs/architecture.md`.
