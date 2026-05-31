@@ -137,7 +137,7 @@ source .ate-dev-env.sh
 
 ---
 
-## Step 2 — Provision GCP resources
+## Step 2: Provision GCP resources
 
 > This guide assumes you **already have a GKE Standard cluster** with the GCP APIs
 > enabled (see Prerequisites). The `gcloud` commands below configure the snapshot
@@ -254,7 +254,7 @@ kubectl get nodes
 
 ---
 
-## Step 3 — Install the Agent Substrate system
+## Step 3: Install the Agent Substrate system
 
 This builds the core images (via `ko`, pushed to `KO_DOCKER_REPO`) and deploys the
 control plane and node components: the CRDs, the `ate-api-server` (control plane),
@@ -277,7 +277,7 @@ kubectl get pods -n ate-system --watch
 
 ---
 
-## Step 4 — Deploy the counter demo
+## Step 4: Deploy the counter demo
 
 The counter demo is a small stateful Go HTTP server that increments an in-memory
 counter on every request. Deploying it creates the `ate-demo-counter` namespace,
@@ -306,7 +306,7 @@ kubectl get workerpool,actortemplate -n ate-demo-counter
 
 ---
 
-## Step 5 — Install the CLI
+## Step 5: Install the CLI
 
 `kubectl-ate` is a `kubectl` plugin for managing actors and workers.
 
@@ -325,7 +325,7 @@ kubectl ate --help
 
 ---
 
-## Step 6 — Create an actor
+## Step 6: Create an actor
 
 Create an actor instance from the counter template. The actor ID must be a valid
 DNS-1123 label (lowercase alphanumeric + hyphens).
@@ -344,7 +344,7 @@ kubectl ate get actor my-counter-1
 
 ---
 
-## Step 7 — Drive traffic to the actor
+## Step 7: Drive traffic to the actor
 
 Substrate routes to actors by a uniform DNS name:
 `<actor-id>.actors.resources.substrate.ate.dev`. Port-forward the `atenet` router
@@ -376,7 +376,7 @@ kubectl ate get workers
 
 ---
 
-## Step 8 — Prove state survives suspend/resume
+## Step 8: Prove state survives suspend/resume
 
 This is the payoff. Suspend the actor — Substrate checkpoints its full memory +
 disk state to the GCS snapshot bucket and reclaims the worker pod:
@@ -403,7 +403,7 @@ kubectl ate logs actor my-counter-1
 
 ---
 
-## Step 9 — Clean up
+## Step 9: Clean up
 
 Delete the actor (only suspended actors can be deleted):
 
