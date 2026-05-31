@@ -193,10 +193,17 @@ gcloud container clusters update "$CLUSTER_NAME" \
   --workload-pool="${PROJECT_ID}.svc.id.goog"
 ```
 
-> Enabling beta APIs changes the control plane, but **existing nodes only pick up
-> the newly-enabled beta APIs once they are recreated** — a same-version, in-place
-> operation does *not* apply them. Either upgrade the pool to a **later** GKE
-> version, or create a fresh node pool. To upgrade:
+The two notes below cover follow-ups that **may or may not** apply to your existing
+cluster. Check first; only run the mutating command if the check says you need to.
+
+> **Node rollout (check reactively).** The `podCertificate` projected volume is a
+> **kubelet**-level feature, so existing nodes generally need to be **recreated**
+> before they honor it — a same-version, in-place op does *not* apply it. Rather
+> than upgrade pre-emptively, let the install tell you: run Step 3 and watch
+> `kubectl get pods -n ate-system`. If `ate-api-server` / `atenet-router` / `valkey`
+> come up Ready, your nodes already serve it — **do nothing**. If they're stuck
+> failing to mount the cert volume (`kubectl describe pod`), *then* recreate nodes
+> by upgrading the pool to a **later** version (or create a fresh pool):
 > ```bash
 > gcloud container clusters upgrade "$CLUSTER_NAME" \
 >   --location="$CLUSTER_LOCATION" --project="$PROJECT_ID" \
@@ -204,9 +211,17 @@ gcloud container clusters update "$CLUSTER_NAME" \
 > ```
 > See the [GKE beta API docs](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/use-beta-apis#ensure_that_nodes_use_the_newly-enabled_beta_apis).
 
-> Node pools must run the **GKE Metadata Server** for the atelet Workload Identity
-> binding to resolve. Pools created *after* you enable `--workload-pool` get it by
-> default; update a pre-existing pool with:
+> **GKE Metadata Server (check, then update if needed).** The atelet Workload
+> Identity binding only resolves on pools running the GKE Metadata Server. Pools
+> created *after* you enable `--workload-pool` get it by default; pre-existing pools
+> may not. Check each pool:
+> ```bash
+> gcloud container node-pools describe <pool-name> --cluster="$CLUSTER_NAME" \
+>   --location="$CLUSTER_LOCATION" --project="$PROJECT_ID" \
+>   --format='value(config.workloadMetadataConfig.mode)'
+> ```
+> If it prints `GKE_METADATA`, you're set — skip the update. If it's blank or
+> `GCE_METADATA`, enable it:
 > ```bash
 > gcloud container node-pools update <pool-name> --cluster="$CLUSTER_NAME" \
 >   --location="$CLUSTER_LOCATION" --project="$PROJECT_ID" --workload-metadata=GKE_METADATA
