@@ -197,24 +197,44 @@ The two notes below cover follow-ups that **may or may not** apply to your exist
 cluster. Check first; only run the mutating command if the check says you need to.
 
 > **Node rollout (check reactively).** The `podCertificate` projected volume is a
-> **kubelet**-level feature, so existing nodes generally need to be **recreated**
-> before they honor it — a same-version, in-place op does *not* apply it. Rather
-> than upgrade pre-emptively, let the install tell you: run Step 3 and watch
-> `kubectl get pods -n ate-system`. If `ate-api-server` / `atenet-router` / `valkey`
-> come up Ready, your nodes already serve it — **do nothing**. If they're stuck
-> failing to mount the cert volume (`kubectl describe pod`), *then* recreate nodes
-> by upgrading the pool to a **later** version (or create a fresh pool):
+> **kubelet**-level feature baked in at node creation, so existing nodes generally
+> need to be **recreated** before they honor it. Rather than recreate pre-emptively,
+> let the install tell you: run Step 3 and watch `kubectl get pods -n ate-system`.
+> If `ate-api-server` / `atenet-router` / `valkey` come up Ready, your nodes already
+> serve it — **do nothing**. If they're stuck failing to mount the cert volume
+> (`kubectl describe pod` shows `MountVolume.SetUp failed ... ClusterTrustBundle
+> projection is not supported in static kubelet mode` or `credential bundle is not
+> issued yet` that never clears), *then* recreate nodes.
+>
+> **The reliable remedy is a fresh node pool** — it's born after the Step 2a beta-API
+> enablement and you set the Metadata Server (next note) in the same command:
+> ```bash
+> gcloud container node-pools create <new-pool-name> --cluster="$CLUSTER_NAME" \
+>   --location="$CLUSTER_LOCATION" --project="$PROJECT_ID" \
+>   --machine-type=e2-standard-4 --num-nodes=1 --workload-metadata=GKE_METADATA
+> ```
+> Then migrate workloads off the old pool (`gcloud container node-pools delete
+> <old-pool-name> ...`) so the stuck pods reschedule onto the new nodes.
+>
+> An in-place pool upgrade also works **only if it actually recreates nodes** — i.e.
+> the target version is *later* than the current node version. If your control plane
+> and nodes are already on the **same** version (common on an existing cluster), a
+> same-version upgrade is a **no-op** and won't apply the feature; use a fresh pool
+> or upgrade to a later version:
 > ```bash
 > gcloud container clusters upgrade "$CLUSTER_NAME" \
 >   --location="$CLUSTER_LOCATION" --project="$PROJECT_ID" \
 >   --node-pool=<pool-name> --cluster-version=<later-version>
 > ```
-> See the [GKE beta API docs](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/use-beta-apis#ensure_that_nodes_use_the_newly-enabled_beta_apis).
+> Any 4-vCPU machine type works (`runsc` runs nested in the worker pod); pick one
+> with stock in your region — a `GCE_STOCKOUT` on create is a transient availability
+> error, not a config problem. See the [GKE beta API docs](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/use-beta-apis#ensure_that_nodes_use_the_newly-enabled_beta_apis).
 
 > **GKE Metadata Server (check, then update if needed).** The atelet Workload
-> Identity binding only resolves on pools running the GKE Metadata Server. Pools
-> created *after* you enable `--workload-pool` get it by default; pre-existing pools
-> may not. Check each pool:
+> Identity binding only resolves on pools running the GKE Metadata Server. If you
+> created a fresh pool above with `--workload-metadata=GKE_METADATA`, it's already
+> set — skip this. Pools created *after* you enable `--workload-pool` get it by
+> default; pre-existing pools may not. Check each pool:
 > ```bash
 > gcloud container node-pools describe <pool-name> --cluster="$CLUSTER_NAME" \
 >   --location="$CLUSTER_LOCATION" --project="$PROJECT_ID" \
@@ -333,14 +353,25 @@ kubectl get workerpool,actortemplate -n ate-demo-counter
 go install ./cmd/kubectl-ate
 ```
 
-Confirm it's on your `PATH` and registered as a plugin:
+This drops a `kubectl-ate` binary in your Go bin directory (`$(go env GOPATH)/bin`,
+typically `~/go/bin`). `kubectl` discovers plugins by scanning `PATH`, so that
+directory must be on it. If it isn't, add it (zsh shown — adjust for your shell):
 
 ```bash
+echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Confirm the binary is found and registered as a plugin:
+
+```bash
+which kubectl-ate     # -> .../go/bin/kubectl-ate
 kubectl ate --help
 ```
 
-> If `kubectl ate` is not found, ensure your Go bin directory
-> (`$(go env GOPATH)/bin`) is on your `PATH`.
+> If `kubectl ate` still reports `unknown command "ate" for "kubectl"`, the
+> `kubectl-ate` binary isn't on your `PATH` — re-check the `export` above and that
+> `go install` succeeded.
 
 ---
 
