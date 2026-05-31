@@ -109,9 +109,9 @@ cd substrate
 
 ## Step 1: Configure environment
 
-`hack/install-ate.sh` reads configuration from an env file, and the `gcloud`
-commands below reference the same variables. Copy the example and edit it for your
-project:
+`hack/install-ate.sh` sources `.ate-dev-env.sh` (if present) and the `gcloud`
+commands above and below reference the same variables, so **you do need this file
+even with an existing cluster.** Copy the example and edit it for your project:
 
 ```bash
 cp hack/ate-dev-env.sh.example .ate-dev-env.sh
@@ -126,10 +126,14 @@ Key values to set (see `hack/ate-dev-env.sh.example`):
 | `GCE_REGION` | `us-central1` | Region for the **snapshot bucket**. |
 | `CLUSTER_LOCATION` | `us-central1-c` | Zone (or region) your cluster lives in. **This — not `GCE_REGION` — is what `gcloud container` commands take as `--location`.** |
 | `CLUSTER_NAME` | `substrate-poc` | Name of your **existing** GKE cluster. |
-| `CLUSTER_VERSION` | `1.35.0-gke.2398000` | Present in the example file; **not used by this guide** since your cluster already exists. |
-| `GVISOR_NODE_MACHINE_TYPE` | `c3-standard-4` | Worker node machine type. |
 | `BUCKET_NAME` | `my-substrate-snapshots` | GCS bucket for snapshots. |
 | `KO_DOCKER_REPO` | `gcr.io/my-substrate-proj/ate-images` | Image registry for `ko`. |
+| `KUBECTL_CONTEXT` | `gke_my-proj_us-central1-c_substrate-poc` | **Optional but recommended for an existing cluster.** If set, `install-ate.sh` uses this kubeconfig context and **skips** its `gcloud get-credentials` call. |
+
+The example file also carries `CLUSTER_VERSION`, `GVISOR_NODE_MACHINE_TYPE`,
+`NODE_POOL_NAME`, `NODE_POOL_VERSION`, `NETWORK`, and `SUBNETWORK`. These are
+**creation-only** — consumed by `setup-gcp` when it builds a cluster, and unused by
+this guide. Leave them at their defaults; you don't need to set them.
 
 ```bash
 source .ate-dev-env.sh
