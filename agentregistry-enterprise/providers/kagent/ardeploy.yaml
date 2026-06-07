@@ -1,0 +1,12 @@
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: k8shelper-kagent
+spec:
+  targetRef:
+    kind: Agent
+    name: k8shelper
+    tag: "1.0.0"
+  runtimeRef:
+    kind: Runtime
+    name: kagent
