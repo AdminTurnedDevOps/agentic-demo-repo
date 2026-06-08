@@ -1,11 +1,11 @@
-# Claude Code with AgentGateway
+# Claude Code with Agentgateway
 
 Route Claude Code CLI/Desktop LLM traffic through agentgateway for security, observability, and rate limiting.
 
 ## Prerequisites
 
 - Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
-- AgentGateway deployed and running (see [agentgateway-enterprise/setup.md](../../agentgateway-enterprise/setup.md))
+- Agentgateway deployed and running (see [agentgateway-enterprise/setup.md](../../agentgateway-enterprise/setup.md))
 - Anthropic API key
 
 ## Create Anthropic API Key Secret

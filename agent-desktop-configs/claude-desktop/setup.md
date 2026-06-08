@@ -1,11 +1,11 @@
-# Claude Desktop with AgentGateway
+# Claude Desktop with Agentgateway
 
 Route MCP server traffic from Claude Desktop through the agentgateway for security, observability, and rate limiting.
 
 ## Prerequisites
 
 - Claude Desktop installed
-- AgentGateway deployed and running (see [agentgateway-enterprise/setup.md](../../agentgateway-enterprise/setup.md))
+- Agentgateway deployed and running (see [agentgateway-enterprise/setup.md](../../agentgateway-enterprise/setup.md))
 
 ## Deploy MCP Servers
 
