@@ -1,4 +1,4 @@
-# Claude Desktop with AgentGateway
+# Claude Desktop with Agentgateway
 
 Route MCP server traffic from Claude Desktop through the agentgateway for security, observability, and rate limiting.
 
