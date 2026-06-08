@@ -135,7 +135,67 @@ spec:
 
 Agentregistry injects the runtime telemetry endpoint into kagent BYO agents as `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
-Note that kagent itself might also inject its own tracing variables, such as `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, pointing to kagent's management collector. If you need traces to appear only in Agentregistry, make sure the deployed agent image and kagent runtime prefer the Agentregistry endpoint or override the kagent-injected values.
+#### Repoint kagent's injected trace endpoint
+
+kagent's controller injects its own tracing env into every generated Agent Deployment from the `kagent-controller` ConfigMap. The OpenTelemetry SDK treats `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` as higher precedence than `OTEL_EXPORTER_OTLP_ENDPOINT`, so the AgentRegistry endpoint is ignored unless you also override the kagent-injected one.
+
+Check the current values:
+
+```bash
+kubectl get configmap kagent-controller -n kagent \
+  -o jsonpath='{.data.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}{"\n"}{.data.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL}{"\n"}{.data.OTEL_TRACING_ENABLED}{"\n"}'
+```
+
+If `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` points at kagent's own collector (for example `solo-enterprise-telemetry-collector.kagent.svc.cluster.local:4317`), repoint it to AgentRegistry's collector.
+
+**Recommended: set this in Helm values.** The kagent (enterprise) chart already templates the trace env from `otel.tracing.exporter.otlp.*`, so use a Helm upgrade rather than a one-off ConfigMap patch:
+
+```bash
+helm upgrade kagent <chart> \
+  -n kagent \
+  --reuse-values \
+  --set otel.tracing.enabled=true \
+  --set otel.tracing.exporter.otlp.endpoint=agentregistry-enterprise-telemetry-collector.agentregistry-system.svc.cluster.local:4317 \
+  --set otel.tracing.exporter.otlp.protocol=grpc \
+  --set otel.tracing.exporter.otlp.insecure=true \
+  --wait --timeout 5m
+```
+
+This regenerates the `kagent-controller` ConfigMap, restarts the controller, and survives future `helm upgrade` runs.
+
+If you cannot use Helm right now (for example, the chart is not available in this environment), patch the ConfigMap as a temporary fix. Persist the same values in Helm so the next `helm upgrade` does not revert them:
+
+```bash
+kubectl patch configmap kagent-controller -n kagent --type merge -p '{
+  "data": {
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "agentregistry-enterprise-telemetry-collector.agentregistry-system.svc.cluster.local:4317",
+    "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "grpc",
+    "OTEL_EXPORTER_OTLP_TRACES_INSECURE": "true",
+    "OTEL_TRACING_ENABLED": "true"
+  }
+}'
+
+kubectl rollout restart deployment/kagent-controller -n kagent
+kubectl rollout status deployment/kagent-controller -n kagent --timeout=5m
+```
+
+The injected env is only applied when kagent regenerates Agent Deployments. Force each kagent Agent to reconcile so existing pods pick up the new endpoint:
+
+```bash
+kubectl annotate agent <agent-name> -n kagent \
+  tracing.agentregistry.dev/restarted-at="$(date -u +%Y%m%d%H%M%S)" --overwrite
+
+kubectl rollout status deployment/<agent-name> -n kagent --timeout=5m
+```
+
+Verify the workload now uses AgentRegistry's collector:
+
+```bash
+kubectl get deploy <agent-name> -n kagent \
+  -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")]}{.value}{"\n"}{end}'
+```
+
+> **Tip:** Only real agent invocations (chats / tool calls) emit spans. Fetching `/.well-known/agent-card.json` does not, so the trace table will stay empty until you send a real prompt that calls the model.
 
 ## 3. Verify the Pipeline
 
@@ -185,6 +245,8 @@ Check:
 - The runtime has `spec.telemetryEndpoint` set.
 - The deployment was re-applied after setting `spec.telemetryEndpoint`.
 - The agent image actually emits OpenTelemetry traces.
+- A real chat or tool call has been sent. Card fetches alone do not emit spans.
+- For kagent runtimes, `kagent-controller` injects `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, which overrides `OTEL_EXPORTER_OTLP_ENDPOINT`. Repoint it as shown in [Repoint kagent's injected trace endpoint](#repoint-kagents-injected-trace-endpoint).
 - External runtimes can reach the collector endpoint.
 - The collector logs do not show exporter or ClickHouse write errors.
 
