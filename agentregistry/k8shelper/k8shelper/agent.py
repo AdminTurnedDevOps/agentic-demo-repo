@@ -44,7 +44,7 @@ async def check_prime(nums: list[int]) -> str:
 
 def create_model():
     """Use a Gemini model."""
-    return "gemini-2.0-flash"
+    return os.getenv("MODEL_NAME", "gemini-3.5-flash")
 
 
 mcp_tools = get_mcp_tools()
@@ -76,4 +76,3 @@ You should not rely on the previous history on prime results.
         check_prime,
     ] + (mcp_tools if mcp_tools else []),
 )
-

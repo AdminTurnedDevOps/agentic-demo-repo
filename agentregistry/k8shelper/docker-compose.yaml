@@ -19,7 +19,7 @@ services:
       - OTEL_SERVICE_NAME=k8shelper
       - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}
       - MODEL_PROVIDER=gemini
-      - MODEL_NAME=gemini-2.0-flash
+      - MODEL_NAME=gemini-3.5-flash
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     volumes:
       - type: bind
