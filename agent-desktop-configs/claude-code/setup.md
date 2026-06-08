@@ -1,4 +1,4 @@
-# Claude Code with AgentGateway
+# Claude Code with Agentgateway
 
 Route Claude Code CLI/Desktop LLM traffic through agentgateway for security, observability, and rate limiting.
 
