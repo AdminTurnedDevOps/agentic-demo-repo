@@ -5,7 +5,7 @@ Route Claude Code CLI/Desktop LLM traffic through agentgateway for security, obs
 ## Prerequisites
 
 - Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
-- AgentGateway deployed and running (see [agentgateway-enterprise/setup.md](../../agentgateway-enterprise/setup.md))
+- Agentgateway deployed and running (see [agentgateway-enterprise/setup.md](../../agentgateway-enterprise/setup.md))
 - Anthropic API key
 
 ## Create Anthropic API Key Secret
