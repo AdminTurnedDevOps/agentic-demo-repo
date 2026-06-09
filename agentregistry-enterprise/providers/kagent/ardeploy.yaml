@@ -11,7 +11,7 @@ spec:
     kind: Runtime
     name: kagent
   deploymentRefs:
-    - name: gith-kage-7ln8cmrm74khnmu
+    - name: github-copilot-mcp-kagent
   env:
     MODEL_PROVIDER: gemini
     MODEL_NAME: gemini-3.5-flash

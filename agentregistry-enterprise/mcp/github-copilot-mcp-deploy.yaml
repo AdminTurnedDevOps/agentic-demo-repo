@@ -1,0 +1,12 @@
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: github-copilot-mcp-kagent
+spec:
+  runtimeRef:
+    kind: Runtime
+    name: kagent
+  targetRef:
+    kind: MCPServer
+    name: github-copilot-mcp-server
+    tag: latest

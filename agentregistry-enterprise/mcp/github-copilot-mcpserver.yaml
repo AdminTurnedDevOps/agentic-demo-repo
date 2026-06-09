@@ -1,0 +1,13 @@
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: github-copilot-mcp-server
+  tag: latest
+spec:
+  description: GitHub Copilot MCP Server to interact with GitHub repositories, issues, pull requests, and Copilot coding-agent tasks
+  remote:
+    type: streamable-http
+    url: https://api.githubcopilot.com/mcp
+    headers:
+      - name: Authorization
+        value: ${GITHUB_COPILOT_MCP_TOKEN}

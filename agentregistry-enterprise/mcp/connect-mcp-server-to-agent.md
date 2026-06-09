@@ -1,42 +1,128 @@
 # Connect an MCP Server to an Agent
 
-This guide shows how to wire an MCP server that was deployed through Agentregistry to an Agent that is also deployed through Agentregistry (for example, the `k8shelper` BYO agent on the `kagent` runtime).
+This guide shows a clean, repeatable flow for deploying the GitHub Copilot MCP server through Agentregistry Enterprise and wiring it to the `k8shelper` BYO agent on the `kagent` runtime.
 
-It uses `github-copilot-mcp-server` as the example MCP and `k8shelper` as the example agent.
+Use this flow after deleting the Agentregistry Agent, MCP server, or Deployment records.
 
-## How AgentRegistry Wires MCPs to Agents
+## Prerequisites
 
-For Agentregistry-managed agents, the MCP wiring belongs on the Agentregistry resources, not on the kagent CRs:
+- Enterprise `arctl` is installed and authenticated.
+- `ARCTL_API_BASE_URL` and `ARCTL_API_TOKEN` are set, or equivalent `--registry-url` / `--registry-token` flags are used.
+- The `kagent` runtime exists in Agentregistry:
 
-- The `Agent` declares which MCPs it depends on under `spec.mcpServers`.
-- The `Deployment` declares which MCP deployments to wire under `spec.deploymentRefs`.
-- AgentRegistry resolves the MCP endpoint and injects it into the generated kagent workload.
+```bash
+arctl get runtime kagent -o yaml
+```
 
-Important constraints:
+Expected runtime shape:
 
-- The agent and the MCP deployment must run on the same Runtime (here, `kagent`).
-- The MCP referenced in `spec.mcpServers` must match a target in the agent Deployment's `deploymentRefs`.
+```yaml
+spec:
+  type: Kagent
+  config:
+    kagentUrl: http://kagent-controller.kagent.svc.cluster.local:8083
+    namespace: kagent
+```
 
-### Resource Naming
+- The `k8shelper` image is built from `agentregistry-enterprise/k8shelper`, including:
+  - `k8shelper/mcp_tools.py`, which reads `MCP_SERVERS_CONFIG` and filters the incompatible `issue_write` tool by default.
+  - `k8shelper/agent.py`, which includes `list_available_tools` and prompts the model to disclose GitHub MCP capabilities.
 
-The same agent has three different resource names across the layers:
+## Resource Names
 
-| Layer | Kind | Name in this guide |
-|-------|------|--------------------|
-| AgentRegistry Agent | `ar.dev/v1alpha1` `Agent` | `k8shelper` |
-| AgentRegistry Deployment | `ar.dev/v1alpha1` `Deployment` | `k8shelper-kagent` |
-| Generated kagent Agent CR | `kagent.dev/v1alpha2` `Agent` | `k8shelper` (in `kagent` namespace) |
-| Generated Kubernetes Deployment | `apps/v1` `Deployment` | `k8shelper` (in `kagent` namespace) |
+| Layer | Kind | Example name |
+|-------|------|--------------|
+| Agentregistry MCP artifact | `ar.dev/v1alpha1` `MCPServer` | `github-copilot-mcp-server` |
+| Agentregistry MCP deployment | `ar.dev/v1alpha1` `Deployment` | `github-copilot-mcp-kagent` |
+| Agentregistry Agent artifact | `ar.dev/v1alpha1` `Agent` | `k8shelper` |
+| Agentregistry Agent deployment | `ar.dev/v1alpha1` `Deployment` | `k8shelper-kagent` |
+| Generated kagent Agent CR | `kagent.dev/v1alpha2` `Agent` | `k8shelper` in namespace `kagent` |
+| Generated Kubernetes Deployment | `apps/v1` `Deployment` | `k8shelper` in namespace `kagent` |
 
-Use the AgentRegistry Deployment name (`k8shelper-kagent`) with `arctl` commands, and the kagent / Kubernetes name (`k8shelper`) with `kubectl` commands.
+Use Agentregistry names with `arctl`. Use generated kagent/Kubernetes names with `kubectl`.
 
-## Option 1: Agentregistry-Managed (Recommended)
+## 1. Build k8shelper
 
-This is the right path for AgentRegistry-deployed agents like `k8shelper`.
+From the root of `agentic-demo-repo`:
 
-### 1. Reference the MCP on the Agent
+```bash
+cd agentregistry-enterprise/k8shelper
 
-Update `k8shelper.yaml` to include `spec.mcpServers`:
+export K8SHELPER_IMAGE="<your-registry>/k8shelper:github-mcp"
+docker buildx build --platform linux/amd64 -t "${K8SHELPER_IMAGE}" --push .
+```
+
+Use a registry your cluster can pull from.
+
+## 2. Register the GitHub Copilot MCP Artifact
+
+Use `agentregistry-enterprise/mcp/github-copilot-mcpserver.yaml`:
+
+```yaml
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: github-copilot-mcp-server
+  tag: latest
+spec:
+  description: GitHub Copilot MCP Server to interact with GitHub repositories, issues, pull requests, and Copilot coding-agent tasks
+  remote:
+    type: streamable-http
+    url: https://api.githubcopilot.com/mcp
+    headers:
+      - name: Authorization
+        value: ${GITHUB_COPILOT_MCP_TOKEN}
+```
+
+Apply it:
+
+```bash
+envsubst < agentregistry-enterprise/mcp/github-copilot-mcpserver.yaml | arctl apply -f -
+arctl get mcps
+arctl get mcp github-copilot-mcp-server --tag latest -o yaml
+```
+
+For demos, the token can be rendered into the Agentregistry MCP artifact. For production-style flows, use the secret mechanism supported by your Agentregistry deployment instead of literal values.
+
+## 3. Deploy the MCP to kagent
+
+Use `agentregistry-enterprise/mcp/github-copilot-mcp-deploy.yaml`:
+
+```yaml
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: github-copilot-mcp-kagent
+spec:
+  runtimeRef:
+    kind: Runtime
+    name: kagent
+  targetRef:
+    kind: MCPServer
+    name: github-copilot-mcp-server
+    tag: latest
+```
+
+Apply it:
+
+```bash
+arctl apply -f agentregistry-enterprise/mcp/github-copilot-mcp-deploy.yaml
+arctl get deployments
+arctl get deployment github-copilot-mcp-kagent -o yaml
+```
+
+Look for:
+
+- `phase: deployed`
+- `Ready=True`
+- `RuntimeConfigured=True`
+- `MCPServerURL=True`
+
+If you use a different MCP Deployment name, use that exact name in `deploymentRefs` when deploying `k8shelper`.
+
+## 4. Register k8shelper
+
+`agentregistry-enterprise/providers/kagent/k8shelper.yaml` should reference the image and MCP artifact:
 
 ```yaml
 apiVersion: ar.dev/v1alpha1
@@ -59,12 +145,14 @@ spec:
 Apply it:
 
 ```bash
+cd agentregistry-enterprise/providers/kagent
 envsubst < k8shelper.yaml | arctl apply -f -
+arctl get agent k8shelper --tag 1.0.0 -o yaml
 ```
 
-### 2. Reference the MCP Deployment in the Agent Deployment
+## 5. Deploy k8shelper and Wire the MCP
 
-Update `ardeploy.yaml` to add `deploymentRefs`:
+`agentregistry-enterprise/providers/kagent/ardeploy.yaml` should reference the MCP Deployment from step 3:
 
 ```yaml
 apiVersion: ar.dev/v1alpha1
@@ -80,66 +168,160 @@ spec:
     kind: Runtime
     name: kagent
   deploymentRefs:
-    - name: gith-kage-7ln8cmrm74khnmu
+    - name: github-copilot-mcp-kagent
   env:
     MODEL_PROVIDER: gemini
     MODEL_NAME: gemini-3.5-flash
 ```
 
-Replace `gith-kage-7ln8cmrm74khnmu` with the name of the MCP Deployment you created in Agentregistry.
-
 Apply it:
 
 ```bash
 arctl apply -f ardeploy.yaml
-```
-
-Agentregistry will update the generated kagent Agent so it can call the MCP. For BYO kagent agents, Agentregistry injects the resolved MCPs through `MCP_SERVERS_CONFIG` on the generated workload. The `k8shelper` image must include support for reading that environment variable, or it must have the same JSON mounted at `/config/mcp-servers.json`.
-
-For in-cluster MCP workloads, the resolved endpoint looks like:
-
-```text
-http://github-copilot-mcp-server.kagent.svc.cluster.local:3000/mcp
-```
-
-For remote MCPs, the injected config can point directly at the remote endpoint, for example `https://api.githubcopilot.com/mcp`, with any required headers included in the server entry.
-
-### 3. Verify
-
-Check the Agentregistry Deployment row. Use the Agentregistry Deployment name, for example `k8shelper-kagent`:
-
-```bash
 arctl get deployment k8shelper-kagent -o yaml
 ```
 
 Look for:
 
+- `phase: deployed`
 - `Ready=True`
 - `RuntimeConfigured=True`
-- Resolved MCP endpoint either on the related MCP deployment as `MCPServerURL=True` or as part of the agent runtime config.
+- runtime metadata pointing at namespace `kagent`
 
-You can also confirm the generated kagent workload references the MCP from inside the cluster. The generated kagent `Agent` CR and the Kubernetes Deployment are named `k8shelper`:
+## 6. Configure Runtime Secrets
+
+The generated kagent Agent needs the Gemini API key in the `kagent` namespace:
+
+```bash
+kubectl create secret generic k8shelper-google \
+  -n kagent \
+  --from-literal=GOOGLE_API_KEY="${GOOGLE_API_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Patch the generated kagent Agent CR to reference the Secret:
+
+```bash
+kubectl patch agent k8shelper -n kagent --type='json' -p='[
+  {"op":"add","path":"/spec/byo/deployment/env/-","value":{"name":"GOOGLE_API_KEY","valueFrom":{"secretKeyRef":{"name":"k8shelper-google","key":"GOOGLE_API_KEY"}}}}
+]'
+```
+
+Roll out and verify:
+
+```bash
+kubectl rollout status deployment/k8shelper -n kagent --timeout=5m
+kubectl get agent k8shelper -n kagent -o yaml
+kubectl get pods -n kagent -l kagent=k8shelper
+```
+
+## 7. Verify MCP Wiring
+
+Check that Agentregistry injected MCP configuration into the generated kagent workload:
 
 ```bash
 kubectl get agent k8shelper -n kagent -o yaml | grep -i mcp
-kubectl get deploy k8shelper -n kagent -o yaml | grep -i mcp
-```
-
-For the current `k8shelper` image, also confirm the runtime config source is present:
-
-```bash
 kubectl get deploy k8shelper -n kagent -o yaml | grep -E 'MCP_SERVERS_CONFIG|MCP_SERVERS_CONFIG_PATH|mcp-servers.json'
 ```
 
-### Existing `k8shelper` Images
-
-Current `k8shelper` source reads `MCP_SERVERS_CONFIG` directly. If you are using an older already-built image that only reads `/config/mcp-servers.json`, mount the MCP config as a Secret:
+Check the kagent-side RemoteMCPServer if one was created:
 
 ```bash
+kubectl get remotemcpservers.kagent.dev -n kagent
+kubectl get remotemcpserver github-copilot-mcp-server -n kagent -o yaml
+```
+
+A healthy RemoteMCPServer has:
+
+- `Accepted=True`
+- `spec.url` set to `https://api.githubcopilot.com/mcp` or another valid `http://` / `https://` URL
+- populated `status.discoveredTools`
+
+From inside the pod, confirm the agent sees the GitHub MCP tools:
+
+```bash
+kubectl exec -i -n kagent deploy/k8shelper -- python - <<'PY'
+import asyncio
+from k8shelper.agent import root_agent
+
+async def main():
+    all_tools = []
+    for tool in root_agent.tools:
+        if hasattr(tool, "get_tools"):
+            all_tools.extend(await tool.get_tools())
+        else:
+            all_tools.append(tool)
+
+    names = [getattr(tool, "name", getattr(tool, "__name__", type(tool).__name__)) for tool in all_tools]
+    print("tool_count", len(names))
+    print("has_list_available_tools", "list_available_tools" in names)
+    print("has_github_tools", any(name in names for name in ["search_repositories", "create_pull_request", "get_me"]))
+    print("has_issue_write", "issue_write" in names)
+
+    for tool in root_agent.tools:
+        if hasattr(tool, "close"):
+            await tool.close()
+
+asyncio.run(main())
+PY
+```
+
+Expected output:
+
+```text
+has_list_available_tools True
+has_github_tools True
+has_issue_write False
+```
+
+`issue_write` is filtered out by default because the GitHub Copilot MCP schema includes a boolean-only enum that Gemini rejects when converting MCP tools to function declarations. Override `MCP_DISABLED_TOOLS` only if your model/runtime accepts that schema.
+
+## Existing Image Workaround
+
+Prefer rebuilding the image. Use this workaround only when you must run an older image that does not include the current `agent.py` and `mcp_tools.py`.
+
+Create `/tmp/mcp-servers.json` with only the direct remote GitHub MCP endpoint:
+
+```json
+[
+  {
+    "name": "github-copilot-mcp-server",
+    "type": "remote",
+    "url": "https://api.githubcopilot.com/mcp",
+    "headers": {
+      "Authorization": "${GITHUB_COPILOT_MCP_TOKEN}"
+    }
+  }
+]
+```
+
+Create the Secret:
+
+```bash
+envsubst < /tmp/mcp-servers.json > /tmp/mcp-servers.rendered.json
+
 kubectl create secret generic k8shelper-mcp-servers \
   -n kagent \
-  --from-file=mcp-servers.json=./mcp-servers.json \
+  --from-file=mcp-servers.json=/tmp/mcp-servers.rendered.json \
   --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Create a ConfigMap with the current source files:
+
+```bash
+kubectl create configmap k8shelper-code-override \
+  -n kagent \
+  --from-file=agent.py=agentregistry-enterprise/k8shelper/k8shelper/agent.py \
+  --from-file=mcp_tools.py=agentregistry-enterprise/k8shelper/k8shelper/mcp_tools.py \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Patch the generated kagent Agent. The first patch adds `MCP_SERVERS_CONFIG_PATH` without replacing the existing environment variables. If that variable already exists, edit or replace the existing entry instead of adding a duplicate.
+
+```bash
+kubectl patch agent k8shelper -n kagent --type json -p='[
+  {"op":"add","path":"/spec/byo/deployment/env/-","value":{"name":"MCP_SERVERS_CONFIG_PATH","value":"/config/mcp-servers.json"}}
+]'
 
 kubectl patch agent k8shelper -n kagent --type merge -p '{
   "spec": {
@@ -157,6 +339,22 @@ kubectl patch agent k8shelper -n kagent --type merge -p '{
                 }
               ]
             }
+          },
+          {
+            "name": "k8shelper-code-override",
+            "configMap": {
+              "name": "k8shelper-code-override",
+              "items": [
+                {
+                  "key": "mcp_tools.py",
+                  "path": "mcp_tools.py"
+                },
+                {
+                  "key": "agent.py",
+                  "path": "agent.py"
+                }
+              ]
+            }
           }
         ],
         "volumeMounts": [
@@ -164,92 +362,45 @@ kubectl patch agent k8shelper -n kagent --type merge -p '{
             "name": "mcp-servers-config",
             "mountPath": "/config",
             "readOnly": true
+          },
+          {
+            "name": "k8shelper-code-override",
+            "mountPath": "/app/k8shelper/mcp_tools.py",
+            "subPath": "mcp_tools.py",
+            "readOnly": true
+          },
+          {
+            "name": "k8shelper-code-override",
+            "mountPath": "/app/k8shelper/agent.py",
+            "subPath": "agent.py",
+            "readOnly": true
           }
         ]
       }
     }
   }
 }'
+
+kubectl rollout status deployment/k8shelper -n kagent --timeout=5m
 ```
 
-The `mcp-servers.json` file should be a JSON list of server entries. For a remote GitHub Copilot MCP endpoint, the shape is:
-
-```json
-[
-  {
-    "name": "github-copilot-mcp-server",
-    "type": "remote",
-    "url": "https://api.githubcopilot.com/mcp",
-    "headers": {
-      "Authorization": "${GITHUB_COPILOT_MCP_TOKEN}"
-    }
-  }
-]
-```
-
-## Option 2: Native kagent (Skip Agentregistry MCP Wiring)
-
-Use this option only if you want to manage the agent's tool list directly on the kagent side and bypass Agentregistry's MCP resolution.
-
-If Agentregistry exposed the MCP as a service inside the cluster, register that service URL as a kagent `RemoteMCPServer`:
-
-```yaml
-apiVersion: kagent.dev/v1alpha2
-kind: RemoteMCPServer
-metadata:
-  name: github-copilot
-  namespace: kagent
-spec:
-  protocol: STREAMABLE_HTTP
-  url: http://github-copilot-mcp-server.kagent.svc.cluster.local:3000/mcp
-```
-
-If the MCP is a remote endpoint and no in-cluster Service exists, point the `RemoteMCPServer` at the remote URL instead and provide any required headers through `headersFrom`:
-
-```yaml
-apiVersion: kagent.dev/v1alpha2
-kind: RemoteMCPServer
-metadata:
-  name: github-copilot
-  namespace: kagent
-spec:
-  protocol: STREAMABLE_HTTP
-  url: https://api.githubcopilot.com/mcp
-  headersFrom:
-    - name: Authorization
-      valueFrom:
-        type: Secret
-        name: github-copilot-mcp-auth
-        key: Authorization
-```
-
-For declarative kagent Agents, reference the tools under `spec.declarative.tools`:
-
-```yaml
-apiVersion: kagent.dev/v1alpha2
-kind: Agent
-metadata:
-  name: my-declarative-agent
-  namespace: kagent
-spec:
-  type: Declarative
-  declarative:
-    modelConfig: my-model-config
-    tools:
-      - type: McpServer
-        mcpServer:
-          kind: RemoteMCPServer
-          name: github-copilot
-          toolNames: []
-```
-
-> **Note:** `k8shelper` is a BYO image-based agent managed by Agentregistry. Use Option 1 for it. Option 2 is for kagent-managed declarative agents.
+Direct patches to generated kagent resources can be overwritten by future Agentregistry redeploys.
 
 ## Troubleshooting
 
-- The Agent Deployment must reference the MCP Deployment in `deploymentRefs`, and the Agent CR must list the MCP in `spec.mcpServers`. Agentregistry enforces this match for non-kagent targets and uses it to derive the MCP endpoint for kagent.
-- The agent and the MCP Deployment must use the same Runtime. Cross-runtime MCP wiring is rejected.
-- If the MCP endpoint is not resolved, check the MCP Deployment's status conditions for `MCPServerURL` and confirm the MCP workload is running in the kagent namespace.
-- If a generated kagent `RemoteMCPServer` has `Accepted=False` with `unsupported protocol scheme ""`, its `spec.url` is missing an `http://` or `https://` scheme.
-- If the Agentregistry Deployment is `deployed` but the BYO agent has no MCP tools, check whether the image reads `MCP_SERVERS_CONFIG`. Older `k8shelper` images only read `/config/mcp-servers.json` or `MCP_SERVERS_CONFIG_PATH`.
-- After updating the Agent or Deployment, re-apply through Agentregistry. Direct edits to the kagent CR are reconciled away by Agentregistry on the next sync.
+- `arctl get deployments` shows the MCP deployment as `deployed`, but k8shelper has no GitHub tools:
+  - Confirm `k8shelper` was built from `agentregistry-enterprise/k8shelper`.
+  - Confirm `MCP_SERVERS_CONFIG` or `MCP_SERVERS_CONFIG_PATH` is present in the generated Deployment.
+  - Confirm `list_available_tools` is present in the live pod.
+
+- `RemoteMCPServer` has `Accepted=False` with `unsupported protocol scheme ""`:
+  - Its `spec.url` is missing `http://` or `https://`.
+  - For GitHub Copilot MCP, use `https://api.githubcopilot.com/mcp`.
+
+- Gemini returns `400 INVALID_ARGUMENT` for a function declaration enum:
+  - Confirm `issue_write` is filtered out.
+  - Check `MCP_DISABLED_TOOLS`; default should include `issue_write`.
+
+- The model says it only has `roll_die` and `check_prime`:
+  - Confirm you are running the current `agent.py` with `list_available_tools`.
+  - Ask: `What tools do you have access to?` The agent should call `list_available_tools` and summarize local plus GitHub MCP categories.
