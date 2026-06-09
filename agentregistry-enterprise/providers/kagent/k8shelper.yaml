@@ -10,3 +10,6 @@ spec:
   modelName: gemini-3.5-flash
   source:
     image: ${K8SHELPER_IMAGE}
+  mcpServers:
+    - kind: MCPServer
+      name: github-copilot-mcp-server

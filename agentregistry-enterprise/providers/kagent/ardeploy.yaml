@@ -10,6 +10,8 @@ spec:
   runtimeRef:
     kind: Runtime
     name: kagent
+  deploymentRefs:
+    - name: gith-kage-7ln8cmrm74khnmu
   env:
     MODEL_PROVIDER: gemini
     MODEL_NAME: gemini-3.5-flash

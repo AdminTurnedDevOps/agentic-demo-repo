@@ -35,7 +35,18 @@ def _get_terminate_on_close() -> bool:
 
 
 def _load_runtime_mcp_servers() -> List[dict]:
-    """Load MCP servers resolved at runtime (registry types) from config file."""
+    """Load MCP servers resolved at runtime from env or config file."""
+    env_config = os.environ.get("MCP_SERVERS_CONFIG")
+    if env_config:
+        try:
+            data = json.loads(env_config)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict) and "servers" in data:
+                return data["servers"]
+        except json.JSONDecodeError:
+            pass
+
     # The agent-specific directory is mounted to /config, so the file is at /config/mcp-servers.json
     config_paths = [Path(__file__).parent / "mcp-servers.json", Path("/config/mcp-servers.json")]
 
@@ -130,4 +141,3 @@ def get_mcp_tools(
         toolsets.append(toolset)
 
     return toolsets
-
