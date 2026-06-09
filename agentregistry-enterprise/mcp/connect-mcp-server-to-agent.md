@@ -131,6 +131,62 @@ For the current `k8shelper` image, also confirm the runtime config source is pre
 kubectl get deploy k8shelper -n kagent -o yaml | grep -E 'MCP_SERVERS_CONFIG|MCP_SERVERS_CONFIG_PATH|mcp-servers.json'
 ```
 
+### Existing `k8shelper` Images
+
+Current `k8shelper` source reads `MCP_SERVERS_CONFIG` directly. If you are using an older already-built image that only reads `/config/mcp-servers.json`, mount the MCP config as a Secret:
+
+```bash
+kubectl create secret generic k8shelper-mcp-servers \
+  -n kagent \
+  --from-file=mcp-servers.json=./mcp-servers.json \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl patch agent k8shelper -n kagent --type merge -p '{
+  "spec": {
+    "byo": {
+      "deployment": {
+        "volumes": [
+          {
+            "name": "mcp-servers-config",
+            "secret": {
+              "secretName": "k8shelper-mcp-servers",
+              "items": [
+                {
+                  "key": "mcp-servers.json",
+                  "path": "mcp-servers.json"
+                }
+              ]
+            }
+          }
+        ],
+        "volumeMounts": [
+          {
+            "name": "mcp-servers-config",
+            "mountPath": "/config",
+            "readOnly": true
+          }
+        ]
+      }
+    }
+  }
+}'
+```
+
+The `mcp-servers.json` file should be a JSON list of server entries. For a remote GitHub Copilot MCP endpoint, the shape is:
+
+```json
+[
+  {
+    "name": "github-copilot-mcp-server",
+    "type": "remote",
+    "url": "https://api.githubcopilot.com/mcp",
+    "headers": {
+      "Authorization": "${GITHUB_COPILOT_MCP_TOKEN}"
+    }
+  }
+]
+```
+
 ## Option 2: Native kagent (Skip Agentregistry MCP Wiring)
 
 Use this option only if you want to manage the agent's tool list directly on the kagent side and bypass Agentregistry's MCP resolution.
