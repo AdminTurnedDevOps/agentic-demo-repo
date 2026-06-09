@@ -16,6 +16,8 @@ export GOOGLE_API_KEY=<your-google-api-key>
 
 The agent loads runtime MCP servers from `MCP_SERVERS_CONFIG` when Agent Registry injects it. It also supports file-based config from `MCP_SERVERS_CONFIG_PATH` or `/config/mcp-servers.json`.
 
+By default, `issue_write` is filtered out through `MCP_DISABLED_TOOLS` because the GitHub Copilot MCP schema includes a boolean-only enum that Gemini rejects when converting MCP tools to function declarations. Override `MCP_DISABLED_TOOLS` if you are using a model/runtime that accepts that schema.
+
 Build and push an amd64 image for Kubernetes nodes:
 
 ```bash

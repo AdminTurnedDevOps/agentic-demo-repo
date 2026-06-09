@@ -55,7 +55,7 @@ Expected result: `HTTP/1.1 200 OK`.
 
 ## 2. Register an Agent for kagent
 
-The k8shelper image must contain the model-selection fix from `agentregistry/k8shelper/k8shelper/agent.py`, which reads `MODEL_NAME` from the environment:
+The k8shelper image must contain the model-selection fix from `agentregistry-enterprise/k8shelper/k8shelper/agent.py`, which reads `MODEL_NAME` from the environment:
 
 ```python
 return os.getenv("MODEL_NAME", "gemini-3.5-flash")
@@ -65,7 +65,7 @@ Build and push the image first. Replace the image value with a registry you can 
 
 ```bash
 # Run from the root of agentic-demo-repo.
-cd agentregistry/k8shelper
+cd agentregistry-enterprise/k8shelper
 
 export K8SHELPER_IMAGE="<your-registry>/k8shelper:model-fix"
 docker buildx build --platform linux/amd64 -t "${K8SHELPER_IMAGE}" --push .
