@@ -1,6 +1,6 @@
-# AgentRegistry Enterprise on Private EKS with GitLab CI/CD
+# Agentregistry Enterprise on Private EKS with GitLab CI/CD
 
-This guide covers deploying AgentRegistry Enterprise on a **private AWS EKS cluster** where the service is not directly exposed via a LoadBalancer. Instead, traffic is routed through an existing Istio Gateway backed by a Network Load Balancer (NLB). Agents and MCP servers are registered via `arctl` in GitLab CI/CD pipelines.
+This guide covers deploying Agentregistry Enterprise on a **private AWS EKS cluster** where the service is not directly exposed via a LoadBalancer. Instead, traffic is routed through an existing Istio Gateway backed by a Network Load Balancer (NLB). Agents and MCP servers are registered via `arctl` in GitLab CI/CD pipelines.
 
 ## Architecture
 
@@ -17,7 +17,7 @@ Internet
                         └── :31313 MCP server
 ```
 
-The private EKS cluster has no public endpoint. All external traffic enters through the existing NLB -> Istio Gateway path. AgentRegistry Enterprise runs as a ClusterIP service, and an HTTPRoute on the Istio Gateway routes traffic to it.
+The private EKS cluster has no public endpoint. All external traffic enters through the existing NLB -> Istio Gateway path. Agentregistry Enterprise runs as a ClusterIP service, and an HTTPRoute on the Istio Gateway routes traffic to it.
 
 ## Prerequisites
 
