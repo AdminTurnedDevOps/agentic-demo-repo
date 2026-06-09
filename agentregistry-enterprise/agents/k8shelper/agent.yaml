@@ -1,8 +1,0 @@
-agentName: k8shelper
-image: ${K8SHELPER_IMAGE}
-language: python
-framework: adk
-modelProvider: gemini
-modelName: gemini-3.5-flash
-description: ""
-updatedAt: 2026-04-12T14:45:33.136136-04:00
