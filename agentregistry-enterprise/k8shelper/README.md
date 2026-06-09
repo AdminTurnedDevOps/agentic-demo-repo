@@ -18,6 +18,8 @@ The agent loads runtime MCP servers from `MCP_SERVERS_CONFIG` when Agent Registr
 
 By default, `issue_write` is filtered out through `MCP_DISABLED_TOOLS` because the GitHub Copilot MCP schema includes a boolean-only enum that Gemini rejects when converting MCP tools to function declarations. Override `MCP_DISABLED_TOOLS` if you are using a model/runtime that accepts that schema.
 
+The agent includes `list_available_tools` so users can ask what local and GitHub MCP-backed tools are available.
+
 Build and push an amd64 image for Kubernetes nodes:
 
 ```bash

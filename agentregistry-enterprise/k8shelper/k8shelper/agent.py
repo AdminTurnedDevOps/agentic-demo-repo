@@ -42,6 +42,89 @@ async def check_prime(nums: list[int]) -> str:
     return "No prime numbers found." if not primes else f"{', '.join(str(num) for num in primes)} are prime numbers."
 
 
+def list_available_tools() -> dict:
+    """List the local tools and GitHub MCP tool categories available to this agent."""
+    return {
+        "local_tools": [
+            {
+                "name": "roll_die",
+                "description": "Roll a die with a specified number of sides.",
+            },
+            {
+                "name": "check_prime",
+                "description": "Check whether a list of numbers are prime.",
+            },
+            {
+                "name": "list_available_tools",
+                "description": "List local and MCP-backed tool capabilities.",
+            },
+        ],
+        "github_mcp_tools": {
+            "repository": [
+                "search_repositories",
+                "create_repository",
+                "fork_repository",
+                "get_file_contents",
+                "create_or_update_file",
+                "delete_file",
+                "push_files",
+            ],
+            "branches_commits_releases": [
+                "list_branches",
+                "create_branch",
+                "list_commits",
+                "get_commit",
+                "list_tags",
+                "get_tag",
+                "list_releases",
+                "get_latest_release",
+                "get_release_by_tag",
+            ],
+            "issues": [
+                "list_issues",
+                "search_issues",
+                "issue_read",
+                "add_issue_comment",
+                "add_reply_to_pull_request_comment",
+                "list_issue_fields",
+                "list_issue_types",
+                "sub_issue_write",
+            ],
+            "pull_requests": [
+                "list_pull_requests",
+                "search_pull_requests",
+                "pull_request_read",
+                "create_pull_request",
+                "update_pull_request",
+                "update_pull_request_branch",
+                "merge_pull_request",
+                "pull_request_review_write",
+                "add_comment_to_pending_review",
+                "request_copilot_review",
+            ],
+            "copilot": [
+                "assign_copilot_to_issue",
+                "create_pull_request_with_copilot",
+                "get_copilot_job_status",
+            ],
+            "search_and_identity": [
+                "search_code",
+                "search_commits",
+                "search_users",
+                "get_me",
+                "get_label",
+                "get_team_members",
+                "get_teams",
+                "list_repository_collaborators",
+                "run_secret_scanning",
+            ],
+            "disabled_by_default": [
+                "issue_write",
+            ],
+        },
+    }
+
+
 def create_model():
     """Use a Gemini model."""
     return os.getenv("MODEL_NAME", "gemini-3.5-flash")
@@ -53,7 +136,12 @@ root_agent = Agent(
     name="k8shelper_agent",
     description="k8shelper agent.",
     instruction=build_instruction("""
-You roll dice and answer questions about the outcome of the dice rolls.
+You are k8shelper, a Kubernetes demo agent with local dice/math tools and GitHub Copilot MCP tools.
+When the user asks what tools you have access to, call list_available_tools and summarize the local tools and GitHub MCP tool categories.
+You can use GitHub MCP tools for repositories, files, branches, commits, releases, issues, pull requests, code search, users, teams, collaborators, secret scanning, and GitHub Copilot coding-agent tasks.
+The issue_write GitHub MCP tool is disabled by default because its schema is not compatible with the current Gemini function declaration conversion.
+
+You can also roll dice and answer questions about the outcome of the dice rolls.
 You can roll dice of different sizes.
 You can use multiple tools in parallel by calling functions in parallel (in one request and in one round).
 It is ok to discuss previous dice roles, and comment on the dice rolls.
@@ -74,5 +162,6 @@ You should not rely on the previous history on prime results.
     tools=[
         roll_die,
         check_prime,
+        list_available_tools,
     ] + (mcp_tools if mcp_tools else []),
 )
