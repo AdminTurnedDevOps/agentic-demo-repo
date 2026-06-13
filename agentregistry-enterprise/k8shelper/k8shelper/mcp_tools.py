@@ -13,6 +13,7 @@ from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StreamableHTTPConn
 
 _MCP_SERVERS = [
 ]
+_DEFAULT_DISABLED_TOOLS = "issue_write"
 
 
 def _resolve_env_vars(value: str) -> str:
@@ -35,29 +36,76 @@ def _get_terminate_on_close() -> bool:
 
 
 def _load_runtime_mcp_servers() -> List[dict]:
-    """Load MCP servers resolved at runtime (registry types) from config file."""
+    """Load MCP servers resolved at runtime from env or config file."""
+    env_path = os.environ.get("MCP_SERVERS_CONFIG_PATH")
+    if env_path:
+        data = _load_mcp_servers_file(Path(env_path))
+        if data:
+            return data
+
+    env_config = os.environ.get("MCP_SERVERS_CONFIG")
+    if env_config:
+        try:
+            data = json.loads(env_config)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict) and "servers" in data:
+                return data["servers"]
+        except json.JSONDecodeError:
+            pass
+
     # The agent-specific directory is mounted to /config, so the file is at /config/mcp-servers.json
     config_paths = [Path(__file__).parent / "mcp-servers.json", Path("/config/mcp-servers.json")]
 
-    # Allow override via environment variable for testing/debugging
-    env_path = os.environ.get("MCP_SERVERS_CONFIG_PATH")
-    if env_path:
-        config_paths.insert(0, Path(env_path))
-
     for config_path in config_paths:
-        if not config_path.exists():
-            continue
-        try:
-            with open(config_path, "r") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    return data
-                elif isinstance(data, dict) and "servers" in data:
-                    return data["servers"]
-        except (json.JSONDecodeError, IOError):
-            continue
+        data = _load_mcp_servers_file(config_path)
+        if data:
+            return data
 
     return []
+
+
+def _load_mcp_servers_file(config_path: Path) -> List[dict]:
+    if not config_path.exists():
+        return []
+    try:
+        with open(config_path, "r") as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict) and "servers" in data:
+                return data["servers"]
+    except (json.JSONDecodeError, IOError):
+        pass
+    return []
+
+
+def _split_tool_names(value: str) -> set[str]:
+    return {item.strip() for item in value.split(",") if item.strip()}
+
+
+def _compose_tool_filter(
+    base_filter: Optional[Union[ToolPredicate, List[str]]] = None,
+) -> Optional[ToolPredicate]:
+    enabled_tools = _split_tool_names(os.environ.get("MCP_ENABLED_TOOLS", ""))
+    disabled_tools = _split_tool_names(os.environ.get("MCP_DISABLED_TOOLS", _DEFAULT_DISABLED_TOOLS))
+
+    if not enabled_tools and not disabled_tools and base_filter is None:
+        return None
+
+    def predicate(tool, readonly_context=None) -> bool:
+        tool_name = getattr(tool, "name", "")
+        if enabled_tools and tool_name not in enabled_tools:
+            return False
+        if disabled_tools and tool_name in disabled_tools:
+            return False
+        if isinstance(base_filter, list):
+            return tool_name in base_filter
+        if base_filter is not None:
+            return base_filter(tool, readonly_context)
+        return True
+
+    return predicate
 
 
 def _get_all_mcp_servers() -> List[dict]:
@@ -122,6 +170,8 @@ def get_mcp_tools(
                 url=url, terminate_on_close=terminate_on_close
             )
 
+        predicate = _compose_tool_filter(predicate)
+
         if predicate is not None:
             toolset = MCPToolset(connection_params=connection_params, tool_filter=predicate)
         else:
@@ -130,4 +180,3 @@ def get_mcp_tools(
         toolsets.append(toolset)
 
     return toolsets
-

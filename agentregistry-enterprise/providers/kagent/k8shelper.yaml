@@ -7,6 +7,9 @@ spec:
   title: k8shelper
   description: "Kubernetes helper agent deployed through the kagent runtime"
   modelProvider: gemini
-  modelName: gemini-2.0-flash
+  modelName: gemini-3.5-flash
   source:
-    image: adminturneddevops/k8shelper:v2
+    image: ${K8SHELPER_IMAGE}
+  mcpServers:
+    - kind: MCPServer
+      name: github-copilot-mcp-server

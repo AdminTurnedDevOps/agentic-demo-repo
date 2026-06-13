@@ -55,7 +55,33 @@ Expected result: `HTTP/1.1 200 OK`.
 
 ## 2. Register an Agent for kagent
 
-Save the following in a file called `k8shelper.yaml`
+The k8shelper image must contain the model-selection fix from `agentregistry-enterprise/k8shelper/k8shelper/agent.py`, which reads `MODEL_NAME` from the environment:
+
+```python
+return os.getenv("MODEL_NAME", "gemini-3.5-flash")
+```
+
+Build and push the image first. Replace the image value with a registry you can push to and that your cluster can pull from:
+
+```bash
+# Run from the root of agentic-demo-repo.
+cd agentregistry-enterprise/k8shelper
+
+export K8SHELPER_IMAGE="<your-registry>/k8shelper:model-fix"
+docker buildx build --platform linux/amd64 -t "${K8SHELPER_IMAGE}" --push .
+```
+
+Create a Kubernetes Secret for the Gemini API key. Do not put API keys directly in the AgentRegistry manifest:
+
+```bash
+kubectl create secret generic k8shelper-google \
+  -n kagent \
+  --from-literal=GOOGLE_API_KEY="${GOOGLE_API_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Save the following in a file called `k8shelper.yaml`:
+
 ```yaml
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -65,16 +91,16 @@ metadata:
 spec:
   title: k8shelper
   description: "Kubernetes helper agent deployed through the kagent runtime"
-  modelProvider: Anthropic
-  modelName: claude-haiku-4-5-20251001
+  modelProvider: gemini
+  modelName: gemini-3.5-flash
   source:
-    image: adminturneddevops/k8shelper:v2
+    image: ${K8SHELPER_IMAGE}
 ```
 
 Apply it:
 
 ```bash
-arctl apply -f k8shelper.yaml
+envsubst < k8shelper.yaml | arctl apply -f -
 arctl get agents
 ```
 
@@ -95,12 +121,25 @@ spec:
   runtimeRef:
     kind: Runtime
     name: kagent
+  env:
+    MODEL_PROVIDER: gemini
+    MODEL_NAME: gemini-3.5-flash
 ```
 
 Apply it:
 
 ```bash
 arctl apply -f ardeploy.yaml
+```
+
+Patch the generated kagent Agent CR to reference the Google API key Secret. AgentRegistry `Deployment.spec.env` supports literal values, but this Secret reference must be added on the generated kagent resource:
+
+```bash
+kubectl patch agent k8shelper -n kagent --type='json' -p='[
+  {"op":"add","path":"/spec/byo/deployment/env/-","value":{"name":"GOOGLE_API_KEY","valueFrom":{"secretKeyRef":{"name":"k8shelper-google","key":"GOOGLE_API_KEY"}}}}
+]'
+
+kubectl rollout status deployment/k8shelper -n kagent --timeout=5m
 ```
 
 The deployment should move from `deploying` to `deployed` / `Ready=True`.
@@ -113,6 +152,7 @@ AgentRegistry creates a kagent `Agent` CR in the runtime namespace. For the exam
 kubectl get agents.kagent.dev -n kagent k8shelper -o yaml
 kubectl get pods -n kagent -l kagent=k8shelper
 kubectl get svc -n kagent -l kagent=k8shelper
+kubectl get deploy k8shelper -n kagent -o yaml | grep -E 'MODEL_NAME|MODEL_PROVIDER|GOOGLE_API_KEY|image:'
 ```
 
 If the Agent name contains characters that are not valid in Kubernetes resource names, AgentRegistry sanitizes it before creating the kagent CR.
@@ -131,6 +171,7 @@ Common issues:
 - `kagent URL is required`: the runtime is missing `spec.config.kagentUrl`.
 - `authentication token expired during deployment; please retry`: AgentRegistry maps any kagent API `401` to this message. It does not always mean the token is old. It can also mean the kagent controller endpoint rejected the forwarded AgentRegistry bearer token or expected a browser/session-based kagent identity instead.
 - Image pull failures: the image must be public or the runtime must include image pull secrets that exist in the kagent namespace.
+- Gemini `429 RESOURCE_EXHAUSTED` for `gemini-2.0-flash`: the old demo image hardcoded `gemini-2.0-flash`. Rebuild and deploy the patched image from this repo so `MODEL_NAME=gemini-3.5-flash` is honored.
 
 For Entra-authenticated installs, refreshing the CLI token is worth trying first:
 
