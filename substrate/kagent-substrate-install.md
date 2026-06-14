@@ -1,21 +1,31 @@
-```
-helm upgrade kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds --version 0.9.7 -n kagent
-```
+The ate-system substrate control plane (CRDs, ate-api-server, atenet-router, at least one WorkerPool, etc.) must be installed and healthy before you enable the integration on the kagent side.
+
+Why the order matters
+
+When you set:
 
 ```
-helm upgrade kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version 0.9.7 -n kagent --reuse-values \
-     --set controller.agentImage.tag="" \
-     --set controller.skillsInitImage.tag="" \
-     --set controller.image.registry="" \
-     --set controller.image.repository=kagent-dev/kagent/controller \
-     --set controller.image.tag="" \
-     --set controller.image.pullPolicy="" \
-     --set ui.image.registry="" \
-     --set ui.image.repository=kagent-dev/kagent/ui \
-     --set ui.image.tag="" \
-     --set ui.image.pullPolicy="" \
-     --set substrateWorkerPool.ateomImage=ghcr.io/kagent-dev/substrate/ateom-gvisor:v0.0.6
+controller:
+  substrate:
+    enabled: true
+    ateApiEndpoint: "dns:///api.ate-system.svc:443"
+    ...
 ```
+
+the kagent controller does this at startup (see go/core/pkg/app/app.go:548):
+
+```
+if cfg.Substrate.AteAPIEndpoint != "" {
+    substrateAteClient, dialErr = substrate.Dial(...)
+    if dialErr != nil {
+        ...log...
+        os.Exit(1)   // hard failure
+    }
+    ...
+}
+```
+
+If the endpoint isn't reachable (or the substrate components aren't there yet), the controller pod will fail to start and will keep crash-looping.
 
 ```
 helm upgrade --install substrate-crds \
@@ -26,4 +36,40 @@ oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds
 helm upgrade --install substrate \
 oci://ghcr.io/kagent-dev/substrate/helm/substrate \
 --namespace ate-system --create-namespace
+```
+
+if you aren't using GKE, you will have to set the JWT issuer to your cluster so you can hit the /substrate page. For example, if you're running an Azure Kubernetes Service (AKS) cluster, your installation of Agent Substrate will look like the below (no need to run the below; this is just to show for if you're not on a GKE or Kind cluster)
+
+```
+helm upgrade --install substrate \
+     oci://ghcr.io/kagent-dev/substrate/helm/substrate \
+     --namespace ate-system --create-namespace \
+     --set auth.jwt.issuer=https://aksenvironment01-dns01-xujbmtcz.hcp.westus.azmk8s.io \
+     --set auth.jwt.audience=api.ate-system.svc 2>&1 | tail -20
+```
+
+```
+helm upgrade kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds --version 0.9.7 -n kagent --create-namespace
+```
+
+```
+helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version 0.9.7 -n kagent \
+  --set providers.default=anthropic \
+  --set providers.anthropic.apiKey=$ANTHROPIC_API_KEY \
+  --set controller.agentImage.tag="" \
+  --set controller.skillsInitImage.tag="" \
+  --set controller.image.registry="" \
+  --set controller.image.repository=kagent-dev/kagent/controller \
+  --set controller.image.tag="" \
+  --set controller.image.pullPolicy="" \
+  --set ui.image.registry="" \
+  --set ui.image.repository=kagent-dev/kagent/ui \
+  --set ui.image.tag="" \
+  --set ui.image.pullPolicy="" \
+  --set controller.substrate.enabled=true \
+  --set controller.substrate.ateApiEndpoint="dns:///api.ate-system.svc:443" \
+  --set controller.substrate.ateApiInsecure=true \
+  --set controller.substrate.atenetRouterURL="http://atenet-router.ate-system.svc:80" \
+  --set controller.substrate.ateApiTokenFile="/var/run/secrets/tokens/ate-api/token" \
+  --set substrateWorkerPool.ateomImage=ghcr.io/kagent-dev/substrate/ateom-gvisor:v0.0.6
 ```
