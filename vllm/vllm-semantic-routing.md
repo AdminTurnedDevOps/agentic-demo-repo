@@ -129,6 +129,93 @@ curl -X POST http://$SR_IP:8080/api/v1/classify/intent \
   -d '{"text":"Explain quantum computing"}'
 ```
 
+## Running the vLLM Semantic Router Dashboard Locally Against the Cluster
+
+The Helm chart ships only the router (gRPC `50051`, classify-api `8080`, metrics `9190`). The Web UI ("dashboard") is a separate Go backend + React frontend that lives in the upstream repo at `dashboard/`. To use it against the in-cluster router, port-forward the router APIs and run the dashboard binary locally pointed at them.
+
+Verified on `aksenvironment01` against the `semantic-router` Helm release in `vllm-semantic-router-system`.
+
+### Prerequisites
+
+- The upstream repo cloned at `agentic-demo-repo/vllm/semantic-router`
+- `node` (v18+) and `go` (1.22+) on the local machine
+- `kubectl` context pointing at the cluster where `semantic-router` is installed
+
+### 1. Port-forward the in-cluster router
+
+```bash
+kubectl port-forward -n vllm-semantic-router-system svc/semantic-router 8080:8080 &
+kubectl port-forward -n vllm-semantic-router-system svc/semantic-router-metrics 9190:9190 &
+
+# Sanity check
+curl -s -o /dev/null -w "router api => %{http_code}\n" http://localhost:8080/health
+curl -s -o /dev/null -w "router metrics => %{http_code}\n" http://localhost:9190/metrics
+```
+
+Both should return `200`.
+
+### 2. Build the dashboard frontend
+
+```bash
+cd agentic-demo-repo/vllm/semantic-router/dashboard/frontend
+npm install
+npx vite build
+```
+
+Note: `npm run build` runs `tsc && vite build`. The upstream tree currently has one TypeScript type error in `src/components/chatStreamingFrameSync.ts` (`Timeout` vs `number`) that breaks the `tsc` step. Calling `vite build` directly skips type-checking and produces a working `dist/`.
+
+### 3. Build the dashboard backend
+
+```bash
+cd ../backend
+go build -o vsr-dashboard .
+```
+
+### 4. Run the dashboard pointed at the port-forwards
+
+```bash
+cd agentic-demo-repo/vllm/semantic-router/dashboard/backend
+
+DASHBOARD_PORT=8700 \
+TARGET_ROUTER_API_URL=http://localhost:8080 \
+TARGET_ROUTER_METRICS_URL=http://localhost:9190/metrics \
+DASHBOARD_STATIC_DIR=../frontend/dist \
+./vsr-dashboard
+```
+
+Expected log lines on startup:
+
+```
+Semantic Router Dashboard listening on :8700
+Router API: http://localhost:8080 → /api/router/*
+Router Metrics: http://localhost:9190/metrics → /metrics/router
+```
+
+Open `http://localhost:8700/` in a browser. The Landing, Config, and Topology tabs render against the in-cluster router immediately.
+
+### Optional targets
+
+The dashboard supports additional reverse-proxy targets. Leave them unset and those tabs are just inert:
+
+- `TARGET_GRAFANA_URL` — Grafana for the Monitoring iframe (`http://localhost:3000` if you port-forward a Grafana service)
+- `TARGET_PROMETHEUS_URL` — Prometheus for link-outs and metric queries
+- `TARGET_ENVOY_URL` — Envoy proxy for the Playground chat tab (Helm chart does not deploy Envoy)
+
+### Caveats specific to the in-cluster install
+
+- **No Grafana/Prometheus is deployed** by the `semantic-router` Helm chart. The Monitoring tab will be blank unless you install kube-prometheus-stack (or any Prometheus + Grafana) and port-forward Grafana to `:3000`.
+- **No Envoy front-proxy** is deployed. The Playground chat tab will not produce completions until Envoy is added in front of the router.
+- **Config writes won't persist.** The router config is mounted from the `semantic-router-config` ConfigMap and is read-only inside the pod. `POST /api/router/config/update` calls from the dashboard will fail. Read-only views (Config, Topology) work fine.
+- `/api/router/config/all` returns `401` until you sign in to the dashboard — that is the expected protected-endpoint behavior, not a wiring issue.
+
+### Teardown
+
+```bash
+# Stop the dashboard
+pkill -f vsr-dashboard
+
+# Stop the port-forwards
+pkill -f "port-forward.*semantic-router"
 
 ## References
 
@@ -136,3 +223,4 @@ curl -X POST http://$SR_IP:8080/api/v1/classify/intent \
 - Upstream docs & CLI: https://vllm-semantic-router.com
 - GitHub: https://github.com/vllm-project/semantic-router
 - Example runtime config source: the `.vllm-sr/` directory produced by a local `vllm-sr serve` run.
+```
