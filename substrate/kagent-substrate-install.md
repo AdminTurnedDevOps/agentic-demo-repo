@@ -67,6 +67,11 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --vers
   --set ui.image.tag="" \
   --set ui.image.pullPolicy="" \
   --set controller.substrate.enabled=true \
+  --set controller.substrate.defaultWorkerPool.namespace=kagent \
+  --set controller.substrate.defaultWorkerPool.name=kagent-default \
+  --set substrateWorkerPool.create=true \
+  --set substrateWorkerPool.name=kagent-default \
+  --set substrateWorkerPool.replicas=1 \
   --set controller.substrate.ateApiEndpoint="dns:///api.ate-system.svc:443" \
   --set controller.substrate.ateApiInsecure=true \
   --set controller.substrate.atenetRouterURL="http://atenet-router.ate-system.svc:80" \
