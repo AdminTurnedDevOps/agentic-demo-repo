@@ -1,8 +1,6 @@
 The ate-system substrate control plane (CRDs, ate-api-server, atenet-router, at least one WorkerPool, etc.) must be installed and healthy before you enable the integration on the kagent side.
 
-Why the order matters
-
-When you set:
+The order matters because when you set:
 
 ```
 controller:
@@ -27,18 +25,24 @@ if cfg.Substrate.AteAPIEndpoint != "" {
 
 If the endpoint isn't reachable (or the substrate components aren't there yet), the controller pod will fail to start and will keep crash-looping.
 
+### Substrate Install
+
+1. Install the CRDs for Substrate
 ```
 helm upgrade --install substrate-crds \
 oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds
 ```
 
+2. Install substrate
 ```
 helm upgrade --install substrate \
 oci://ghcr.io/kagent-dev/substrate/helm/substrate \
 --namespace ate-system --create-namespace
 ```
 
-if you aren't using GKE, you will have to set the JWT issuer to your cluster so you can hit the /substrate page. For example, if you're running an Azure Kubernetes Service (AKS) cluster, your installation of Agent Substrate will look like the below (no need to run the below; this is just to show for if you're not on a GKE or Kind cluster)
+### Kagent Install
+
+If you aren't using GKE, you will have to set the JWT issuer to your cluster so you can hit the /substrate page. For example, if you're running an Azure Kubernetes Service (AKS) cluster, your installation of Agent Substrate will look like the below (no need to run the below; this is just to show for if you're not on a GKE or Kind cluster)
 
 ```
 helm upgrade --install substrate \
@@ -48,9 +52,14 @@ helm upgrade --install substrate \
      --set auth.jwt.audience=api.ate-system.svc 2>&1 | tail -20
 ```
 
+1. Install the kagent CRDs
 ```
 helm upgrade kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds --version 0.9.7 -n kagent --create-namespace
 ```
+
+2. Install kagent. This configuration also points to your Substrate installation and creates a `WorkerPool` because without it, you won't be able to create an Agent with Substrate as you'll get the following error:
+
+![](images/suberror.png)
 
 ```
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version 0.9.7 -n kagent \
