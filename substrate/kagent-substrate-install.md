@@ -87,3 +87,7 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --vers
   --set controller.substrate.ateApiTokenFile="/var/run/secrets/tokens/ate-api/token" \
   --set substrateWorkerPool.ateomImage=ghcr.io/kagent-dev/substrate/ateom-gvisor:v0.0.6
 ```
+
+You should now be able to see kagent up & running and the `/substrate` dashboard with your workers
+
+![](images/kagent.png)
