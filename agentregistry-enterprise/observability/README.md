@@ -1,4 +1,4 @@
-# Observability — Trace fan-out to the AgentRegistry dashboard
+# Observability: Trace fan-out to the AgentRegistry dashboard
 
 ## Problem
 
