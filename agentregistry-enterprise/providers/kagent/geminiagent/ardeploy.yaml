@@ -15,3 +15,5 @@ spec:
   env:
     MODEL_PROVIDER: gemini
     MODEL_NAME: gemini-3.5-flash
+    # Example full image for reference (set via K8SHELPER_IMAGE before envsubst on the Agent yaml):
+    # northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-3.5-flash
