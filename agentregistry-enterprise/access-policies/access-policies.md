@@ -4,11 +4,7 @@ Agent Registry Enterprise is configured with `RBAC_ROLE_CLAIM=groups`, and
 Entra emits group object IDs (GUIDs) in the `groups` claim. A `Role` principal
 therefore references a group GUID, not the group's display name.
 
-These examples use the `are-admins` group GUID:
-
-```text
-94f6134f-0fbd-4786-b69f-1f163719f28c
-```
+These examples use the `are-readers` group GUID
 
 ## Policy Model
 
@@ -28,19 +24,19 @@ Code-backed references in `gitrepos/agentregistry-enterprise`:
 
 ## Catalog Read Access
 
-Members of `are-admins` can read matching catalog resources. Deletion is intentionally omitted.
+Members of `are-readers` can read matching catalog resources. Deletion is intentionally omitted.
 
 ```bash
 arctl apply -f - <<EOF
 apiVersion: ar.dev/v1alpha1
 kind: AccessPolicy
 metadata:
-  name: are-admins-read-catalog
+  name: are-readers-read-catalog
 spec:
-  description: "Catalog read access for the are-admins Entra group"
+  description: "Catalog read access for the are-readers Entra group"
   principals:
     - kind: Role
-      name: "94f6134f-0fbd-4786-b69f-1f163719f28c" # are-admins
+      name: "45cade63-b7a8-401a-b818-5cc06167729b" # are-readers
   rules:
     - actions:
         - "registry:read"
@@ -56,7 +52,7 @@ EOF
 
 ## Catalog Write Access
 
-Members of `are-admins` can read, publish, and edit matching catalog resources.
+Members of `are-readers` can read, publish, and edit matching catalog resources.
 Deletion is intentionally omitted.
 
 ```bash
@@ -64,12 +60,12 @@ arctl apply -f - <<EOF
 apiVersion: ar.dev/v1alpha1
 kind: AccessPolicy
 metadata:
-  name: are-admins-catalog-write
+  name: are-readers-catalog-write
 spec:
-  description: "Catalog read, publish, and edit access for the are-admins Entra group"
+  description: "Catalog read, publish, and edit access for the are-readers Entra group"
   principals:
     - kind: Role
-      name: "94f6134f-0fbd-4786-b69f-1f163719f28c" # are-admins
+      name: "45cade63-b7a8-401a-b818-5cc06167729b" # are-readers
   rules:
     - actions:
         - "registry:read"
