@@ -1,15 +1,15 @@
 # Remote MCP Through Agentgateway
 
-This demo catalogs a remote MCP server in Agent Registry Enterprise and exposes
+This demo catalogs a remote MCP server in agentregistry Enterprise and exposes
 it through Agentgateway using a `Virtual` runtime.
 
 The flow is:
 
 ```text
-client -> Agentgateway Gateway -> parent HTTPRoute -> Agent Registry child HTTPRoute -> AgentgatewayBackend -> remote MCP server
+client -> Agentgateway Gateway -> parent HTTPRoute -> agentregistry child HTTPRoute -> AgentgatewayBackend -> remote MCP server
 ```
 
-Agent Registry owns the catalog `MCPServer` and `Deployment`. The gateway admin
+Agentregistry owns the catalog `MCPServer` and `Deployment`. The gateway admin
 owns the Kubernetes `Gateway` and parent `HTTPRoute`.
 
 ## Prerequisites
@@ -17,7 +17,7 @@ owns the Kubernetes `Gateway` and parent `HTTPRoute`.
 - Agentregistry is installed and `arctl` is authenticated.
 - Agentgateway and Gateway API CRDs are installed.
 - A GatewayClass named `enterprise-agentgateway` exists.
-- The Agent Registry install namespace is `agentregistry-system`.
+- The agentregistry install namespace is `agentregistry-system`.
 - For the GitHub Copilot MCP example, export a GitHub token:
 
 ```bash
@@ -27,7 +27,7 @@ export GITHUB_COPILOT_MCP_TOKEN="<github-token>"
 ## 1. Create The Parent Gateway And Route
 
 The `agentregistry.solo.io/runtime` label binds Kubernetes gateway resources to
-an Agent Registry `Virtual` runtime. This demo uses the seeded
+an agentregistry `Virtual` runtime. This demo uses the seeded
 `virtual-default` runtime.
 
 ```bash
@@ -73,11 +73,11 @@ EOF
 ```
 
 The parent `HTTPRoute` delegates `/registry` to child `HTTPRoute` resources that
-Agent Registry creates in the `agentregistry-system` namespace.
+agentregistry creates in the `agentregistry-system` namespace.
 
 ## 2. Confirm The Virtual Runtime Exists
 
-Agent Registry seeds `virtual-default` on startup.
+Agentregistry seeds `virtual-default` on startup.
 
 ```bash
 arctl get runtime virtual-default -o yaml
@@ -111,7 +111,7 @@ EOF
 
 This example catalogs GitHub Copilot MCP as a remote MCP server.
 
-For demo purposes, the token is rendered into the Agent Registry catalog entry.
+For demo purposes, the token is rendered into the agentregistry catalog entry.
 For production, use the secret mechanism supported by your deployment instead
 of committing or sharing literal credentials.
 
@@ -183,7 +183,7 @@ Look for:
 
 ## 5. Inspect Generated Agentgateway Resources
 
-Agent Registry should create child resources in its install namespace.
+Agentregistry should create child resources in its install namespace.
 
 ```bash
 kubectl -n agentregistry-system get httproutes.gateway.networking.k8s.io
@@ -247,7 +247,7 @@ kubectl -n agentgateway-system get gateway remote-mcp-gateway --show-labels
 kubectl -n agentgateway-system get httproute remote-mcp-delegate --show-labels
 ```
 
-The label value must match the Agent Registry runtime name:
+The label value must match the agentregistry runtime name:
 
 ```text
 agentregistry.solo.io/runtime=virtual-default
@@ -255,7 +255,7 @@ agentregistry.solo.io/runtime=virtual-default
 
 ### No Child HTTPRoute Was Created
 
-Check the Agent Registry Deployment status:
+Check the agentregistry Deployment status:
 
 ```bash
 arctl get deployment github-copilot-remote-mcp-agw -o yaml
@@ -270,7 +270,7 @@ Common causes:
 
 ### Upstream TLS Or Auth Fails
 
-For an `https://` remote MCP URL, Agent Registry configures Agentgateway to use
+For an `https://` remote MCP URL, agentregistry configures Agentgateway to use
 TLS to the upstream. If the upstream needs custom TLS, mTLS, or custom auth
 handling, attach the appropriate Agentgateway policy to the generated backend.
 
