@@ -42,5 +42,7 @@ mcp:
       exposeHeaders:
       - Mcp-Session-Id
 config:
+  database:
+    url: sqlite:///work/requests.db
   modelCatalog:
   - file: base-costs.json

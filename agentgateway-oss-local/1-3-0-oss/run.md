@@ -70,23 +70,26 @@ docker logs mcp-everything   # -> "MCP Streamable HTTP Server listening on port 
 
 ```bash
 docker run --rm \
-  -v "$PWD/v130config.yaml:/config.yaml:ro" \
+  -v "$PWD:/work" \
   -v "$PWD/secrets:/etc/agentgateway/secrets:ro" \
-  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /config.yaml --validate-only
+  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/v130config.yaml --validate-only
 # -> Configuration is valid!
 ```
 
 ### 5. Start the gateway
 
-Must be on `agw-net` (to reach `mcp-everything`) and must set `ADMIN_ADDR=0.0.0.0:15000` (see gotchas):
+Must be on `agw-net` (to reach `mcp-everything`) and must set `ADMIN_ADDR=0.0.0.0:15000` (see gotchas).
+The whole folder is mounted at **`/work`** (writable) — not just the config file — because the gateway
+writes files **next to the config**: the request-log DB (`requests.db`) and the cost catalog
+(`base-costs.json`). Mounting only the file would put those in `/` (root, unwritable) and fail.
 
 ```bash
 docker run -d --name agw-v130 --network agw-net \
   -p 15000:15000 -p 3000:3000 -p 3001:3001 \
   -e ADMIN_ADDR=0.0.0.0:15000 \
-  -v "$PWD/v130config.yaml:/config.yaml" \
+  -v "$PWD:/work" \
   -v "$PWD/secrets:/etc/agentgateway/secrets:ro" \
-  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /config.yaml
+  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/v130config.yaml
 ```
 
 Open **http://localhost:15000/ui** — Home should show **LLM Enabled**, **MCP Enabled**.
@@ -145,6 +148,21 @@ mcp:
 - **Use the top-level `mcp:` block**, same reasoning as `llm:` — the UI's MCP card reads `config.mcp`. An MCP backend inside a route counts as "Traffic", not MCP.
 - **`stdio` targets don't work in the stock image** (no Node). That is why we use an HTTP sidecar and an `mcp:` (Streamable HTTP) target instead.
 - `exposeHeaders: [Mcp-Session-Id]` lets browser MCP clients read the session id.
+
+### `config:` block — request-log DB + cost catalog
+
+```yaml
+config:
+  database:
+    url: sqlite:///work/requests.db   # request-log sink; powers UI Analytics + Logs
+  modelCatalog:
+  - file: base-costs.json             # pricing catalog (relative to the config dir = /work)
+```
+
+- **Analytics and Logs require a request-log database.** Without `config.database`, those UI pages show "request log database is not configured". SQLite (any non-`postgres://` URL) is created automatically; Postgres is also supported via `postgres://...`.
+- The DB path is **absolute (`/work/requests.db`)** so it lands in the writable mounted folder. A relative path would resolve against the container's `/` working dir and fail to write.
+- `modelCatalog` is added automatically when you click **Refresh base costs** in the UI; it points at `base-costs.json` (also written into `/work`).
+- **What gets committed:** `base-costs.json` is committed (static, regenerable pricing data). `requests.db` (and its `-wal`/`-shm` sidecars) are **git-ignored** — runtime state that can contain request/response payloads.
 
 ---
 
