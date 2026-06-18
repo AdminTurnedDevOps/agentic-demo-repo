@@ -46,3 +46,4 @@ config:
     url: sqlite:///work/requests.db
   modelCatalog:
   - file: base-costs.json
+binds: []
