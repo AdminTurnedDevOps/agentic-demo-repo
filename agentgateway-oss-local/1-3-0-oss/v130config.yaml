@@ -26,8 +26,6 @@ mcp:
   port: 3001
   targets:
   - name: everything
-    # Streamable-HTTP target -> the "everything" server running as a sidecar
-    # container (node) on the shared docker network "agw-net".
     mcp:
       host: mcp-everything
       port: 3001
@@ -43,3 +41,6 @@ mcp:
       - POST
       exposeHeaders:
       - Mcp-Session-Id
+config:
+  modelCatalog:
+  - file: base-costs.json
