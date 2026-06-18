@@ -1,0 +1,45 @@
+llm:
+  port: 3000
+  providers:
+  - name: anthropic
+    provider: anthropic
+    params:
+      apiKey:
+        file: /etc/agentgateway/secrets/anthropic-api-key
+  models:
+  - name: claude-opus-4-8
+    visibility: public
+    provider:
+      reference: anthropic
+  policies:
+    cors:
+      allowOrigins:
+      - '*'
+      - http://localhost:15000
+      allowHeaders:
+      - '*'
+      allowMethods:
+      - '*'
+      - GET
+      - POST
+mcp:
+  port: 3001
+  targets:
+  - name: everything
+    # Streamable-HTTP target -> the "everything" server running as a sidecar
+    # container (node) on the shared docker network "agw-net".
+    mcp:
+      host: mcp-everything
+      port: 3001
+      path: /mcp
+  policies:
+    cors:
+      allowOrigins:
+      - http://localhost:15000
+      allowHeaders:
+      - '*'
+      allowMethods:
+      - GET
+      - POST
+      exposeHeaders:
+      - Mcp-Session-Id
