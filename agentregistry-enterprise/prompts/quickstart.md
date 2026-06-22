@@ -1,7 +1,6 @@
 # Prompt Quickstart
 
-Prompts are Agent Registry catalog assets. Manage them with `arctl`, not
-`kubectl`.
+Prompts are agentregistry catalog assets. Manage them with `arctl`.
 
 ## List Prompts
 
@@ -56,4 +55,26 @@ arctl get prompt kubernetes-triage-system-prompt --tag "1.0.0" -o yaml
 
 ```bash
 arctl delete prompt kubernetes-triage-system-prompt --tag "1.0.0"
+```
+
+## Use The Prompt
+
+```yaml
+kubectl apply -f - <<EOF
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: k8shelperanthropic
+  tag: "1.0.0"
+spec:
+  title: k8shelperanthropic
+  modelProvider: anthropic
+  modelName: claude-sonnet-4-6
+  source:
+    image: ...
+  prompts:
+    - name: kubernetes-triage-system-prompt
+      registryPromptName: kubernetes-triage-system-prompt
+      registryPromptVersion: "1.0.0"
+EOF
 ```
