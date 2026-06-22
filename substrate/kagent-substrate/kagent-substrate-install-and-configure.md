@@ -90,7 +90,7 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --vers
 
 You should now be able to see kagent up & running and the `/substrate` dashboard with your workers
 
-![](images/kagent.png)
+![](../images/kagent.png)
 
 ## Substrate Agent Deploy
 
