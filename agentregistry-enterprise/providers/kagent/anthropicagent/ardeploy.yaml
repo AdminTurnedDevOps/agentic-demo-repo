@@ -1,0 +1,17 @@
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: k8shelperanthropic-kagent
+spec:
+  targetRef:
+    kind: Agent
+    name: k8shelperanthropic
+    tag: "1.0.0"
+  runtimeRef:
+    kind: Runtime
+    name: kagent
+  env:
+    MODEL_PROVIDER: anthropic
+    MODEL_NAME: claude-sonnet-4-6
+    # Example full image for reference (set via K8SHELPER_IMAGE before envsubst on the Agent yaml):
+    # northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelperanthropic:claude-sonnet-4-6

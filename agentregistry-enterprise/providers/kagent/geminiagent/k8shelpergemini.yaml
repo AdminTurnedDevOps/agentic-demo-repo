@@ -10,6 +10,8 @@ spec:
   modelName: gemini-3.5-flash
   source:
     image: ${K8SHELPER_IMAGE}
+    # Concrete example (after push to Artifact Registry):
+    # image: northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-3.5-flash
   mcpServers:
     - kind: MCPServer
       name: github-copilot-mcp-server

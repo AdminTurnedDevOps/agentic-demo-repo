@@ -1,0 +1,10 @@
+[project]
+name = "k8shelper"
+version = "0.1"
+description = "k8shelper agent"
+readme = "README.md"
+dependencies = [
+  "google-adk==1.25.1",
+  "litellm==1.80.5",
+]
+requires-python = ">=3.13"

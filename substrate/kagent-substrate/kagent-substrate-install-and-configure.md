@@ -90,4 +90,43 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --vers
 
 You should now be able to see kagent up & running and the `/substrate` dashboard with your workers
 
-![](images/kagent.png)
+![](../images/kagent.png)
+
+## Substrate Agent Deploy
+
+To check Substrate Agents deployed, run the following:
+
+```bash
+kubectl get SandboxAgent -A
+```
+
+Example declarative Substrate Agent deployment:
+```yaml
+kubectl apply -f - <<EOF
+apiVersion: kagent.dev/v1alpha2
+kind: SandboxAgent
+metadata:
+  name: test123
+  namespace: kagent
+spec:
+  declarative:
+    modelConfig: default-model-config
+    runtime: go
+    systemMessage: |-
+      You're a helpful agent, made by the kagent team.
+
+      # Instructions
+          - If user question is unclear, ask for clarification before running any tools
+          - Always be helpful and friendly
+          - If you don't know how to answer the question DO NOT make things up, tell the user "Sorry, I don't know how to answer that" and ask them to clarify the question further
+          - If you are unable to help, or something goes wrong, refer the user to https://kagent.dev for more information or support.
+
+      # Response format:
+          - ALWAYS format your response as Markdown
+          - Your response will include a summary of actions you took and an explanation of the result
+          - If you created any artifacts such as files or resources, you will include those in your response as well
+  description: my nifty substrate agent
+  platform: substrate
+  substrate: {}
+  type: Declarative
+```

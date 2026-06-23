@@ -1,0 +1,15 @@
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: k8shelperanthropic
+  tag: "1.0.0"
+spec:
+  title: k8shelperanthropic
+  description: "Kubernetes helper agent deployed through the kagent runtime (Anthropic/Claude)"
+  modelProvider: anthropic
+  modelName: claude-sonnet-4-6
+  source:
+    image: northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelperanthropic:direct-anthropic-20260615105149
+  mcpServers:
+    - kind: MCPServer
+      name: github-copilot-mcp-server
