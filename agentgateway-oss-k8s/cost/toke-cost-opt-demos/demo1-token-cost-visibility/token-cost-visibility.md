@@ -24,11 +24,12 @@ This is the first of four demos (the others: cost management, cost optimization 
 ## Prerequisites
 
 - Kubernetes cluster, version 1.29 or newer
-- Gateway API CRDs v1.2.0 (standard channel)
+- Gateway API CRDs v1.5.0
 - agentgateway controller + CRDs, v1.3.0 (install per the [Kubernetes quickstart](https://agentgateway.dev/docs/kubernetes/latest))
 - kube-prometheus-stack (provides the Prometheus Operator `ServiceMonitor` CRD and Grafana)
 - An Anthropic API key exported as the `ANTHROPIC_API_KEY` environment variable; cluster egress to `api.anthropic.com`
 - CLI tools: `kubectl`, `helm` 3.14+, `jq`, `curl`
+- `agctl` installed: https://agentgateway.dev/docs/kubernetes/main/operations/agctl/
 
 ## Architecture
 
@@ -42,16 +43,14 @@ curl (OpenAI-format) ─▶ Gateway team-a ─▶ HTTPRoute ─▶ AgentgatewayB
 
 ---
 
-## Step 0 — Install the platform dependencies
+## Step 0: Install the platform dependencies
 
 Install the agentgateway controller + CRDs (this also registers the `agentgateway` GatewayClass) following the official quickstart linked above, and install kube-prometheus-stack:
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
-helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-  --version 77.6.0 \
-  --namespace monitoring --create-namespace
+helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace
 ```
 
 Confirm the `agentgateway` GatewayClass is registered:
@@ -60,7 +59,7 @@ Confirm the `agentgateway` GatewayClass is registered:
 kubectl get gatewayclass agentgateway
 ```
 
-## Step 1 — Namespaces
+## Step 1: Namespaces
 
 One namespace per team gateway, plus the monitoring namespace was created in Step 0.
 
@@ -78,12 +77,13 @@ metadata:
 EOF
 ```
 
-## Step 2 — Anthropic API key Secret (per namespace)
+## Step 2: Anthropic API key Secret (per namespace)
 
 The gateway reads the credential from a Secret data key named `Authorization` and injects it upstream (it strips a leading `Bearer ` if present). The key is sourced from your env var — never written into the manifest.
 
 ```bash
-# Make sure the key is exported first:  export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=
+
 kubectl create secret generic anthropic-key \
   --from-literal=Authorization="$ANTHROPIC_API_KEY" -n team-a
 
@@ -91,40 +91,28 @@ kubectl create secret generic anthropic-key \
   --from-literal=Authorization="$ANTHROPIC_API_KEY" -n team-b
 ```
 
-## Step 3 — Model-cost catalog ConfigMap (per namespace)
+## Step 3: Model-cost catalog ConfigMap (per namespace)
 
-Cost in the access log requires a catalog so the gateway knows per-token rates. Rates are US dollars per 1,000,000 tokens. This is a minimal inline catalog for just the two models used here; full catalog management (import from models.dev, hot-reload) is Demo 2. The ConfigMap must live in the same namespace as the Gateway that references it.
+Cost in the access log requires a catalog so the gateway knows per-token rates. Rates are US dollars per 1,000,000 tokens. Generate the catalog with `agctl` from `models.dev`, then create a ConfigMap in each gateway namespace. The ConfigMap must live in the same namespace as the Gateway that references it.
+
+models.dev is a public model/provider catalog service. `agctl costs import` fetches https://models.dev/api.json, then it transforms the provider/model pricing data into agentgateway's model-cost catalog format.
 
 ```bash
+agctl costs import --source models.dev --providers anthropic --pretty --out catalog.json
+
 for ns in team-a team-b; do
-kubectl apply -n "$ns" -f - <<'EOF'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: model-catalog
-data:
-  catalog.json: |
-    {
-      "providers": {
-        "anthropic": {
-          "models": {
-            "claude-sonnet-4-5": {
-              "rates": { "input": "3", "output": "15", "cacheRead": "0.3", "cacheWrite": "3.75" }
-            },
-            "claude-opus-4-1": {
-              "rates": { "input": "15", "output": "75", "cacheRead": "1.5", "cacheWrite": "18.75" }
-            }
-          }
-        }
-      }
-    }
-EOF
+  kubectl create configmap model-catalog \
+    --from-file=catalog.json=./catalog.json \
+    -n "$ns" \
+    --dry-run=client -o yaml | kubectl apply -f -
 done
 ```
 
-## Step 4 — AgentgatewayParameters (per gateway)
+## Step 4: AgentgatewayParameters (per gateway)
 
-Each gateway gets its own parameters: JSON logging (so the access log — including cost — is structured) and a reference to its model-catalog ConfigMap. Model-catalog references are only honored on Gateway-level parameters (referenced from `Gateway.spec.infrastructure.parametersRef`).
+Each gateway gets its own parameters: JSON logging (so the access log, including cost, is structured), a `MODEL_CATALOG_PATHS` setting, and a deployment overlay that mounts the model-catalog ConfigMap.
+
+> agentgateway supports `spec.modelCatalog.sources[].configMap`, but for the v1.3.0 controller used in this demo we mount the ConfigMap explicitly outside `/config` and point `MODEL_CATALOG_PATHS` at it. This avoids a nested ConfigMap mount edge case where the catalog path can be created as a directory instead of a file.
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -136,11 +124,26 @@ metadata:
 spec:
   logging:
     format: json
-  modelCatalog:
-    sources:
-    - configMap:
-        name: model-catalog
-        key: catalog.json
+  env:
+  - name: MODEL_CATALOG_PATHS
+    value: /model-catalog/catalog.json
+  deployment:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: agentgateway
+            volumeMounts:
+            - name: model-catalog
+              mountPath: /model-catalog
+              readOnly: true
+          volumes:
+          - name: model-catalog
+            configMap:
+              name: model-catalog
+              items:
+              - key: catalog.json
+                path: catalog.json
 ---
 apiVersion: agentgateway.dev/v1alpha1
 kind: AgentgatewayParameters
@@ -150,15 +153,30 @@ metadata:
 spec:
   logging:
     format: json
-  modelCatalog:
-    sources:
-    - configMap:
-        name: model-catalog
-        key: catalog.json
+  env:
+  - name: MODEL_CATALOG_PATHS
+    value: /model-catalog/catalog.json
+  deployment:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: agentgateway
+            volumeMounts:
+            - name: model-catalog
+              mountPath: /model-catalog
+              readOnly: true
+          volumes:
+          - name: model-catalog
+            configMap:
+              name: model-catalog
+              items:
+              - key: catalog.json
+                path: catalog.json
 EOF
 ```
 
-## Step 5 — Gateways
+## Step 5: Gateways
 
 Two Gateways on the `agentgateway` class, each pointing at its own parameters via `infrastructure.parametersRef`. The `gateway` metric label is derived from these resource names.
 
@@ -206,7 +224,7 @@ spec:
 EOF
 ```
 
-## Step 6 — AgentgatewayBackends (Anthropic)
+## Step 6: AgentgatewayBackends (Anthropic)
 
 One backend per team, each pinned to a different Anthropic model and authenticated from the Secret created in Step 2. With `provider.anthropic.model` set, the gateway uses that model regardless of the model in the request body.
 
@@ -244,7 +262,7 @@ spec:
 EOF
 ```
 
-## Step 7 — HTTPRoutes
+## Step 7: HTTPRoutes
 
 Route the OpenAI-compatible chat path to each backend. agentgateway exposes a unified OpenAI-compatible surface and translates to Anthropic upstream.
 
@@ -288,16 +306,16 @@ spec:
 EOF
 ```
 
-## Step 8 — ServiceMonitor (our own)
+## Step 8: PodMonitor
 
-Scrape the gateway proxy metrics endpoint. agentgateway serves Prometheus metrics on the `metrics` port at `/metrics`. This ServiceMonitor selects both gateways by their gateway-class label across the two namespaces.
+Scrape the gateway proxy metrics endpoint. agentgateway serves Prometheus metrics on the pod's `metrics` container port at `/metrics`. This PodMonitor selects both gateway pods by their gateway-class label across the two namespaces.
 
-> The `release: kube-prometheus-stack` label makes this discoverable by the stack's Prometheus (its default `serviceMonitorSelector`). Adjust if your Prometheus uses a different selector.
+> The `release: kube-prometheus-stack` label makes this discoverable by the stack's Prometheus (its default `podMonitorSelector`). Adjust if your Prometheus uses a different selector.
 
 ```bash
 kubectl apply -f - <<'EOF'
 apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+kind: PodMonitor
 metadata:
   name: agentgateway-llm
   namespace: monitoring
@@ -311,7 +329,7 @@ spec:
   selector:
     matchLabels:
       gateway.networking.k8s.io/gateway-class-name: agentgateway
-  endpoints:
+  podMetricsEndpoints:
   - port: metrics
     path: /metrics
     interval: 15s
@@ -320,7 +338,7 @@ EOF
 
 ---
 
-## Step 9 — Wait for readiness
+## Step 9: Wait for readiness
 
 ```bash
 kubectl wait --for=condition=Programmed gateway/team-a -n team-a --timeout=120s
@@ -329,7 +347,7 @@ kubectl rollout status deploy -n team-a -l gateway.networking.k8s.io/gateway-nam
 kubectl rollout status deploy -n team-b -l gateway.networking.k8s.io/gateway-name=team-b --timeout=120s
 ```
 
-## Step 10 — Drive traffic
+## Step 10: Drive traffic
 
 Port-forward each gateway and send a few chat completions with mixed prompt sizes so the histograms fill. No API key on the client — the gateway injects it.
 
@@ -339,15 +357,17 @@ kubectl -n team-b port-forward svc/team-b 8081:8080 >/tmp/pf-b.log 2>&1 &
 sleep 2
 
 for i in $(seq 1 20); do
-  curl -s localhost:8080/v1/chat/completions -H 'content-type: application/json' \
-    -d '{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"In two sentences, what is a service mesh?"}]}' >/dev/null
-  curl -s localhost:8081/v1/chat/completions -H 'content-type: application/json' \
-    -d '{"model":"claude-opus-4-1","messages":[{"role":"user","content":"Explain Kubernetes operators in one paragraph."}]}' >/dev/null
+  curl -sS -o /dev/null -w "team-a %{http_code}\n" localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+    -d '{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"In two sentences, what is a service mesh?"}]}'
+  curl -sS -o /dev/null -w "team-b %{http_code}\n" localhost:8081/v1/chat/completions -H 'content-type: application/json' \
+    -d '{"model":"claude-opus-4-1","messages":[{"role":"user","content":"Explain Kubernetes operators in one paragraph."}]}'
 done
 echo "done"
 ```
 
-## Step 11 — Query the metrics (per gateway)
+If either gateway prints non-`200` status codes, inspect the response body by temporarily removing `-o /dev/null -w ...` from the matching `curl` command before moving on to the Prometheus queries.
+
+## Step 11: Query the metrics (per gateway)
 
 Run these in the Prometheus UI (`kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090`) or Grafana Explore.
 
@@ -389,32 +409,63 @@ histogram_quantile(0.95, sum by (le, gateway) (rate(agentgateway_gen_ai_server_t
 
 You should see distinct `team-a` and `team-b` series, and `claude-sonnet-4-5` vs `claude-opus-4-1` series.
 
-## Step 12 — Import the Grafana dashboard
+## Step 12: Import the Grafana dashboard
 
-Port-forward Grafana and import `grafana-dashboard.json` (Dashboards → New → Import). Default kube-prometheus-stack Grafana login is `admin` / `prom-operator`.
+1. Port-forward Grafana and import `grafana-dashboard.json` (Dashboards → New → Import).
 
 ```bash
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
 ```
 
+2. To access the Grafana dashboard:
+- Username: admin
+- Password: `kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d`
+
 Panels split token volume and latency by gateway, model, and provider.
 
-## Step 13 — See per-request cost in the access log
+3. Generate more traffic to see the traffic within the new dashboard:
 
-For LLM requests the proxy emits an access-log line with token counts and (because a catalog is configured) the total cost. With `logging.format: json` it's structured, so filter with `jq`:
+```
+kubectl -n team-a port-forward svc/team-a 8080:8080 >/tmp/pf-a.log 2>&1 &
+kubectl -n team-b port-forward svc/team-b 8081:8080 >/tmp/pf-b.log 2>&1 &
+sleep 2
+
+for i in $(seq 1 20); do
+  curl -sS -o /dev/null -w "team-a %{http_code}\n" localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+    -d '{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"In two sentences, what is a service mesh?"}]}'
+  curl -sS -o /dev/null -w "team-b %{http_code}\n" localhost:8081/v1/chat/completions -H 'content-type: application/json' \
+    -d '{"model":"claude-opus-4-1","messages":[{"role":"user","content":"Explain Kubernetes operators in one paragraph."}]}'
+done
+echo "done"
+```
+
+## Step 13: See per-request cost in the access log
+
+For successful LLM requests the proxy emits an access-log line with token counts and, because a catalog is configured, the total cost. With `logging.format: json` it's structured, so filter with `jq`.
+
+Start with `team-b`, which uses the Opus model from the traffic step:
 
 ```bash
-kubectl logs -n team-a deploy/team-a --tail=200 \
-  | grep -E 'gen_ai|cost' \
+kubectl logs -n team-b deploy/team-b --tail=200 \
   | jq 'select(."agw.ai.usage.cost.total" != null)
-        | {gateway: "team-a",
+        | {gateway,
            model: ."gen_ai.request.model",
            input_tokens: ."gen_ai.usage.input_tokens",
            output_tokens: ."gen_ai.usage.output_tokens",
            cost_total: ."agw.ai.usage.cost.total"}'
 ```
 
-Each matching line shows input/output tokens and `agw.ai.usage.cost.total` (USD) for that single request. The full per-dimension breakdown (`agw.ai.usage.cost.input`, `.output`, `.cache_read`, …) appears when request tracing is enabled — covered in Demo 2.
+If this prints nothing, send one more successful `team-b` request and rerun the log command:
+
+```bash
+curl -sS -o /dev/null -w "team-b %{http_code}\n" localhost:8081/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{"model":"claude-opus-4-1","messages":[{"role":"user","content":"Explain Kubernetes operators in one paragraph."}]}'
+```
+
+Only `200` responses produce token and cost fields. If `team-a` shows no cost output, check its response body first; that usually means the configured Sonnet model is not available to your Anthropic key or the upstream request is failing.
+
+Each matching line shows input/output tokens and `agw.ai.usage.cost.total` (USD) for that single request. The full per-dimension breakdown (`agw.ai.usage.cost.input`, `.output`, `.cache_read`, ...) appears when request tracing is enabled, covered in Demo 2.
 
 ---
 
@@ -433,6 +484,6 @@ kubectl delete namespace monitoring
 
 ## Notes / scope
 
-- Demo 1 ships a minimal inline catalog only so cost renders; importing/refreshing catalogs is **Demo 2**.
+- Demo 1 imports a small provider catalog from `models.dev`; broader catalog management and refresh workflows are **Demo 2**.
 - Charting dollars in Grafana (recording rules: tokens × rate) is **Demo 2** — here cost is a per-request access-log artifact.
 - Model IDs (`claude-sonnet-4-5`, `claude-opus-4-1`) must match models your key can access and the catalog keys; change all three together if you swap models.
