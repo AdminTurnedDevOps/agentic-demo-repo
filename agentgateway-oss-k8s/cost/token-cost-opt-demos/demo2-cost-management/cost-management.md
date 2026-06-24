@@ -24,13 +24,11 @@ This is the second of four demos (visibility, **management**, optimization & con
 - Cluster egress to `models.dev` (catalog import) and `api.anthropic.com`.
 - CLI tools: `kubectl`, `jq`, `curl`.
 
-## Key reality check (read this)
-
-agentgateway records **tokens** as Prometheus metrics, but **dollar cost is not a native metric** — `cost_catalog_lookups` only counts catalog lookups by status. Per-request dollars land in the access log (`agw.ai.usage.cost.total`) and the built-in UI; **per-gateway dollars for dashboards are *derived*** (tokens × catalog rate) via Prometheus recording rules. That's the approach in B-5.
-
 ---
 
 ## B-4 — Catalog setup
+
+agentgateway records **tokens** as Prometheus metrics, but **dollar cost is not a native metric** — `cost_catalog_lookups` only counts catalog lookups by status. Per-request dollars land in the access log (`agw.ai.usage.cost.total`) and the built-in UI; **per-gateway dollars for dashboards are *derived*** (tokens × catalog rate) via Prometheus recording rules. That's the approach in B-5.
 
 ### Import a real catalog
 
