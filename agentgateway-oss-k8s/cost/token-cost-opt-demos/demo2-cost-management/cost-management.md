@@ -23,6 +23,7 @@ This is the second of four demos (visibility, **management**, optimization & con
 - agentgateway controller + CRDs v1.3.0, and the **`agctl` v1.3.0** CLI on your PATH (ships with the agentgateway controller release — see the [quickstart](https://agentgateway.dev/docs/kubernetes/latest)).
 - Cluster egress to `models.dev` (catalog import) and `api.anthropic.com`.
 - CLI tools: `kubectl`, `jq`, `curl`.
+- `agctl` installed: https://agentgateway.dev/docs/kubernetes/main/operations/agctl/
 
 ---
 
