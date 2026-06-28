@@ -1,0 +1,82 @@
+llm:
+  port: 3000
+  providers:
+  - name: anthropic
+    provider: anthropic
+    params:
+      apiKey:
+        file: /etc/agentgateway/secrets/anthropic-api-key
+  - name: xai
+    provider: xai
+    params:
+      apiKey:
+        file: /etc/agentgateway/secrets/xai-api-key
+  - name: gemini
+    provider: gemini
+    params:
+      apiKey:
+        file: /etc/agentgateway/secrets/gemini-api-key
+  - name: openai
+    provider: openai
+    params:
+      apiKey:
+        file: /etc/agentgateway/secrets/openai-api-key
+  models:
+  - name: claude-opus-4-8
+    visibility: public
+    provider:
+      reference: anthropic
+  - name: grok-build
+    visibility: public
+    provider:
+      reference: xai
+    params:
+      model: grok-3
+  - name: gpt-5.5
+    visibility: public
+    provider:
+      reference: openai
+    params:
+      model: gpt-4o
+  - name: gemini-3.5-flash
+    visibility: public
+    provider:
+      reference: gemini
+    params:
+      model: gemini-2.5-flash
+  policies:
+    cors:
+      allowOrigins:
+      - '*'
+      - http://localhost:15000
+      allowHeaders:
+      - '*'
+      allowMethods:
+      - '*'
+      - GET
+      - POST
+mcp:
+  port: 3001
+  targets:
+  - name: everything
+    mcp:
+      host: mcp-everything
+      port: 3001
+      path: /mcp
+  policies:
+    cors:
+      allowOrigins:
+      - http://localhost:15000
+      allowHeaders:
+      - '*'
+      allowMethods:
+      - GET
+      - POST
+      exposeHeaders:
+      - Mcp-Session-Id
+config:
+  database:
+    url: sqlite:///work/requests.db
+  modelCatalog:
+  - file: base-costs.json
+binds: []

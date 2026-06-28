@@ -1,12 +1,12 @@
-# agentgateway OSS v1.3.0 — standalone LLM + MCP (Docker)
+# agentgateway OSS v1.3.0+ — standalone LLM + MCP (Docker)
 
 A self-contained local stack:
 
-- **LLM gateway** → Anthropic (Claude `claude-opus-4-8`) on **:3000**
+- **LLM gateway** supporting multiple providers (Anthropic, xAI/Grok, Gemini, OpenAI) on **:3000**
 - **MCP gateway** → the "everything" reference server (HTTP sidecar) on **:3001**
 - **Admin + Web UI** on **:15000** (`/ui`)
 
-Everything is driven by `v130config.yaml` (in this folder).
+Everything is driven by one of the config files in this folder (e.g. `v130-example-config.yaml` for basic or `multi-prov.yaml` for multi-provider).
 
 ---
 
@@ -24,24 +24,34 @@ Everything is driven by `v130config.yaml` (in this folder).
 ## Prerequisites
 
 - Docker
-- An Anthropic API key
+- The API key(s) for the providers you want to use (Anthropic for basic; plus xAI, Gemini, OpenAI for multi-prov)
 
 ---
 
 ## Run it from a clean state
 
-All commands are run **from this folder** (`1-3-0-oss/`).
+All commands are run **from this folder** (`1-3-0-and-above/`).
 
-### 1. Put your Anthropic API key in the secrets file
+### 1. Put your API keys in the secrets files
 
-The config reads the key from a mounted file (never from the config or git). Create it:
+The configs read keys from mounted files (never from the config or git).
+
+For the basic/single-provider config (or multi which still includes Anthropic):
 
 ```bash
 mkdir -p secrets
 printf '%s' "sk-ant-..." > secrets/anthropic-api-key   # no trailing newline
 ```
 
-`secrets/.gitignore` ignores everything except itself, so the key is never committed.
+For the multi-provider config you also need:
+
+```bash
+printf '%s' "xai-..."   > secrets/xai-api-key
+printf '%s' "AIza..."   > secrets/gemini-api-key
+printf '%s' "sk-proj-..." > secrets/openai-api-key
+```
+
+`secrets/.gitignore` ignores everything except itself, so the keys are never committed.
 
 ### 2. Create a shared Docker network
 
@@ -72,7 +82,9 @@ docker logs mcp-everything   # -> "MCP Streamable HTTP Server listening on port 
 docker run --rm \
   -v "$PWD:/work" \
   -v "$PWD/secrets:/etc/agentgateway/secrets:ro" \
-  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/v130config.yaml --validate-only
+  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/v130-example-config.yaml --validate-only
+# or for multi:
+# ... -f /work/multi-prov.yaml --validate-only
 # -> Configuration is valid!
 ```
 
@@ -83,20 +95,34 @@ The whole folder is mounted at **`/work`** (writable) — not just the config fi
 writes files **next to the config**: the request-log DB (`requests.db`) and the cost catalog
 (`base-costs.json`). Mounting only the file would put those in `/` (root, unwritable) and fail.
 
+1. With the smaller demo config
+
 ```bash
 docker run -d --name agw-v130 --network agw-net \
   -p 15000:15000 -p 3000:3000 -p 3001:3001 \
   -e ADMIN_ADDR=0.0.0.0:15000 \
+  -w /work \
   -v "$PWD:/work" \
   -v "$PWD/secrets:/etc/agentgateway/secrets:ro" \
-  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/v130config.yaml
+  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/v130-example-config.yaml
+```
+
+2. With the multi-provider config
+```bash
+docker run -d --name agw-v130 --network agw-net \
+  -p 15000:15000 -p 3000:3000 -p 3001:3001 \
+  -e ADMIN_ADDR=0.0.0.0:15000 \
+  -w /work \
+  -v "$PWD:/work" \
+  -v "$PWD/secrets:/etc/agentgateway/secrets:ro" \
+  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/multi-prov.yaml
 ```
 
 Open **http://localhost:15000/ui** — Home should show **LLM Enabled**, **MCP Enabled**.
 
 ---
 
-## Config reference (`v130config.yaml`)
+## Config reference (llm: / mcp: / config: blocks)
 
 What each part does — this is the annotation that used to live in the file as comments.
 
