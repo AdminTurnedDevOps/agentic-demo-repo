@@ -1,4 +1,4 @@
-# agentgateway OSS v1.3.0+ — standalone LLM + MCP (Docker)
+# agentgateway OSS v1.3.1+: Standalone LLM + MCP (Docker)
 
 A self-contained local stack:
 
@@ -31,6 +31,14 @@ Everything is driven by one of the config files in this folder (e.g. `v130-examp
 ## Run it from a clean state
 
 All commands are run **from this folder** (`1-3-0-and-above/`).
+
+**Set the agentgateway version** (update this value when a new release comes out):
+
+```bash
+AGENTGATEWAY_VERSION=v1.3.1
+```
+
+The commands below use `${AGENTGATEWAY_VERSION}`. For easy copy-paste, each command block includes the assignment at the top (just update the value in the block you run). You can also export it in your shell first.
 
 ### 1. Put your API keys in the secrets files
 
@@ -82,7 +90,7 @@ docker logs mcp-everything   # -> "MCP Streamable HTTP Server listening on port 
 docker run --rm \
   -v "$PWD:/work" \
   -v "$PWD/secrets:/etc/agentgateway/secrets:ro" \
-  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/v130-example-config.yaml --validate-only
+  ghcr.io/agentgateway/agentgateway:${AGENTGATEWAY_VERSION} -f /work/v130-example-config.yaml --validate-only
 # or for multi:
 # ... -f /work/multi-prov.yaml --validate-only
 # -> Configuration is valid!
@@ -104,7 +112,7 @@ docker run -d --name agw-v130 --network agw-net \
   -w /work \
   -v "$PWD:/work" \
   -v "$PWD/secrets:/etc/agentgateway/secrets:ro" \
-  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/v130-example-config.yaml
+  ghcr.io/agentgateway/agentgateway:${AGENTGATEWAY_VERSION} -f /work/v130-example-config.yaml
 ```
 
 2. With the multi-provider config
@@ -115,7 +123,7 @@ docker run -d --name agw-v130 --network agw-net \
   -w /work \
   -v "$PWD:/work" \
   -v "$PWD/secrets:/etc/agentgateway/secrets:ro" \
-  ghcr.io/agentgateway/agentgateway:v1.3.0 -f /work/multi-prov.yaml
+  ghcr.io/agentgateway/agentgateway:${AGENTGATEWAY_VERSION} -f /work/multi-prov.yaml
 ```
 
 Open **http://localhost:15000/ui** — Home should show **LLM Enabled**, **MCP Enabled**.
