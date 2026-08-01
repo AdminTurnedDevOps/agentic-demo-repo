@@ -1,0 +1,134 @@
+{
+  "eval_set_id": "kagent-enterprise-golden-v1",
+  "name": "kagent Enterprise — golden eval set (demo)",
+  "description": "Small golden dataset for Solo Enterprise / kagent agent demos. Each case has a user prompt, an expected final_response (golden answer), and an expected tool trajectory. Use with an eval_config that includes final_response_match (LLM judge for semantic similarity) and optionally tool_trajectory_avg_score. Tool args are intentionally sparse so trajectory checks focus on tool names and order, not brittle argument matching.",
+  "eval_cases": [
+    {
+      "eval_id": "nginx-crashloop-probe",
+      "conversation": [
+        {
+          "invocation_id": "inv-nginx-crashloop-1",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "The nginx pods in the prod namespace are crashlooping. What's wrong and how do I fix it?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "The nginx Deployment pods are in CrashLoopBackOff. The liveness probe targets /healthz, which the default nginx image does not serve (returns 404), so kubelet keeps restarting the container. Fix: change the liveness probe path to a route nginx actually serves (for example `/`) or add a real /healthz handler, then roll the Deployment."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "id": "t1", "name": "kubectl_get_pods", "args": {} },
+              { "id": "t2", "name": "kubectl_describe_pod", "args": {} },
+              { "id": "t3", "name": "kubectl_logs", "args": {} }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "api-imagepullbackoff",
+      "conversation": [
+        {
+          "invocation_id": "inv-api-imagepull-1",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Why can't the api Deployment's pods start in the prod namespace?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "The api pods are stuck in ImagePullBackOff. Events show kubelet failing to pull an image tag that does not exist in the registry (for example a bad or mistyped tag). Fix: update the Deployment image to a tag that exists, or correct the registry path / pull secret, then re-roll the Deployment."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "id": "t1", "name": "kubectl_get_pods", "args": {} },
+              { "id": "t2", "name": "kubectl_describe_pod", "args": {} }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "service-no-endpoints",
+      "conversation": [
+        {
+          "invocation_id": "inv-svc-endpoints-1",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Clients in the cluster get connection refused to the checkout Service. Pods look Running. What should I check?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "If pods are Running but clients still fail, check whether the Service has Endpoints. A label selector mismatch between the Service and the Pods leaves the Service with zero endpoints, so traffic never reaches a backend. Fix: align Service selector labels with Pod labels (or fix the Pod labels), confirm endpoints appear, then retest from a client pod."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "id": "t1", "name": "kubectl_get_svc", "args": {} },
+              { "id": "t2", "name": "kubectl_get_endpoints", "args": {} },
+              { "id": "t3", "name": "kubectl_get_pods", "args": {} }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "agentgateway-route-401",
+      "conversation": [
+        {
+          "invocation_id": "inv-agw-401-1",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Calls through agentgateway to our LLM route return 401 Unauthorized with 'authentication failure'. How should I debug this?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "A 401 from agentgateway means the gateway rejected the request before it reached the upstream model. Check that the client sends a valid Authorization bearer token, the JWT issuer/audience match the gateway JWT policy, and the signing key id (kid) is present in the configured JWKS. Also confirm required headers (for example org or tenant headers) and that the HTTPRoute targets the intended backend. Fix the token or auth policy configuration, then retry the same request."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              { "id": "t1", "name": "kubectl_get_httproute", "args": {} },
+              { "id": "t2", "name": "kubectl_get_gateway", "args": {} },
+              { "id": "t3", "name": "kubectl_logs", "args": {} }
+            ],
+            "tool_responses": []
+          }
+        }
+      ]
+    }
+  ]
+}
