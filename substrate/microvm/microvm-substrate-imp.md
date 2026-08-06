@@ -66,6 +66,7 @@ no /dev/kvm required      needs KVM / nested virt + node label
 - A Node Pool that supports nested virtualization (e.g - `n2-standard-4`)
 - Substrate checkout: work from `substrate/substrate` (the nested upstream
   tree) with a current `main` pull.
+- Snapshot bucket (BUCKET_NAME) must allow the node/atelet identity to create objects (storage.objects.create, e.g. roles/storage.objectAdmin on the bucket). Read-only / bucketViewer is not enough for golden snapshots.
 - Substrate installed: Follow [setup](../setup.md)
 - Confirm control-plane basics if you already installed:
 ```bash
