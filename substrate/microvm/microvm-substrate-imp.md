@@ -261,9 +261,14 @@ curl -s -X POST \
   http://localhost:8000/
 ```
 
+You'll see an output similar to the below:
+```
+hello from: 169.254.17.2 | preserved memory count: 1 | preserved file counter: 1
+```
+
 ---
 
-## Understand the asset model
+#### Understand the asset model
 
 Nothing Kata-specific is baked into the worker image. On first use, **atelet**
 pulls the microVM toolchain from **GCS** into the node cache using the
@@ -286,108 +291,17 @@ the laptop is arm64 — match **nodes**, not the laptop.
 
 ---
 
-## Step 3 — Manual path (same pieces, explicit)
+## Prove guest-memory suspend / resume
 
-Use this when you already have a healthy control plane and only want the
-microVM demo layer.
+Use the **`my-counter-1`** actor from the demo step above. The counter lives
+in **guest RAM**. Continuing the count after suspend + resume (especially on
+another worker) proves the microVM memory snapshot round-tripped.
 
-### 3a. Assemble assets
-
-On a machine that can build/fetch for the **node** arch:
-
-```bash
-# Typical GKE nodes are amd64
-ARCH=amd64 OUT="$PWD/bin/microvm-assets/amd64" hack/microvm-assets/assemble.sh
-```
-
-### 3b. Stage to the GCS snapshot bucket
-
-```bash
-OUT="$PWD/bin/microvm-assets/amd64" BUCKET="$BUCKET_NAME" hack/microvm-assets/stage-to-gcs.sh
-# objects land under gs://${BUCKET_NAME}/kata-assets/
-```
-
-### 3c. Apply the microVM WorkerPool + template
-
-`run-microvm-demo.sh` is preferred because it rewrites `${VIRTIOFSD_SHA256}`
-when the binary is not byte-reproducible. On amd64, committed pins usually
-match the prebuilt binary.
-
-```bash
-VIRTIOFSD_SHA256="$(sha256sum bin/microvm-assets/${ARCH}/virtiofsd | awk '{print $1}')"
-sed -e "s|\${BUCKET_NAME}|${BUCKET_NAME}|g" \
-    -e "s|\${VIRTIOFSD_SHA256}|${VIRTIOFSD_SHA256}|g" \
-    demos/counter/counter-microvm.yaml.tmpl \
-  | ./hack/run-tool.sh ko apply -f -
-```
-
-That creates:
-
-- Namespace `ate-demo-counter-microvm`
-- `SandboxConfig/counter-microvm` (`sandboxClass: microvm`)
-- `WorkerPool/counter-microvm` (`replicas: 2`, `ateomImage: .../ateom-microvm`)
-- `ActorTemplate/counter-microvm` (`sandboxClass: microvm`)
-
-Wait for the golden snapshot:
-
-```bash
-kubectl wait --for=condition=Ready \
-  actortemplate/counter-microvm -n ate-demo-counter-microvm --timeout=600s
-```
-
-Inspect:
-
-```bash
-kubectl get sandboxconfig counter-microvm -o yaml
-kubectl get workerpool -n ate-demo-counter-microvm
-kubectl get pods -n ate-demo-counter-microvm -o wide
-# workers should land on nodes labeled ate.dev/sandboxClass=microvm
-```
-
----
-
-## Step 4 — Create an actor and hit it through atenet
-
-Same client path as gVisor actors: **atenet-router** (Envoy or agentgateway)
-+ Host header. Sandbox class does not change actor DNS.
-
-```bash
-go install ./cmd/kubectl-ate   # if needed
-export PATH="$(go env GOPATH)/bin:$PATH"
-
-kubectl ate create atespace demo
-kubectl ate create actor my-counter-1 -a demo \
-  --template ate-demo-counter-microvm/counter-microvm
-
-kubectl ate get actor my-counter-1 -a demo
-```
-
-Port-forward the router and increment the in-RAM counter:
+Keep (or re-open) the atenet-router port-forward if it is not still running:
 
 ```bash
 kubectl -n ate-system port-forward svc/atenet-router 8000:80
 ```
-
-In another terminal:
-
-```bash
-for i in 1 2 3; do
-  curl -s -X POST \
-    -H "Host: my-counter-1.demo.actors.resources.substrate.ate.dev" \
-    http://localhost:8000/
-  echo
-done
-```
-
-Note the count (and worker assignment from `kubectl ate get actor`).
-
----
-
-## Step 5 — Prove guest-memory suspend / resume
-
-The counter lives in **guest RAM**. Continuing the count after suspend +
-resume (especially on another worker) proves the microVM memory snapshot
-round-tripped.
 
 ```bash
 # Capture worker before suspend
@@ -397,20 +311,18 @@ kubectl ate suspend actor my-counter-1 -a demo
 kubectl ate get actor my-counter-1 -a demo
 # expect STATUS_SUSPENDED; worker released
 
-# Resume (traffic through the router also resumes on demand)
-kubectl ate resume actor my-counter-1 -a demo
-# or just curl again through atenet-router
-
-kubectl ate get actor my-counter-1 -a demo
-# note worker pod — ideally a different pod than before if pool has capacity
-
+# Resume via traffic (preferred) — curl wakes the actor through atenet-router.
+# Optional explicit resume: kubectl ate resume actor my-counter-1 -a demo
 curl -s -X POST \
   -H "Host: my-counter-1.demo.actors.resources.substrate.ate.dev" \
   http://localhost:8000/
+
+kubectl ate get actor my-counter-1 -a demo
+# note worker pod — ideally a different pod than before if the pool has capacity
 ```
 
-If the count continues from where you left off, microVM checkpoint/restore
-worked.
+Watch **`preserved memory count`** in the curl body. If it continues from where
+you left off (e.g. was `1`, becomes `2`+), microVM checkpoint/restore worked.
 
 ---
 
