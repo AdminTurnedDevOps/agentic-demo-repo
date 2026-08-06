@@ -35,6 +35,18 @@ def _get_terminate_on_close() -> bool:
     return os.environ.get("MCP_TERMINATE_ON_CLOSE", "true").lower() != "false"
 
 
+def _get_connection_timeout() -> float:
+    """Get the MCP connection timeout in seconds."""
+    value = os.environ.get("MCP_CONNECTION_TIMEOUT_SECONDS", "30")
+    try:
+        timeout = float(value)
+    except ValueError as error:
+        raise ValueError("MCP_CONNECTION_TIMEOUT_SECONDS must be a number") from error
+    if timeout <= 0:
+        raise ValueError("MCP_CONNECTION_TIMEOUT_SECONDS must be greater than zero")
+    return timeout
+
+
 def _load_runtime_mcp_servers() -> List[dict]:
     """Load MCP servers resolved at runtime from env or config file."""
     env_path = os.environ.get("MCP_SERVERS_CONFIG_PATH")
@@ -135,6 +147,8 @@ def get_mcp_tools(
     Environment variables:
         MCP_TERMINATE_ON_CLOSE: Set to "false" for stateless MCP servers.
             Defaults to "true" for backward compatibility.
+        MCP_CONNECTION_TIMEOUT_SECONDS: Timeout for establishing an MCP session.
+            Defaults to 30 seconds.
     """
 
     servers = _get_all_mcp_servers()
@@ -143,6 +157,7 @@ def get_mcp_tools(
         servers = [s for s in servers if s.get("name") in server_names]
 
     terminate_on_close = _get_terminate_on_close()
+    connection_timeout = _get_connection_timeout()
 
     toolsets = []
     for server in servers:
@@ -163,11 +178,16 @@ def get_mcp_tools(
 
         if headers:
             connection_params = StreamableHTTPConnectionParams(
-                url=url, headers=headers, terminate_on_close=terminate_on_close
+                url=url,
+                headers=headers,
+                timeout=connection_timeout,
+                terminate_on_close=terminate_on_close,
             )
         else:
             connection_params = StreamableHTTPConnectionParams(
-                url=url, terminate_on_close=terminate_on_close
+                url=url,
+                timeout=connection_timeout,
+                terminate_on_close=terminate_on_close,
             )
 
         predicate = _compose_tool_filter(predicate)

@@ -13,5 +13,6 @@ spec:
   env:
     MODEL_PROVIDER: anthropic
     MODEL_NAME: claude-sonnet-4-6
+    MCP_CONNECTION_TIMEOUT_SECONDS: "30"
     # Example full image for reference (set via K8SHELPER_IMAGE before envsubst on the Agent yaml):
     # northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelperanthropic:claude-sonnet-4-6

@@ -1,132 +1,121 @@
-The ate-system substrate control plane (CRDs, ate-api-server, atenet-router, at least one WorkerPool, etc.) must be installed and healthy before you enable the integration on the kagent side.
+The Quickstart below shows you how to upgrade your existing kagent enterprise environment to enable Agent Substrate and how to deploy Substrate Agents with BYO Agents, Declarative Agents, and Agent Harnesses (OpenClaw and Hermes)
 
-The order matters because when you set:
+## Install
 
-```
-controller:
-  substrate:
-    enabled: true
-    ateApiEndpoint: "dns:///api.ate-system.svc:443"
-    ...
-```
+Upgrade your existing kagent installation:
 
-the kagent controller does this at startup (see go/core/pkg/app/app.go:548):
+The CRDs and Controller
 
-```
-if cfg.Substrate.AteAPIEndpoint != "" {
-    substrateAteClient, dialErr = substrate.Dial(...)
-    if dialErr != nil {
-        ...log...
-        os.Exit(1)   // hard failure
-    }
-    ...
-}
+The below contains:
+
+1. Env variables
+2. OCI chart locations
+3. Substrate Controller config and CRDs, which is installed as a *subchart* of the kagent release, so Service names are "${KAGENT_RELEASE}-...".
 ```
 
-If the endpoint isn't reachable (or the substrate components aren't there yet), the controller pod will fail to start and will keep crash-looping.
+export KAGENT_NS="${KAGENT_NS:-kagent}"
+export KAGENT_RELEASE="${KAGENT_RELEASE:-kagent}"
+export KAGENT_CRDS_RELEASE="${KAGENT_CRDS_RELEASE:-kagent-crds}"
+export KAGENT_VERSION="${KAGENT_VERSION:-0.5.3}"
 
-### Substrate Install
+export KAGENT_CRDS_CHART="${KAGENT_CRDS_CHART:-oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise-crds}"
+export KAGENT_CHART="${KAGENT_CHART:-oci://us-docker.pkg.dev/solo-public/kagent-enterprise-helm/charts/kagent-enterprise}"
 
-1. Install the CRDs for Substrate
-```
-helm upgrade --install substrate-crds \
-oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds
-```
+export SUBSTRATE_API_SVC="${SUBSTRATE_API_SVC:-${KAGENT_RELEASE}-api}"
+export SUBSTRATE_ATENET_SVC="${SUBSTRATE_ATENET_SVC:-${KAGENT_RELEASE}-atenet-router}"
+export SUBSTRATE_ATE_API_SA="${SUBSTRATE_ATE_API_SA:-${KAGENT_RELEASE}-ate-api-server}"
+export SUBSTRATE_VALKEY_SVC="${SUBSTRATE_VALKEY_SVC:-${KAGENT_RELEASE}-valkey-cluster}"
 
-2. Install substrate
-```
-helm upgrade --install substrate \
-oci://ghcr.io/kagent-dev/substrate/helm/substrate \
---namespace ate-system --create-namespace
-```
+# Controller → ate-api / atenet endpoints (in-cluster DNS)
+export ATE_API_ENDPOINT="${ATE_API_ENDPOINT:-dns:///${SUBSTRATE_API_SVC}.${KAGENT_NS}.svc:443}"
+export ATENET_ROUTER_URL="${ATENET_ROUTER_URL:-http://${SUBSTRATE_ATENET_SVC}.${KAGENT_NS}.svc:80}"
+export VALKEY_CLUSTER_ADDRESS="${VALKEY_CLUSTER_ADDRESS:-${SUBSTRATE_VALKEY_SVC}.${KAGENT_NS}.svc:6379}"
 
-### Kagent Install
+# JWT: must match the cluster SA token issuer (GKE example below).
+#   GKE:  https://container.googleapis.com/v1/projects/<proj>/locations/<loc>/clusters/<name>
+#   kind: https://kubernetes.default.svc.cluster.local
+# Discover with:
+#   kubectl get --raw /.well-known/openid-configuration | jq -r .issuer
+export JWT_ISSUER="${JWT_ISSUER:-$(kubectl get --raw /.well-known/openid-configuration 2>/dev/null | sed -n 's/.*"issuer"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')}"
+if [ -z "${JWT_ISSUER}" ]; then
+  echo "JWT_ISSUER is empty. Set it explicitly (see comment above)." >&2
+  exit 1
+fi
 
-If you aren't using GKE, you will have to set the JWT issuer to your cluster so you can hit the /substrate page. For example, if you're running an Azure Kubernetes Service (AKS) cluster, your installation of Agent Substrate will look like the below (no need to run the below; this is just to show for if you're not on a GKE or Kind cluster)
+# WorkerPool
+export WORKER_POOL_NAME="${WORKER_POOL_NAME:-kagent-default}"
+export WORKER_POOL_REPLICAS="${WORKER_POOL_REPLICAS:-2}"
+export ATEOM_IMAGE="${ATEOM_IMAGE:-ghcr.io/kagent-dev/substrate/ateom-gvisor:v0.0.8}"
 
-```
-helm upgrade --install substrate \
-     oci://ghcr.io/kagent-dev/substrate/helm/substrate \
-     --namespace ate-system --create-namespace \
-     --set auth.jwt.issuer=https://aksenvironment01-dns01-xujbmtcz.hcp.westus.azmk8s.io \
-     --set auth.jwt.audience=api.ate-system.svc 2>&1 | tail -20
-```
+# Chart-generated self-signed ate-api TLS: controller does not mount that CA
+export ATE_API_INSECURE="${ATE_API_INSECURE:-true}"
 
-1. Install the kagent CRDs
-```
-helm upgrade kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds --version 0.9.7 -n kagent --create-namespace
-```
+helm upgrade "${KAGENT_CRDS_RELEASE}" "${KAGENT_CRDS_CHART}" \
+  --version "${KAGENT_VERSION}" \
+  -n "${KAGENT_NS}" \
+  --reuse-values \
+  --set substrate.enabled=true \
+  --wait --timeout 5m
 
-2. Install kagent. This configuration also points to your Substrate installation and creates a `WorkerPool` because without it, you won't be able to create an Agent with Substrate as you'll get the following error:
-
-![](images/suberror.png)
-
-```
-helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version 0.9.7 -n kagent \
-  --set providers.default=anthropic \
-  --set providers.anthropic.apiKey=$ANTHROPIC_API_KEY \
-  --set controller.agentImage.tag="" \
-  --set controller.skillsInitImage.tag="" \
-  --set controller.image.registry="" \
-  --set controller.image.repository=kagent-dev/kagent/controller \
-  --set controller.image.tag="" \
-  --set controller.image.pullPolicy="" \
-  --set ui.image.registry="" \
-  --set ui.image.repository=kagent-dev/kagent/ui \
-  --set ui.image.tag="" \
-  --set ui.image.pullPolicy="" \
+helm upgrade "${KAGENT_RELEASE}" "${KAGENT_CHART}" \
+  --version "${KAGENT_VERSION}" \
+  -n "${KAGENT_NS}" \
+  --reuse-values \
+  --set substrate.enabled=true \
+  --set "substrate.redis.clusterAddress=${VALKEY_CLUSTER_ADDRESS}" \
+  --set "substrate.auth.jwt.issuer=${JWT_ISSUER}" \
   --set controller.substrate.enabled=true \
-  --set controller.substrate.defaultWorkerPool.namespace=kagent \
-  --set controller.substrate.defaultWorkerPool.name=kagent-default \
+  --set "controller.substrate.ateApiEndpoint=${ATE_API_ENDPOINT}" \
+  --set "controller.substrate.ateApiInsecure=${ATE_API_INSECURE}" \
+  --set "controller.substrate.atenetRouterURL=${ATENET_ROUTER_URL}" \
+  --set "controller.substrate.ateApiServer.namespace=${KAGENT_NS}" \
+  --set "controller.substrate.ateApiServer.serviceAccount=${SUBSTRATE_ATE_API_SA}" \
+  --set "controller.substrate.defaultWorkerPool.name=${WORKER_POOL_NAME}" \
   --set substrateWorkerPool.create=true \
-  --set substrateWorkerPool.name=kagent-default \
-  --set substrateWorkerPool.replicas=1 \
-  --set controller.substrate.ateApiEndpoint="dns:///api.ate-system.svc:443" \
-  --set controller.substrate.ateApiInsecure=true \
-  --set controller.substrate.atenetRouterURL="http://atenet-router.ate-system.svc:80" \
-  --set controller.substrate.ateApiTokenFile="/var/run/secrets/tokens/ate-api/token" \
-  --set substrateWorkerPool.ateomImage=ghcr.io/kagent-dev/substrate/ateom-gvisor:v0.0.6
+  --set "substrateWorkerPool.replicas=${WORKER_POOL_REPLICAS}" \
+  --set "substrateWorkerPool.ateomImage=${ATEOM_IMAGE}" \
+  --set "substrateWorkerPool.name=${WORKER_POOL_NAME}" \
+  --wait --timeout 15m
 ```
 
-You should now be able to see kagent up & running and the `/substrate` dashboard with your workers
+To use Substrate in kagent enterprise, you need a minimum version of `0.5.3`
 
-![](../images/kagent.png)
 
-## Substrate Agent Deploy
+## Harness Agents (OpenClaw and Hermes)
 
-To check Substrate Agents deployed, run the following:
-
-```bash
-kubectl get SandboxAgent -A
+```
+kubectl apply -f - <<'EOF'
+apiVersion: kagent.dev/v1alpha2
+kind: AgentHarness
+metadata:
+  name: my-openclaw
+  namespace: kagent
+spec:
+  backend: openclaw
+  description: OpenClaw on Agent Substrate (kagent-ee-felevan)
+  modelConfigRef: default-model-config
+  substrate:
+    workerPoolRef:
+      name: kagent-default
+    snapshotsConfig:
+      location: gs://ate-snapshots-field-engineering-us-substrate-mlevan/kagent/my-openclaw
+EOF
 ```
 
-Example declarative Substrate Agent deployment:
-```yaml
-kubectl apply -f - <<EOF
+## Declarative/BYO Agents
+
+```
 apiVersion: kagent.dev/v1alpha2
 kind: SandboxAgent
 metadata:
-  name: test123
+  name: my-sandbox-agent
   namespace: kagent
 spec:
+  type: Declarative   # or BYO
   declarative:
-    modelConfig: default-model-config
-    runtime: go
-    systemMessage: |-
-      You're a helpful agent, made by the kagent team.
-
-      # Instructions
-          - If user question is unclear, ask for clarification before running any tools
-          - Always be helpful and friendly
-          - If you don't know how to answer the question DO NOT make things up, tell the user "Sorry, I don't know how to answer that" and ask them to clarify the question further
-          - If you are unable to help, or something goes wrong, refer the user to https://kagent.dev for more information or support.
-
-      # Response format:
-          - ALWAYS format your response as Markdown
-          - Your response will include a summary of actions you took and an explanation of the result
-          - If you created any artifacts such as files or resources, you will include those in your response as well
-  description: my nifty substrate agent
-  platform: substrate
-  substrate: {}
-  type: Declarative
+    modelConfig: my-model
+    # instructions, tools, etc.
+  substrate:
+    workerPoolRef:
+      name: kagent-default
 ```

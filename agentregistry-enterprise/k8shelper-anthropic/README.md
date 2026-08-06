@@ -21,6 +21,9 @@ When `MODEL_PROVIDER=anthropic`, the code prefixes `MODEL_NAME` with
 
 The agent loads runtime MCP servers from `MCP_SERVERS_CONFIG` when Agent Registry injects it. It also supports file-based config from `MCP_SERVERS_CONFIG_PATH` or `/config/mcp-servers.json`.
 
+MCP session creation defaults to a 30-second timeout. Override it with
+`MCP_CONNECTION_TIMEOUT_SECONDS` when an upstream needs more or less time.
+
 By default, `issue_write` is filtered out through `MCP_DISABLED_TOOLS` because the GitHub Copilot MCP schema includes a boolean-only enum that some models reject when converting MCP tools to function declarations. Override `MCP_DISABLED_TOOLS` if you are using a model/runtime that accepts that schema.
 
 The agent includes `list_available_tools` so users can ask what local and GitHub MCP-backed tools are available.
@@ -36,7 +39,7 @@ cd k8shelper-anthropic
 docker buildx build --platform linux/amd64 -t k8shelperanthropic:claude-sonnet-4-6 --load .
 
 # Tag + push the specific version (and optionally :latest)
-export K8SHELPER_IMAGE="northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelperanthropic:direct-anthropic-20260615105149"
+export K8SHELPER_IMAGE="northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelperanthropic:mcp-timeout-20260803102609"
 docker tag k8shelperanthropic:claude-sonnet-4-6 "${K8SHELPER_IMAGE}"
 docker push "${K8SHELPER_IMAGE}"
 
@@ -48,7 +51,7 @@ docker push northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-i
 The image is now available at:
 
 ```
-northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelperanthropic:direct-anthropic-20260615105149
+northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelperanthropic:mcp-timeout-20260803102609
 ```
 
 ## Deploy to kagent
