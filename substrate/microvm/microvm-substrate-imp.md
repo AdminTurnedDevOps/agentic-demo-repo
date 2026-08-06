@@ -297,28 +297,43 @@ Use the **`my-counter-1`** actor from the demo step above. The counter lives
 in **guest RAM**. Continuing the count after suspend + resume (especially on
 another worker) proves the microVM memory snapshot round-tripped.
 
-Keep (or re-open) the atenet-router port-forward if it is not still running:
+Keep (or re-open) the `atenet-router` port-forward if it is not still running:
 
 ```bash
 kubectl -n ate-system port-forward svc/atenet-router 8000:80
 ```
 
+See the Actor (note its Worker)
 ```bash
-# Capture worker before suspend
 kubectl ate get actor my-counter-1 -a demo
+```
 
-kubectl ate suspend actor my-counter-1 -a demo
-kubectl ate get actor my-counter-1 -a demo
-# expect STATUS_SUSPENDED; worker released
+Run the `curl` a few times
 
-# Resume via traffic (preferred) — curl wakes the actor through atenet-router.
-# Optional explicit resume: kubectl ate resume actor my-counter-1 -a demo
+```bash
 curl -s -X POST \
   -H "Host: my-counter-1.demo.actors.resources.substrate.ate.dev" \
   http://localhost:8000/
+```
 
+Suspend the Actor. After suspendending get Actor, expect a `STATUS_SUSPENDED` and an empty Worker
+```bash
+kubectl ate suspend actor my-counter-1 -a demo
 kubectl ate get actor my-counter-1 -a demo
-# note worker pod — ideally a different pod than before if the pool has capacity
+```
+
+Resume the Actor with live traffic
+
+```bash
+curl -s -X POST \
+  -H "Host: my-counter-1.demo.actors.resources.substrate.ate.dev" \
+  http://localhost:8000/
+```
+
+Check where the Actor ended up (see if it moved to another Worker)
+
+```bash
+kubectl ate get actor my-counter-1 -a demo
 ```
 
 Watch **`preserved memory count`** in the curl body. If it continues from where
