@@ -2,21 +2,28 @@
 
 ## Bundled Postgres
 
-```
+```bash
 helm upgrade --install agentregistry \
   oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --namespace agentregistry \
   --create-namespace
 ```
 
-With an LB for the service:
+```bash
+kubectl -n agentregistry port-forward svc/agentregistry 12121:12121
 ```
+
+With an LB for the service:
+
+```bash
 helm upgrade --install agentregistry \
   oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --namespace agentregistry \
   --create-namespace \
   --set service.type=LoadBalancer
 ```
+
+Access the ui: `http://34.73.63.97:12121`
 
 ## External Postgres
 
