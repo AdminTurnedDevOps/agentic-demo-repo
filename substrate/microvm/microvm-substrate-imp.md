@@ -68,6 +68,7 @@ no /dev/kvm required      needs KVM / nested virt + node label
   tree) with a current `main` pull.
 - Snapshot bucket (BUCKET_NAME) must allow the node/atelet identity to create objects (storage.objects.create, e.g. roles/storage.objectAdmin on the bucket). Read-only / bucketViewer is not enough for golden snapshots.
 - Substrate installed: Follow [setup](../setup.md)
+- Latest version of `kubectl-ate` (`go install ./cmd/kubectl-ate`)
 - Confirm control-plane basics if you already installed:
 ```bash
 source .ate-dev-env.sh
@@ -241,10 +242,14 @@ Then create an actor from that template and hit it through atenet-router:
 
 ```bash
 kubectl ate create atespace demo
+```
 
+```bash
 kubectl ate create actor my-counter-1 -a demo \
   --template ate-demo-counter-microvm/counter-microvm
+```
 
+```bash
 kubectl -n ate-system port-forward svc/atenet-router 8000:80
 ```
 
