@@ -23,7 +23,22 @@ helm upgrade --install agentregistry \
   --set service.type=LoadBalancer
 ```
 
-Access the ui: `http://34.73.63.97:12121`
+Access the ui: `http://YOUR_ALB_IP:12121`
+
+### Enabling The Plugin Marketplace
+
+The below env var enabled the plugin marketin
+```bash
+--set-json 'extraEnvVars=[{"name":"AGENT_REGISTRY_PLUGIN_MARKETPLACE_COMPAT_ENABLED","value":"true"}]'
+```
+
+```bash
+helm upgrade --install agentregistry \
+  oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+  --namespace agentregistry \
+  --create-namespace \
+  --set-json 'extraEnvVars=[{"name":"AGENT_REGISTRY_PLUGIN_MARKETPLACE_COMPAT_ENABLED","value":"true"}]'
+```
 
 ## External Postgres
 
