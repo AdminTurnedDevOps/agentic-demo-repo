@@ -51,12 +51,6 @@ spec:
 EOF
 ```
 
-Verify the rate limiter (and its Redis-based extCache dependency, which is auto-provisioned) comes up:
-
-```
-kubectl get pods -n agentgateway-system | grep -E 'rate-limiter|ext-cache'
-```
-
 ## 2. Create the Gateway
 
 ```
@@ -76,6 +70,12 @@ spec:
         namespaces:
           from: Same
 EOF
+```
+
+Verify the rate limiter (and its Redis-based extCache dependency, which is auto-provisioned) comes up:
+
+```
+kubectl get pods -n agentgateway-system | grep -E 'rate-limiter|ext-cache'
 ```
 
 ## 3. Create the MCP backend (DeepWiki)
