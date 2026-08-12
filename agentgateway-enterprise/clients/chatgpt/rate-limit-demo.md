@@ -18,40 +18,10 @@ Two important mechanics of this demo:
 
 ## Prerequisites
 
-- A cluster with enterprise agentgateway installed (see [setup.md](../../setup.md))
+- A cluster with enterprise agentgateway and its rate-limiter extension installed (see [setup.md](../../setup.md))
 - The unified ChatGPT desktop app
 
-## 1. Enable the rate-limiter extension server
-
-The enterprise global rate limiter is an extension server that gets auto-provisioned when enabled via `EnterpriseAgentgatewayParameters`. The default `enterprise-agentgateway` GatewayClass has no `parametersRef`, so create a dedicated GatewayClass that points at the parameters.
-
-```
-kubectl apply -f- <<EOF
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayParameters
-metadata:
-  name: agw-rl-params
-  namespace: agentgateway-system
-spec:
-  sharedExtensions:
-    ratelimiter:
-      enabled: true
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: enterprise-agentgateway-rl
-spec:
-  controllerName: solo.io/enterprise-agentgateway
-  parametersRef:
-    group: enterpriseagentgateway.solo.io
-    kind: EnterpriseAgentgatewayParameters
-    name: agw-rl-params
-    namespace: agentgateway-system
-EOF
-```
-
-## 2. Create the Gateway
+## 1. Create the Gateway
 
 ```
 kubectl apply -f- <<EOF
@@ -61,7 +31,7 @@ metadata:
   name: chatgpt-mcp-gateway
   namespace: agentgateway-system
 spec:
-  gatewayClassName: enterprise-agentgateway-rl
+  gatewayClassName: enterprise-agentgateway
   listeners:
     - name: mcp
       port: 3000
@@ -72,13 +42,13 @@ spec:
 EOF
 ```
 
-Verify the rate limiter (and its Redis-based extCache dependency, which is auto-provisioned) comes up:
+Verify the rate limiter and its Redis-based extCache dependency are running:
 
 ```
 kubectl get pods -n agentgateway-system | grep -E 'rate-limiter|ext-cache'
 ```
 
-## 3. Create the MCP backend (DeepWiki)
+## 2. Create the MCP backend (DeepWiki)
 
 DeepWiki is a free, no-auth, public MCP server (tools: `read_wiki_structure`, `read_wiki_contents`, `ask_question` for any public GitHub repo). The gateway originates TLS to it (`policies.tls: {}` uses system CAs).
 
@@ -103,7 +73,7 @@ spec:
 EOF
 ```
 
-## 4. Route `/mcp` to the backend
+## 3. Route `/mcp` to the backend
 
 ```
 kubectl apply -f- <<EOF
@@ -127,7 +97,7 @@ spec:
 EOF
 ```
 
-## 5. Sanity check the MCP path (before rate limiting)
+## 4. Sanity check the MCP path (before rate limiting)
 
 ```
 export GATEWAY_IP=$(kubectl get svc chatgpt-mcp-gateway -n agentgateway-system -o jsonpath="{.status.loadBalancer.ingress[0]['hostname','ip']}")
@@ -143,7 +113,7 @@ curl -s "http://$GATEWAY_IP:3000/mcp" \
 
 You should get back a `serverInfo` result from DeepWiki via the gateway.
 
-## 6. Create the rate limit
+## 5. Create the rate limit
 
 The `RateLimitConfig` uses a `genericKey` action so **all** requests on the route share one counter — no custom headers required (the MCP client doesn't send any). 10 requests per minute leaves room for the MCP handshake but trips quickly during use.
 
@@ -198,14 +168,14 @@ EOF
 >     entRateLimit:
 >       global:
 >         backendRef:
->           name: rate-limiter-enterprise-agentgateway-rl
+>           name: rate-limiter-enterprise-agentgateway
 >           namespace: agentgateway-system
 >           port: 8083
 >         rateLimitConfigRefs:
 >           - name: mcp-request-limit
 > ```
 
-## 7. Verify the limit with curl
+## 6. Verify the limit with curl
 
 Fire 12 requests; the first 10 return `200`, the rest `429`:
 
@@ -226,7 +196,7 @@ kubectl logs -n agentgateway-system deploy/chatgpt-mcp-gateway --tail=20 | grep 
 
 Wait a minute for the counter to reset before moving on (the MCP handshake needs a few requests).
 
-## 8. Connect the ChatGPT/Codex app
+## 7. Connect the ChatGPT/Codex app
 
 Codex mode configures MCP servers in `~/.codex/config.toml` and connects to them **locally**, so it can reach the gateway LB directly. Add:
 
@@ -235,7 +205,7 @@ Codex mode configures MCP servers in `~/.codex/config.toml` and connects to them
 url = "http://<GATEWAY_IP>:3000/mcp"
 ```
 
-Replace `<GATEWAY_IP>` with the value from step 5.
+Replace `<GATEWAY_IP>` with the value from step 4.
 
 > If your app build only supports stdio MCP servers (no `url` key), bridge with `mcp-remote`:
 >
@@ -256,7 +226,7 @@ then read the contents of the first three pages one at a time.
 
 > If your cluster LB isn't reachable from your laptop, port-forward instead and point the config at localhost: `kubectl port-forward -n agentgateway-system svc/chatgpt-mcp-gateway 3000:3000`, then use `url = "http://127.0.0.1:3000/mcp"`.
 
-## 9. Watch the rate limit trip
+## 8. Watch the rate limit trip
 
 Each MCP call the app makes is a POST through the gateway. After the 10th request in a minute, the rate limiter returns `429` and Codex surfaces the tool calls as failed (and retries them).
 
@@ -276,8 +246,6 @@ kubectl delete ratelimitconfig mcp-request-limit -n agentgateway-system
 kubectl delete httproute deepwiki-mcp-route -n agentgateway-system
 kubectl delete agentgatewaybackend deepwiki-mcp -n agentgateway-system
 kubectl delete gateway chatgpt-mcp-gateway -n agentgateway-system
-kubectl delete gatewayclass enterprise-agentgateway-rl
-kubectl delete enterpriseagentgatewayparameters agw-rl-params -n agentgateway-system
 ```
 
 Also remove the `[mcp_servers.deepwiki]` block from `~/.codex/config.toml`.
