@@ -177,14 +177,14 @@ EOF
 
 ## 6. Verify the limit with curl
 
-Fire 12 requests; the first 10 return `200`, the rest `429`:
+Fire 12 valid MCP initialization requests; the first 10 return `200`, the rest `429`. Initialization is used because agentgateway requires an `mcp-session-id` header for other MCP methods.
 
 ```
 for i in $(seq 1 12); do
-  curl -s -o /dev/null -w "%{http_code}\n" "http://$GATEWAY_IP:3000/mcp" \
+  curl -v -w "\nHTTP %{http_code}\n" "http://$GATEWAY_IP:3000/mcp" \
     -H "content-type: application/json" \
     -H "accept: application/json, text/event-stream" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"ping"}'
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"rate-limit-test","version":"1.0"}}}'
 done
 ```
 
