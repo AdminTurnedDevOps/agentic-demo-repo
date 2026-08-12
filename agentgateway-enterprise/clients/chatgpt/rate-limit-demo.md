@@ -54,13 +54,13 @@ DeepWiki is a free, no-auth, public MCP server (tools: `read_wiki_structure`, `r
 
 ```
 kubectl apply -f- <<EOF
-apiVersion: agentgateway.dev/v1alpha1
-kind: AgentgatewayBackend
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
 metadata:
   name: deepwiki-mcp
   namespace: agentgateway-system
 spec:
-  mcp:
+  entMcp:
     targets:
       - name: deepwiki
         static:
@@ -92,8 +92,8 @@ spec:
             value: /mcp
       backendRefs:
         - name: deepwiki-mcp
-          group: agentgateway.dev
-          kind: AgentgatewayBackend
+          group: enterpriseagentgateway.solo.io
+          kind: EnterpriseAgentgatewayBackend
 EOF
 ```
 
@@ -244,7 +244,7 @@ Wait a minute and retry — the tools work again once the window resets.
 kubectl delete enterpriseagentgatewaypolicy mcp-rate-limit -n agentgateway-system
 kubectl delete ratelimitconfig mcp-request-limit -n agentgateway-system
 kubectl delete httproute deepwiki-mcp-route -n agentgateway-system
-kubectl delete agentgatewaybackend deepwiki-mcp -n agentgateway-system
+kubectl delete enterpriseagentgatewaybackend deepwiki-mcp -n agentgateway-system
 kubectl delete gateway chatgpt-mcp-gateway -n agentgateway-system
 ```
 
