@@ -28,7 +28,7 @@ metadata:
   name: my-sandbox-agent
   namespace: kagent
 spec:
-  type: Declarative   # or BYO
+  type: Declarative
   declarative:
     modelConfig: my-model
     # instructions, tools, etc.
