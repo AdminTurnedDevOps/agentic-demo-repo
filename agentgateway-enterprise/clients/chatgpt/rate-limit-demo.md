@@ -188,6 +188,8 @@ for i in $(seq 1 12); do
 done
 ```
 
+On enterprise agentgateway v2026.7.0, denied requests return `429 Too Many Requests` with a `retry-after` header and an empty response body. Starting in v2026.8.0, agentgateway also derives `x-ratelimit-limit`, `x-ratelimit-remaining`, and `x-ratelimit-reset` from the global rate limiter's descriptor status. A `rate limit exceeded` response body is not added unless the rate limiter supplies one.
+
 You can also see the 429s in the gateway pod logs:
 
 ```
