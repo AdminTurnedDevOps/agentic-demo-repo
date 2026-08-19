@@ -372,9 +372,7 @@ EOF
 ### 5.1 Install Pinniped CLI
 
 ```
-curl -L https://get.pinniped.dev/latest/pinniped-cli-linux-amd64 -o pinniped
-chmod +x pinniped
-sudo mv pinniped /usr/local/bin/
+brew install vmware/pinniped/pinniped-cli
 ```
 
 ### 5.2 Generate Kubeconfig
@@ -385,7 +383,7 @@ Use the Pinniped CLI to generate a kubeconfig that uses OIDC authentication:
 pinniped get kubeconfig \
   --oidc-issuer https://${KEYCLOAK_IP}/realms/kubernetes \
   --oidc-client-id pinniped-cli \
-  --oidc-scopes openid,email,groups \
+  --oidc-scopes openid,email \
   --oidc-listen-port 12345 \
   --oidc-ca-bundle keycloak-tls.crt \
   > pinniped-kubeconfig.yaml
