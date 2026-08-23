@@ -1,0 +1,39 @@
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: k8shelper
+  namespace: kagent
+  labels:
+    kagent.solo.io/waypoint: "true"
+spec:
+  description: Kubernetes helper BYO agent using Anthropic Claude.
+  type: BYO
+  byo:
+    deployment:
+      image: northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelperanthropic:mcp-timeout-20260803102609
+      env:
+        - name: HOST
+          value: 0.0.0.0
+        - name: MODEL_PROVIDER
+          value: anthropic
+        - name: MODEL_NAME
+          value: claude-sonnet-4-6
+        - name: MCP_CONNECTION_TIMEOUT_SECONDS
+          value: "30"
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: k8shelper-anthropic
+              key: ANTHROPIC_API_KEY
+        - name: MCP_SERVERS_CONFIG
+          valueFrom:
+            secretKeyRef:
+              name: k8shelper-mcp-servers
+              key: mcp-servers.json
+      resources:
+        requests:
+          cpu: 100m
+          memory: 384Mi
+        limits:
+          cpu: "2"
+          memory: 1Gi
