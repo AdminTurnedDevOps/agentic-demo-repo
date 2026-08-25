@@ -139,7 +139,7 @@ spec:
   ai:
     provider:
       openai:
-        model: gpt-5.6-luna
+        model: gpt-4.1-mini
   policies:
     auth:
       secretRef:
@@ -211,7 +211,7 @@ curl -s http://$LLM_GW:8080/v1/chat/completions \
 Example output:
 ```json
 {
-  "model": "gpt-5.6-luna",
+  "model": "gpt-4.1-mini",
   "service_tier": "default",
   "usage": {
     "prompt_tokens": 16,
@@ -238,11 +238,10 @@ Agentgateway automatically logs every LLM request with AI-specific metadata:
 kubectl logs deploy/llm-gateway -n agentgateway-system | grep 'request '
 ```
 
-Expected output:
-```json
-{
-2026-08-25T15:01:26.801848Z     info    request gateway=agentgateway-system/llm-gateway listener=http route=agentgateway-system/llm-route endpoint=api.openai.com:443 src.addr=x.x.x.x:24311 http.method=POST http.host=x.x.x.x http.path=/v1/chat/completions http.version=HTTP/1.1 http.status=200 protocol=llm gen_ai.operation.name=chat gen_ai.provider.name=openai gen_ai.request.model=gpt-5.6-luna gen_ai.response.model=gpt-5.6-luna gen_ai.usage.input_tokens=15 gen_ai.usage.cache_creation.input_tokens=0 gen_ai.usage.cache_read.input_tokens=0 gen_ai.usage.output_tokens=25 gen_ai.usage.reasoning_tokens=0 agw.ai.usage.cost.total=0.000033 gen_ai.usage.input_audio_tokens=0 gen_ai.usage.output_audio_tokens=0 gen_ai.request.max_tokens=50 duration=1719ms
-}
+Expected output (text format; this install does not log JSON by default):
+
+```
+2026-08-25T15:01:26.801848Z  info  request  gateway=agentgateway-system/llm-gateway listener=http route=agentgateway-system/llm-route endpoint=api.openai.com:443 http.method=POST http.path=/v1/chat/completions http.status=200 protocol=llm gen_ai.operation.name=chat gen_ai.provider.name=openai gen_ai.request.model=gpt-4.1-mini gen_ai.usage.input_tokens=15 gen_ai.usage.output_tokens=25 duration=1719ms
 ```
 
 This gives you per-request visibility into token usage, model, and latency, which is critical for enterprise cost tracking and chargeback.
@@ -398,7 +397,7 @@ metadata:
   namespace: kagent
 spec:
   provider: OpenAI
-  model: gpt-4o-mini
+  model: gpt-4.1-mini
   apiKeySecret: kagent-openai
   apiKeySecretKey: OPENAI_API_KEY
   openAI:
@@ -408,7 +407,7 @@ EOF
 
 ### Create or Update an Agent
 
-Create an agent that uses the new ModelConfig. This example creates a Kubernetes troubleshooting agent:
+Create an agent that uses the new `ModelConfig`. This example creates a Kubernetes troubleshooting agent:
 
 ```yaml
 kubectl apply -f - <<EOF
@@ -425,34 +424,24 @@ spec:
     systemMessage: |
       You are a Kubernetes expert. Help users diagnose and fix issues
       with their clusters, pods, deployments, and services.
-    tools:
-      - type: McpServer
-        mcpServer:
-          apiGroup: kagent.dev
-          kind: MCPServer
-          name: kubernetes
 EOF
 ```
 
 ### Verify the Integration
 
-Open the kagent dashboard and chat with the agent by either:
+Open the kagent dashboard and chat with the agent by asking something like:
 
-1. Open the ALB IP via the `solo-enterprise-ui` service under the `kagent` namespace
-
-2. Port-forward the UI:
-
-```bash
-kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80
+```
+What pods are running in the default namespace?
 ```
 
-Ask the agent a question like *"What pods are running in the default namespace?"*. Then confirm the request flowed through Agentgateway by checking the access logs:
+Then confirm the request flowed through Agentgateway by checking the access logs:
 
 ```bash
-kubectl logs deploy/llm-gateway -n agentgateway-system --tail=5 | grep '"scope":"request"'
+kubectl logs deploy/llm-gateway -n agentgateway-system | grep 'request '
 ```
 
-You should see the LLM request logged with token usage, model, and latency -- confirming that all kAgent LLM traffic is now flowing through Agentgateway with the custom enterprise headers injected.
+You should see the LLM request logged with token usage, model, and latency, which confirms that all kagent LLM traffic is now flowing through agentgateway with the custom enterprise headers injected.
 
 ---
 
@@ -460,7 +449,7 @@ You should see the LLM request logged with token usage, model, and latency -- co
 
 Steps 1–4 use a static token in the HTTPRoute, which works for demos. In production, enterprise LLM backends often issue short-lived JWT tokens (e.g., 30-second expiry) from a separate token endpoint. A static token would expire almost immediately.
 
-Enterprise Agentgateway solves this with an **External Authorization (ExtAuth) service** that fetches a fresh token on every LLM request:
+Enterprise Agentgateway solves this with an **External Authorization (ExtAuth) service** that fetches a fresh token on every request:
 
 ```mermaid
 sequenceDiagram
@@ -472,7 +461,7 @@ sequenceDiagram
 
     KA->>AGW: POST /v1/chat/completions
     AGW->>Auth: Check request (gRPC ext-authz)
-    Auth->>IDP: POST /token<br/>(service account credentials)
+    Auth->>IDP: POST /token
     IDP-->>Auth: JWT (30s TTL)
     Auth-->>AGW: 200 OK<br/>+ inject header: X-Corp-Trust-Token
     Note over AGW: Adds token from ext-auth<br/>response into upstream request
@@ -480,22 +469,91 @@ sequenceDiagram
     LLM-->>KA: Response
 ```
 
-### Deploy the ExtAuth Service
+### Remove the static trust token
 
-The ext-auth service implements the [Envoy gRPC ext-authz protocol](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/auth/v3/external_auth.proto). On each request, it:
-1. Calls the enterprise token endpoint with service account credentials
-2. Receives a fresh JWT
-3. Returns the JWT in a response header that Agentgateway injects into the upstream request
+ExtAuth should be the only source of `X-Corp-Trust-Token`. Keep the correlation headers on the HTTPRoute.
 
-A sample token-fetcher implementation is available at [`rvennam/token-fetcher`](https://hub.docker.com/r/rvennam/token-fetcher). It's a ~100 line Go service that:
-1. Receives a gRPC ext-authz `Check` request from Agentgateway
-2. POSTs to the enterprise token endpoint with service credentials
-3. Extracts the JWT from the response
-4. Returns it as a header in the ext-authz `OkHttpResponse.Headers` field, which Agentgateway injects into the upstream request
+```bash
+kubectl patch httproute llm-route -n agentgateway-system --type=json -p='[
+  {"op":"replace","path":"/spec/rules/0/filters/0/requestHeaderModifier/add","value":[
+    {"name":"x-correlation-id","value":"kagent-demo-001"},
+    {"name":"x-usersession-id","value":"kagent-session-001"}
+  ]}
+]'
+```
 
-Source code: [`token-fetcher/main.go`](./token-fetcher/main.go)
+Redeploy the echo route from Step 3 if you deleted it. It is used below to prove the header rotates.
 
-```yaml
+### Deploy a mock token endpoint
+
+This workshop does not assume a real enterprise IdP. [`token-fetcher/mock-idp.py`](./token-fetcher/mock-idp.py) is a tiny HTTP service that `POST /token` returns `{"issued_token": "<demo jwt>"}`. Swap this URL for your IdP in production.
+
+```bash
+kubectl create configmap mock-idp \
+  --from-file=mock-idp.py=token-fetcher/mock-idp.py \
+  -n agentgateway-system --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-idp
+  namespace: agentgateway-system
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: mock-idp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-idp
+  namespace: agentgateway-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-idp
+  template:
+    metadata:
+      labels:
+        app: mock-idp
+    spec:
+      containers:
+        - name: mock-idp
+          image: python:3.12.11-alpine3.21
+          command: ["python3", "/app/mock-idp.py"]
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+      volumes:
+        - name: app
+          configMap:
+            name: mock-idp
+EOF
+```
+
+### Deploy the ExtAuth service
+
+[`rvennam/token-fetcher`](https://hub.docker.com/r/rvennam/token-fetcher) implements the [Envoy gRPC ext-authz protocol](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/auth/v3/external_auth.proto). On each request it:
+
+1. Receives a gRPC `Check` from Agentgateway
+2. POSTs to `TOKEN_ENDPOINT`
+3. Reads `TOKEN_RESPONSE_FIELD` from the JSON response
+4. Returns that value in `OkHttpResponse.Headers`, which Agentgateway copies onto the upstream request
+
+```bash
+kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Service
 metadata:
@@ -505,7 +563,8 @@ metadata:
     app: token-fetcher
 spec:
   ports:
-    - port: 9000
+    - name: grpc
+      port: 9000
       targetPort: 9000
       protocol: TCP
       appProtocol: kubernetes.io/h2c
@@ -534,27 +593,36 @@ spec:
             - containerPort: 9000
           env:
             - name: TOKEN_ENDPOINT
-              value: "https://your-enterprise-idp/token"
+              value: "http://mock-idp.agentgateway-system.svc.cluster.local:8080/token"
             - name: TOKEN_REQUEST_BODY
-              value: '{"input_token_state":{"token_type":"CREDENTIAL","username":"your_service_account","password":"your_password"},"output_token_state":{"token_type":"JWT"}}'
+              value: '{"input_token_state":{"token_type":"CREDENTIAL"},"output_token_state":{"token_type":"JWT"}}'
             - name: TOKEN_RESPONSE_FIELD
               value: "issued_token"
             - name: INJECT_HEADER_NAME
               value: "X-Corp-Trust-Token"
+EOF
 ```
 
 | Environment Variable | Description |
 |---|---|
-| `TOKEN_ENDPOINT` | URL to POST to for a fresh JWT |
-| `TOKEN_REQUEST_BODY` | JSON body to send to the token endpoint |
-| `TOKEN_RESPONSE_FIELD` | JSON field in the response containing the token (default: `issued_token`) |
-| `INJECT_HEADER_NAME` | Header name to inject into the upstream request (default: `X-Corp-Trust-Token`) |
+| `TOKEN_ENDPOINT` | URL to POST for a fresh JWT. Workshop: in-cluster mock-idp. Production: your IdP token URL. |
+| `TOKEN_REQUEST_BODY` | JSON body sent to the token endpoint. Put credentials in a Secret in production. |
+| `TOKEN_RESPONSE_FIELD` | JSON field in the IdP response that contains the token (default: `issued_token`) |
+| `INJECT_HEADER_NAME` | Header name injected onto the upstream request (default: `X-Corp-Trust-Token`) |
+
+Wait until both deployments are ready:
+
+```bash
+kubectl rollout status deploy/mock-idp -n agentgateway-system
+kubectl rollout status deploy/token-fetcher -n agentgateway-system
+```
 
 ### Attach the ExtAuth Policy
 
-Create an `EnterpriseAgentgatewayPolicy` that calls the token-fetcher on every request to the LLM route:
+Target the LLM route and the echo test route so you can inspect the injected header:
 
-```yaml
+```bash
+kubectl apply -f - <<EOF
 apiVersion: enterpriseagentgateway.solo.io/v1alpha1
 kind: EnterpriseAgentgatewayPolicy
 metadata:
@@ -565,6 +633,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: HTTPRoute
       name: llm-route
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: echo-test
   traffic:
     extAuth:
       backendRef:
@@ -572,18 +643,43 @@ spec:
         namespace: agentgateway-system
         port: 9000
       grpc: {}
+EOF
 ```
+
+Confirm the policy is accepted:
 
 ```bash
-kubectl apply -f ext-auth.yaml
+kubectl get enterpriseagentgatewaypolicy llm-ext-auth -n agentgateway-system
 ```
 
-With this setup, kagent and the HTTPRoute stay exactly the same as Steps 1–4. The ExtAuth service runs transparently in front of every request:
-- Tokens are always fresh — no 30-second expiry issues
-- kagent has zero awareness of the enterprise auth flow
-- The token-fetcher service is a simple gRPC server you control (~100 lines of code)
+### Verify token rotation
 
-> **Note:** ExtAuth requires Enterprise Agentgateway. The static `RequestHeaderModifier` approach from Steps 1–4 works with both OSS and Enterprise.
+Two echo requests should each get a **different** `x-corp-trust-token` (the `jti` claim changes). Correlation headers still come from the HTTPRoute.
+
+```bash
+export LLM_GW=$(kubectl get gateway llm-gateway -n agentgateway-system -o jsonpath='{.status.addresses[0].value}')
+
+curl -s http://$LLM_GW:8080/echo | jq '.request.headers["x-corp-trust-token"]'
+curl -s http://$LLM_GW:8080/echo | jq '.request.headers["x-corp-trust-token"]'
+```
+
+LLM traffic through the same gateway should still succeed:
+
+```bash
+curl -s http://$LLM_GW:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4.1-mini","messages":[{"role":"user","content":"Say hi in one word."}],"max_tokens":8}' | jq
+```
+
+token-fetcher logs a fetch on every check:
+
+```bash
+kubectl logs deploy/token-fetcher -n agentgateway-system | grep 'fetched fresh token'
+```
+
+kagent does not change. ExtAuth runs in front of every request on the targeted routes:
+- Tokens are minted per request (30s TTL in the demo JWT)
+- kagent has no awareness of the enterprise auth flow
 
 ---
 
