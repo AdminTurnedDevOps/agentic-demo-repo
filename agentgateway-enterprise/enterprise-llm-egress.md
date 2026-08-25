@@ -74,7 +74,7 @@ kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/re
 ```
 
 ```bash
-export AGENTGATEWAY_LICENSE_KEY=eyJleHAiOjE3OTAyNjA4NDcsImlhdCI6MTc4NzY2ODg0NywiayI6IjNtaDAzUSIsImx0IjoidHJpYWwiLCJuYmYiOjE3ODc2Njg4NDcsInByb2R1Y3QiOiJhZ2VudGdhdGV3YXkifQ.aNDnDkeDqeL8zmuSKctwuQ6O6-LhDQ_1gk9Tmau108k
+export AGENTGATEWAY_LICENSE_KEY=
 
 helm upgrade -i --create-namespace \
   --namespace agentgateway-system \
@@ -101,10 +101,11 @@ Apply all three resources at once. This creates:
 - An **HTTPRoute** that injects the custom enterprise headers on every request
 
 ```bash
-export OPENAI_API_KEY=<openai-api-key>
+export OPENAI_API_KEY=
 ```
 
 ```yaml
+kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -169,6 +170,7 @@ spec:
           namespace: agentgateway-system
           group: agentgateway.dev
           kind: AgentgatewayBackend
+EOF
 ```
 
 ```bash
@@ -184,7 +186,7 @@ kubectl get gateway llm-gateway -n agentgateway-system
 Expected output:
 ```
 NAME          CLASS                     ADDRESS        PROGRAMMED   AGE
-llm-gateway   enterprise-agentgateway   x.x.x.x   True         36s
+llm-gateway   enterprise-agentgateway   x.x.x.x        True         36s
 ```
 
 ---
