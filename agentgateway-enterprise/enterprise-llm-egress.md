@@ -74,7 +74,7 @@ kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/re
 ```
 
 ```bash
-export AGENTGATEWAY_LICENSE_KEY=<your-license-key>
+export AGENTGATEWAY_LICENSE_KEY=eyJleHAiOjE3OTAyNjA4NDcsImlhdCI6MTc4NzY2ODg0NywiayI6IjNtaDAzUSIsImx0IjoidHJpYWwiLCJuYmYiOjE3ODc2Njg4NDcsInByb2R1Y3QiOiJhZ2VudGdhdGV3YXkifQ.aNDnDkeDqeL8zmuSKctwuQ6O6-LhDQ_1gk9Tmau108k
 
 helm upgrade -i --create-namespace \
   --namespace agentgateway-system \
