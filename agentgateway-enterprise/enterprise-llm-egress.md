@@ -168,8 +168,8 @@ spec:
       backendRefs:
         - name: enterprise-llm
           namespace: agentgateway-system
-          group: agentgateway.dev
-          kind: AgentgatewayBackend
+          group: enterpriseagentgateway.solo.io
+          kind: EnterpriseAgentgatewayBackend
 EOF
 ```
 
@@ -197,7 +197,9 @@ Send a chat completion request through the gateway:
 
 ```bash
 export LLM_GW=$(kubectl get gateway llm-gateway -n agentgateway-system -o jsonpath='{.status.addresses[0].value}')
+```
 
+```bash
 curl -s http://$LLM_GW:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -210,6 +212,7 @@ Example output:
 ```json
 {
   "model": "gpt-5.6-luna",
+  "service_tier": "default",
   "usage": {
     "prompt_tokens": 16,
     "completion_tokens": 25,
@@ -218,7 +221,7 @@ Example output:
   "choices": [
     {
       "message": {
-        "content": "Kubernetes is an open-source container orchestration platform that automates the deployment, scaling, and management of containerized applications.",
+        "content": "Kubernetes is an open-source platform for automating the deployment, scaling, and management of containerized applications.",
         "role": "assistant"
       },
       "finish_reason": "stop"
@@ -232,28 +235,13 @@ Example output:
 Agentgateway automatically logs every LLM request with AI-specific metadata:
 
 ```bash
-kubectl logs deploy/llm-gateway -n agentgateway-system --tail=3 | grep '"scope":"request"'
+kubectl logs deploy/llm-gateway -n agentgateway-system | grep 'request '
 ```
 
 Expected output:
 ```json
 {
-  "scope": "request",
-  "gateway": "agentgateway-system/llm-gateway",
-  "route": "agentgateway-system/llm-route",
-  "endpoint": "api.openai.com:443",
-  "http.method": "POST",
-  "http.path": "/v1/chat/completions",
-  "http.status": 200,
-  "protocol": "llm",
-  "gen_ai.operation.name": "chat",
-  "gen_ai.provider.name": "openai",
-  "gen_ai.request.model": "gpt-5.6-luna",
-  "gen_ai.response.model": "gpt-5.6-luna",
-  "gen_ai.usage.input_tokens": 16,
-  "gen_ai.usage.output_tokens": 25,
-  "gen_ai.request.max_tokens": 50,
-  "duration": "1229ms"
+2026-08-25T15:01:26.801848Z     info    request gateway=agentgateway-system/llm-gateway listener=http route=agentgateway-system/llm-route endpoint=api.openai.com:443 src.addr=x.x.x.x:24311 http.method=POST http.host=x.x.x.x http.path=/v1/chat/completions http.version=HTTP/1.1 http.status=200 protocol=llm gen_ai.operation.name=chat gen_ai.provider.name=openai gen_ai.request.model=gpt-5.6-luna gen_ai.response.model=gpt-5.6-luna gen_ai.usage.input_tokens=15 gen_ai.usage.cache_creation.input_tokens=0 gen_ai.usage.cache_read.input_tokens=0 gen_ai.usage.output_tokens=25 gen_ai.usage.reasoning_tokens=0 agw.ai.usage.cost.total=0.000033 gen_ai.usage.input_audio_tokens=0 gen_ai.usage.output_audio_tokens=0 gen_ai.request.max_tokens=50 duration=1719ms
 }
 ```
 
@@ -264,6 +252,7 @@ This gives you per-request visibility into token usage, model, and latency, whic
 To confirm the custom headers are being injected, deploy an echo service and add a test route:
 
 ```yaml
+kubectl apply -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -326,10 +315,7 @@ spec:
           namespace: agentgateway-system
           kind: Service
           port: 80
-```
-
-```bash
-kubectl apply -f echo-test.yaml
+EOF
 ```
 
 Send a request and inspect the headers the upstream received:
@@ -343,16 +329,19 @@ Expected output:
 ```json
 {
   "authorization": "Bearer original-kagent-token",
+  "user-agent": "curl/8.7.1",
+  "accept": "*/*",
   "x-corp-trust-token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.example-trust-token",
   "x-correlation-id": "kagent-demo-001",
-  "x-usersession-id": "kagent-session-001"
+  "x-usersession-id": "kagent-session-001",
+  "host": "x.x.x.x:8080"
 }
 ```
 
 All three custom headers are injected by Agentgateway before the request reaches the upstream. Clean up the echo resources when done:
 
 ```bash
-kubectl delete httproute echo-test deploy/echo svc/echo -n agentgateway-system
+kubectl delete httproute/echo-test deploy/echo svc/echo -n agentgateway-system
 ```
 
 ---
@@ -422,6 +411,7 @@ EOF
 Create an agent that uses the new ModelConfig. This example creates a Kubernetes troubleshooting agent:
 
 ```yaml
+kubectl apply -f - <<EOF
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
@@ -441,24 +431,19 @@ spec:
           apiGroup: kagent.dev
           kind: MCPServer
           name: kubernetes
-```
-
-```bash
-kubectl apply -f agent.yaml
+EOF
 ```
 
 ### Verify the Integration
 
-Open the kAgent dashboard and chat with the agent:
+Open the kagent dashboard and chat with the agent by either:
+
+1. Open the ALB IP via the `solo-enterprise-ui` service under the `kagent` namespace
+
+2. Port-forward the UI:
 
 ```bash
-kagent dashboard
-```
-
-Or port-forward the UI:
-
-```bash
-kubectl port-forward svc/kagent-ui -n kagent 8080:8080
+kubectl port-forward -n kagent svc/solo-enterprise-ui 8080:80
 ```
 
 Ask the agent a question like *"What pods are running in the default namespace?"*. Then confirm the request flowed through Agentgateway by checking the access logs:
