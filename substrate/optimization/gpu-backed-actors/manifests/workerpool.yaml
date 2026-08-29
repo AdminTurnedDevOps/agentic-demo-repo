@@ -1,24 +1,23 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ${NAMESPACE}
+  name: ate-demo-gpu
   labels:
     gpu-backed-actors-demo: "true"
 ---
 apiVersion: ate.dev/v1alpha1
 kind: WorkerPool
 metadata:
-  name: ${WORKERPOOL}
-  namespace: ${NAMESPACE}
+  name: gpu-workers
+  namespace: ate-demo-gpu
   labels:
-    workload: gpu-context-release
+    workload: gpu
 spec:
   replicas: 1
   sandboxClass: gvisor
-  ateomImage: ${ATEOM_GPU_IMAGE}
+  # glibc ateom-gvisor image from the ko build below. Distroless cannot exec nvidia-ctk.
+  workerImage: ${ATEOM_GPU_IMAGE}
   template:
-    nodeSelector:
-      cloud.google.com/gke-accelerator: ${GPU_ACCELERATOR}
     tolerations:
     - key: nvidia.com/gpu
       operator: Exists

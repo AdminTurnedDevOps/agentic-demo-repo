@@ -1,29 +1,20 @@
 apiVersion: ate.dev/v1alpha1
 kind: ActorTemplate
 metadata:
-  name: ${TEMPLATE}
-  namespace: ${NAMESPACE}
+  name: gpu-agent
+  namespace: ate-demo-gpu
 spec:
   sandboxClass: gvisor
   workerSelector:
     matchLabels:
-      workload: gpu-context-release
+      workload: gpu
   containers:
-  - name: gpu-context-release
+  - name: gpu-agent
     image: ${GPU_WORKLOAD_IMAGE}
-    command:
-    - /usr/local/bin/start.sh
     readyz:
       httpGet:
         path: /readyz
         port: 80
-      timeoutSeconds: 300
-    securityContext:
-      capabilities:
-        drop:
-        - ALL
-        add:
-        - NET_BIND_SERVICE
   resources:
     limits:
       cpu: "1"
