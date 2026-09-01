@@ -87,7 +87,7 @@ Work inbound lead 4127. Pull the details, score it, and match on-lot trucks to t
 
 The facts in the reply (Jordan Hale, $38,000, T-2201 Tacoma, and so on) come from the MCP tools, not from the model inventing a CRM.
 
-`mcp/data/leads.json`, `inventory.json`, and `history.json` are loaded into ConfigMap `dealer-leads-data` and mounted at `/data` on the `dealer-leads-mc`p pod. The agent calls tools such as `get_lead_details`, `score_lead`, and `search_inventory`. The model only writes the sentence around those results.
+`mcp/data/leads.json`, `inventory.json`, and `history.json` are loaded into ConfigMap `dealer-leads-data` and mounted at `/data` on the `dealer-leads-mcp pod. The agent calls tools such as `get_lead_details`, `score_lead`, and `search_inventory`. The model only writes the sentence around those results.
 
 **Prompt:**
 
