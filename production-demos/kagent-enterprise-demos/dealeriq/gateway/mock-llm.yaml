@@ -1,0 +1,239 @@
+# Two OpenAI-compatible mocks for Demo 4 circuit breaking.
+# failing always returns 500. healthy always returns 200.
+# Demos 1-3 keep Claude on /anthropic.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dealeriq-mock-llm
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealeriq-mock-llm
+    app.kubernetes.io/part-of: dealeriq
+data:
+  server.py: |
+    import json
+    import os
+    import sys
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    MODE = os.environ.get("MOCK_MODE", "fail")
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code, payload):
+            body = json.dumps(payload).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            if self.path in ("/healthz", "/health", "/"):
+                self._send(200, {"ok": True, "mode": MODE})
+                return
+            self.send_response(404)
+            self.end_headers()
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", "0"))
+            if length:
+                self.rfile.read(length)
+            if MODE == "ok":
+                self._send(200, {
+                    "id": "mock-ok",
+                    "object": "chat.completion",
+                    "model": "mock-llm",
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "healthy mock: failover after circuit breaker eviction",
+                        },
+                        "finish_reason": "stop",
+                    }],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 8,
+                        "total_tokens": 9,
+                    },
+                })
+                return
+            self._send(500, {
+                "error": {
+                    "message": "mock llm injected 500 for circuit-breaker demo",
+                    "type": "server_error",
+                    "code": "mock_failure",
+                }
+            })
+
+        def log_message(self, fmt, *args):
+            sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+
+    if __name__ == "__main__":
+        HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dealeriq-mock-llm
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealeriq-mock-llm
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dealeriq-mock-llm
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dealeriq-mock-llm
+        app.kubernetes.io/part-of: dealeriq
+    spec:
+      containers:
+        - name: mock-llm
+          image: python:3.12.6-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/server.py"]
+          env:
+            - name: MOCK_MODE
+              value: fail
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: app
+          configMap:
+            name: dealeriq-mock-llm
+            defaultMode: 0444
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dealeriq-mock-llm
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealeriq-mock-llm
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  selector:
+    app.kubernetes.io/name: dealeriq-mock-llm
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dealeriq-mock-llm-ok
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealeriq-mock-llm-ok
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dealeriq-mock-llm-ok
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dealeriq-mock-llm-ok
+        app.kubernetes.io/part-of: dealeriq
+    spec:
+      containers:
+        - name: mock-llm
+          image: python:3.12.6-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/server.py"]
+          env:
+            - name: MOCK_MODE
+              value: ok
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: app
+          configMap:
+            name: dealeriq-mock-llm
+            defaultMode: 0444
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dealeriq-mock-llm-ok
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealeriq-mock-llm-ok
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  selector:
+    app.kubernetes.io/name: dealeriq-mock-llm-ok
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Priority group 0 is the failing mock. Group 1 is the healthy mock.
+# After consecutive 5xx, health eviction takes group 0 out and traffic
+# fails over to group 1 (HTTP 200).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata:
+  name: dealeriq-mock-llm
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealeriq-mock-llm
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  ai:
+    groups:
+      - providers:
+          - name: failing
+            openai:
+              model: mock-llm
+            host: dealeriq-mock-llm.dealeriq.svc.cluster.local
+            port: 8080
+      - providers:
+          - name: healthy
+            openai:
+              model: mock-llm
+            host: dealeriq-mock-llm-ok.dealeriq.svc.cluster.local
+            port: 8080
+

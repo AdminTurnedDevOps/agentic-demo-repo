@@ -1,0 +1,31 @@
+# Read-tier tools for both DealerIQ agents (SPIFFE ServiceAccount).
+# UserGroup JWT is not used here: the UI→agent path on this cluster does not
+# send a bearer token on agent→MCP, and UserGroup policies force JWT Strict
+# which 401s initialize. export_leads is not granted.
+apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: dealeriq-reader-read-tools
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/part-of: dealeriq
+    dealeriq.demo/persona: reader
+spec:
+  action: ALLOW
+  from:
+    subjects:
+      - kind: ServiceAccount
+        name: dealer-assistant
+        namespace: dealeriq
+      - kind: ServiceAccount
+        name: dealer-assistant-byo
+        namespace: dealeriq
+  targetRef:
+    kind: MCPServer
+    name: dealer-leads-mcp
+    tools:
+      - get_lead_details
+      - score_lead
+      - search_inventory
+      - get_vehicle_history
+      - draft_followup

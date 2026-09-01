@@ -1,0 +1,19 @@
+{
+  "name": "dealer-assistant-byo",
+  "description": "DealerIQ lead-generation assistant (BYO LangGraph)",
+  "url": "http://dealer-assistant-byo.dealeriq.svc.cluster.local:8080",
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": true
+  },
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "skills": [
+    {
+      "id": "lead-workflow",
+      "name": "Lead workflow",
+      "description": "Qualify inbound leads, match inventory, and send approved customer offers",
+      "tags": ["crm", "inventory", "hitl"]
+    }
+  ]
+}

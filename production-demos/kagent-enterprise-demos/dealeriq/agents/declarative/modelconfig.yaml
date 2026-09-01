@@ -1,0 +1,14 @@
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: dealeriq-claude
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  provider: OpenAI
+  model: claude-sonnet-4-6
+  apiKeySecret: kagent-anthropic
+  apiKeySecretKey: ANTHROPIC_API_KEY
+  openAI:
+    baseUrl: http://dealeriq-llm.dealeriq.svc.cluster.local:8082/anthropic

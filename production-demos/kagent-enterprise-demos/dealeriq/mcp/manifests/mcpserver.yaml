@@ -1,0 +1,43 @@
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: dealer-leads-mcp
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealer-leads-mcp
+    app.kubernetes.io/part-of: dealeriq
+    kagent.solo.io/waypoint: "true"
+spec:
+  transportType: http
+  timeout: 60s
+  httpTransport:
+    targetPort: 3000
+    path: /mcp
+  deployment:
+    image: northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/dealeriq-mcp:0.1.1
+    imagePullPolicy: Always
+    port: 3000
+    cmd: python
+    args:
+      - /app/server.py
+    env:
+      DATA_DIR: /data
+      HOST: "0.0.0.0"
+      PORT: "3000"
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 512Mi
+    imagePullSecrets:
+      - name: regcred
+    volumes:
+      - name: dealer-data
+        configMap:
+          name: dealer-leads-data
+    volumeMounts:
+      - name: dealer-data
+        mountPath: /data
+        readOnly: true

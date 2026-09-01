@@ -1,0 +1,93 @@
+[
+  {
+    "stock": "T-2201",
+    "year": 2022,
+    "make": "Toyota",
+    "model": "Tacoma SR5",
+    "trim": "Crew Cab 4x4",
+    "type": "light truck",
+    "price_usd": 36450,
+    "mileage": 28100,
+    "color": "Magnetic Gray",
+    "history_id": "H-2201",
+    "on_lot": true
+  },
+  {
+    "stock": "T-2194",
+    "year": 2021,
+    "make": "Ford",
+    "model": "Ranger XLT",
+    "trim": "SuperCrew 4x4",
+    "type": "light truck",
+    "price_usd": 32990,
+    "mileage": 41200,
+    "color": "Oxford White",
+    "history_id": "H-2194",
+    "on_lot": true
+  },
+  {
+    "stock": "S-3310",
+    "year": 2023,
+    "make": "Honda",
+    "model": "CR-V EX",
+    "trim": "AWD",
+    "type": "crossover",
+    "price_usd": 28950,
+    "mileage": 15400,
+    "color": "Sonic Gray Pearl",
+    "history_id": "H-3310",
+    "on_lot": true
+  },
+  {
+    "stock": "S-3288",
+    "year": 2020,
+    "make": "Hyundai",
+    "model": "Tucson SEL",
+    "trim": "FWD",
+    "type": "crossover",
+    "price_usd": 21400,
+    "mileage": 47800,
+    "color": "Black Noir",
+    "history_id": "H-3288",
+    "on_lot": true
+  },
+  {
+    "stock": "U-4402",
+    "year": 2024,
+    "make": "Kia",
+    "model": "Carnival EX",
+    "trim": "FWD",
+    "type": "family SUV",
+    "price_usd": 39980,
+    "mileage": 8200,
+    "color": "Astra Blue",
+    "history_id": "H-4402",
+    "on_lot": true
+  },
+  {
+    "stock": "U-4418",
+    "year": 2023,
+    "make": "Honda",
+    "model": "Pilot EX-L",
+    "trim": "AWD",
+    "type": "family SUV",
+    "price_usd": 44900,
+    "mileage": 19100,
+    "color": "Modern Steel",
+    "history_id": "H-4418",
+    "on_lot": true
+  },
+  {
+    "stock": "C-1102",
+    "year": 2019,
+    "make": "Toyota",
+    "model": "Camry LE",
+    "trim": "FWD",
+    "type": "sedan",
+    "price_usd": 17950,
+    "mileage": 62400,
+    "color": "Celestial Silver",
+    "history_id": "H-1102",
+    "on_lot": true
+  }
+]

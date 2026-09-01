@@ -1,0 +1,54 @@
+[
+  {
+    "id": "4127",
+    "name": "Jordan Hale",
+    "source": "web form",
+    "interest": "used midsize pickup",
+    "budget_usd": 38000,
+    "timeline": "this month",
+    "trade_in": "2016 Honda CR-V",
+    "status": "new",
+    "email": "jordan.hale@example.com",
+    "phone": "555-0142",
+    "notes": "Wants a crew-cab truck for weekend towing. Pre-approved at $38k."
+  },
+  {
+    "id": "4104",
+    "name": "Sam Ortiz",
+    "source": "trade-in inquiry",
+    "interest": "compact crossover",
+    "budget_usd": 24000,
+    "timeline": "next quarter",
+    "trade_in": "2014 Toyota Corolla",
+    "status": "contacted",
+    "email": "sam.ortiz@example.com",
+    "phone": "555-0198",
+    "notes": "Price-sensitive. Asked about certified pre-owned."
+  },
+  {
+    "id": "4088",
+    "name": "Avery Chen",
+    "source": "web form",
+    "interest": "family SUV",
+    "budget_usd": 52000,
+    "timeline": "two weeks",
+    "trade_in": null,
+    "status": "new",
+    "email": "avery.chen@example.com",
+    "phone": "555-0117",
+    "notes": "Third-row seating required. Two kids in car seats."
+  },
+  {
+    "id": "4061",
+    "name": "Riley Brooks",
+    "source": "phone",
+    "interest": "commuter sedan",
+    "budget_usd": 18000,
+    "timeline": "this week",
+    "trade_in": "2009 Ford Focus",
+    "status": "lost",
+    "email": "riley.brooks@example.com",
+    "phone": "555-0164",
+    "notes": "Went to a competitor on price."
+  }
+]

@@ -1,0 +1,58 @@
+{
+  "H-2201": {
+    "stock": "T-2201",
+    "owners": 1,
+    "accidents": 0,
+    "title": "clean",
+    "service": "Toyota dealer serviced, last at 26k miles",
+    "carfax_summary": "No accidents. One owner. Regular service."
+  },
+  "H-2194": {
+    "stock": "T-2194",
+    "owners": 2,
+    "accidents": 0,
+    "title": "clean",
+    "service": "Oil changes on record through 38k",
+    "carfax_summary": "No accidents. Two owners. Clean title."
+  },
+  "H-3310": {
+    "stock": "S-3310",
+    "owners": 1,
+    "accidents": 0,
+    "title": "clean",
+    "service": "HondaCare remaining",
+    "carfax_summary": "No accidents. One owner. Remaining factory warranty."
+  },
+  "H-3288": {
+    "stock": "S-3288",
+    "owners": 1,
+    "accidents": 1,
+    "title": "clean",
+    "service": "Rear bumper repaired 2022, no structural damage",
+    "carfax_summary": "One minor accident. Clean title."
+  },
+  "H-4402": {
+    "stock": "U-4402",
+    "owners": 1,
+    "accidents": 0,
+    "title": "clean",
+    "service": "Still under factory warranty",
+    "carfax_summary": "No accidents. One owner. Low miles."
+  },
+  "H-4418": {
+    "stock": "U-4418",
+    "owners": 1,
+    "accidents": 0,
+    "title": "clean",
+    "service": "Dealer maintained",
+    "carfax_summary": "No accidents. One owner."
+  },
+  "H-1102": {
+    "stock": "C-1102",
+    "owners": 2,
+    "accidents": 0,
+    "title": "clean",
+    "service": "Timing belt N/A (chain). Brakes at 58k.",
+    "carfax_summary": "No accidents. Two owners."
+  }
+}

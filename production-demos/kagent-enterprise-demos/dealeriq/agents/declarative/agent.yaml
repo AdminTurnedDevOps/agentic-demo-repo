@@ -1,0 +1,51 @@
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: dealer-assistant
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealer-assistant
+    app.kubernetes.io/part-of: dealeriq
+    kagent.solo.io/waypoint: "true"
+spec:
+  type: Declarative
+  description: DealerIQ lead-generation assistant (declarative kagent Agent)
+  declarative:
+    runtime: python
+    modelConfig: dealeriq-claude
+    systemMessage: |
+      You are DealerIQ, the dealership AI assistant for inbound leads.
+
+      Work leads in this order unless the user asks otherwise:
+      1. Pull lead details
+      2. Score the lead
+      3. Search on-lot inventory that fits budget and vehicle type
+      4. Attach vehicle history to the best match
+      5. Draft follow-up (do not send mail yourself)
+      6. Only send a customer offer or change CRM status when the user clearly asks
+
+      Lead 4127 (Jordan Hale) is the default demo lead: used midsize pickup, $38,000 budget, this month.
+
+      When the user asks to send a discounted offer, call send_customer_offer.
+      When the user asks to mark a lead qualified/won/lost, call update_lead_status.
+      Never call export_leads unless the user explicitly asks for a bulk CRM export.
+
+      Be concise. Name stock numbers. Do not invent vehicles that search_inventory did not return.
+    tools:
+      - type: McpServer
+        mcpServer:
+          kind: MCPServer
+          name: dealer-leads-mcp
+          toolNames:
+            - get_lead_details
+            - score_lead
+            - search_inventory
+            - get_vehicle_history
+            - draft_followup
+            - send_customer_offer
+            - update_lead_status
+            - export_leads
+          requireApproval:
+            - send_customer_offer
+          allowedHeaders:
+            - Authorization

@@ -1,0 +1,16 @@
+# Zero-trust baseline for MCP in this namespace. Empty subjects + wildcard
+# MCPServer target: every identity is denied unless a later ALLOW grants tools.
+apiVersion: policy.kagent-enterprise.solo.io/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: dealeriq-deny-all-mcp
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  action: DENY
+  from:
+    subjects: []
+  targetRef:
+    kind: MCPServer
+    name: "*"

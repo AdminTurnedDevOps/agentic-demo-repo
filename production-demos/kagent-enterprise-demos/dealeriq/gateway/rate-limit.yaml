@@ -1,0 +1,19 @@
+# Applied in Demo 4, not at make deploy / make demo-reset.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: dealeriq-llm-rate-limit
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: dealeriq-llm-route
+  traffic:
+    rateLimit:
+      local:
+        - requests: 40
+          unit: Minutes
+          burst: 10

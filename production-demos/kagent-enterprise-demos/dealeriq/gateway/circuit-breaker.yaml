@@ -1,0 +1,23 @@
+# Demo 4 circuit breaker: evict the failing mock provider after 3 consecutive 5xx.
+# Traffic then fails over to the healthy mock (HTTP 200).
+# Not applied at make deploy. Applied in Demo 4. Removed by make demo-reset.
+# Claude on /anthropic is unchanged.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: dealeriq-mock-llm-circuit-breaker
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/part-of: dealeriq
+spec:
+  targetRefs:
+    - group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayBackend
+      name: dealeriq-mock-llm
+  backend:
+    health:
+      unhealthyCondition: "response.code >= 500"
+      eviction:
+        consecutiveFailures: 3
+        duration: 5m
+        restoreHealth: 100

@@ -1,0 +1,43 @@
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: dealer-assistant-byo
+  namespace: dealeriq
+  labels:
+    app.kubernetes.io/name: dealer-assistant-byo
+    app.kubernetes.io/part-of: dealeriq
+    kagent.solo.io/waypoint: "true"
+spec:
+  type: BYO
+  description: DealerIQ lead-generation assistant (BYO LangGraph)
+  byo:
+    deployment:
+      image: northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/dealeriq-byo:0.1.1
+      imagePullPolicy: Always
+      imagePullSecrets:
+        - name: regcred
+      env:
+        - name: HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8080"
+        - name: MODEL_NAME
+          value: claude-sonnet-4-6
+        - name: OPENAI_BASE_URL
+          value: http://dealeriq-llm.dealeriq.svc.cluster.local:8082/anthropic
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kagent-anthropic
+              key: ANTHROPIC_API_KEY
+        - name: MCP_URL
+          value: http://dealer-leads-mcp.dealeriq.svc.cluster.local:3000/mcp
+        - name: OTEL_TRACING_ENABLED
+          value: "true"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 384Mi
+        limits:
+          cpu: "2"
+          memory: 1Gi
