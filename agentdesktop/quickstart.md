@@ -163,7 +163,6 @@ The daemon stores user-mode state under `~/.local/state/agentdesktop` and listen
 ### 2.4 Verify from another terminal
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
 agentdesktop status
 # ok
 
