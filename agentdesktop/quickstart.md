@@ -71,7 +71,17 @@ Start Dex and agentgateway, then write the YAML that points at them, then run th
 
 ### 2.1 Dex and agentgateway
 
-Requires Docker Desktop and `ANTHROPIC_API_KEY`. Standalone ports: Dex `127.0.0.1:5557`, agentgateway `127.0.0.1:4001`. These containers are not agentdesktop; they come from `examples/standalone/compose.yaml`.
+This section spins up:
+1. Dex (OIDC provider)
+2. Agentgateway OSS
+
+and does so locally so you can run on `localhost`
+
+Standalone ports:
+- Dex `127.0.0.1:5557`
+- agentgateway `127.0.0.1:4001`.
+
+These containers are not agentdesktop; they come from `examples/standalone/compose.yaml`.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
