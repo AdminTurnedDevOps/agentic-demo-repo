@@ -206,8 +206,19 @@ Managed ports: Dex `5556`, fleet API `8443`, controller UI `8080`, agentgateway 
 
 ### 4.1 Dev keys
 
+On macOS, Apple’s `/usr/bin/openssl` (LibreSSL) writes EC keys with explicit
+curve parameters. `agentdesktop-controller` cannot parse those (`Could not parse key pair`).
+Use Homebrew OpenSSL 3 when generating keys:
+
+```bash
+brew install openssl@3
+export PATH="$(brew --prefix openssl@3)/bin:$PATH"
+openssl version   # expect OpenSSL 3.x, not LibreSSL
+```
+
 ```bash
 cd ~/gitrepos/agentdesktop
+rm -rf /tmp/agentdesktop-keys
 ./examples/claude/create-keys.sh
 ```
 
@@ -391,6 +402,9 @@ Enable Docker Desktop host networking. Confirm `ANTHROPIC_API_KEY` is set in the
 
 **No controller UI at :8080**  
 That UI is served by `agentdesktop-controller`, not by the device daemon. Standalone mode has no fleet UI.
+
+**`initialize device certificate issuer` / `Could not parse key pair`**  
+The device CA key was generated with macOS LibreSSL (explicit-parameter P-256). Put Homebrew OpenSSL 3 first on `PATH`, `rm -rf /tmp/agentdesktop-keys`, and rerun `./examples/claude/create-keys.sh`. Confirm `openssl version` prints `OpenSSL 3`, not `LibreSSL`.
 
 **API key errors from Claude Code**  
 The key belongs on agentgateway, not in agentdesktop config. Standalone uses OIDC to the gateway; managed uses a controller-issued JWT. The upstream Anthropic key is still on the gateway.
