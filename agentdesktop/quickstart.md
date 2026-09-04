@@ -1,9 +1,9 @@
 # agentdesktop quickstart
 
-Hands-on install and configuration. Agents always run on the laptop. agentdesktop
-does not need an LLM API key to discover or manage local tools. An Anthropic key
-is only required if you stand up the example **agentgateway** so Claude can send
-model traffic through it.
+Hands-on install and configuration for **Claude Code**. Agents always run on the
+laptop. agentdesktop does not need an LLM API key to discover or manage local
+tools. An Anthropic key is only required if you stand up the example
+**agentgateway** so Claude Code can send model traffic through it.
 
 Two modes:
 
@@ -27,7 +27,7 @@ All commands below assume that repository root unless noted.
 agentdesktop does **not** require Docker. The daemon and controller are local binaries. Docker shows up in this lab only because the repo packages two *other* services as containers:
 
 - **Dex** — stand-in OIDC identity provider (enrollment / gateway login)
-- **agentgateway** — stand-in LLM gateway so Claude can send traffic through a proxy
+- **agentgateway** — stand-in LLM gateway so Claude Code can send traffic through a proxy
 
 Those two are defined in `examples/*/compose.yaml`. `docker compose` is just how this repo starts them. You could run the same images with `docker run`, or point agentdesktop at a real IdP and gateway and skip Docker entirely.
 
@@ -46,7 +46,7 @@ On Docker Desktop, the managed agentgateway example uses host networking: **Sett
 
 ## 1. Get the binaries
 
-**Device binary (daemon, CLI, desktop app)** from [GitHub Releases](https://github.com/agentdesktop-dev/agentdesktop/releases). Put `agentdesktop` on your `PATH`.
+**Device binary (daemon, CLI, tray app)** from [GitHub Releases](https://github.com/agentdesktop-dev/agentdesktop/releases). Put `agentdesktop` on your `PATH`.
 
 The **controller** is not in that download. For the local managed lab, build both from source:
 
@@ -71,26 +71,14 @@ agentdesktop --help
 
 Standalone reads a local YAML. It does not enroll a device and does not talk to a controller.
 
-Discovery and managed settings work with **no** API key and **no** Docker. The Dex + agentgateway containers are only for the “Claude through a local gateway” path.
+Discovery and managed settings work with **no** API key and **no** Docker. The Dex + agentgateway containers are only for the “Claude Code through a local gateway” path.
 
-### 2.1 Config for `--user` mode
+### 2.1 Claude Code config (`--user`)
 
-The checked-in file enables Claude Desktop, which cannot be configured in `--user` mode. Copy it and drop that block:
+Write a Claude Code–only config. Do not copy the repo’s `examples/standalone/config.yaml` as-is.
 
 ```bash
-cp examples/standalone/config.yaml /tmp/agentdesktop-standalone.yaml
-```
-
-In `/tmp/agentdesktop-standalone.yaml`, comment out or remove:
-
-```yaml
-  claudeDesktop:
-    useLlmGateway: true
-```
-
-Leave:
-
-```yaml
+cat > /tmp/agentdesktop-standalone.yaml <<'EOF'
 llmGateway:
   url: http://127.0.0.1:4001
   authentication:
@@ -104,15 +92,16 @@ programs:
   claudeCode:
     useLlmGateway: true
     companyAnnouncements: ["Using the local Agentgateway through Agentdesktop"]
+EOF
 ```
 
-`programs.claudeCode` means Claude Code is **managed** if it is installed. It does not block other tools.
+`programs.claudeCode` means Claude Code is **managed** if it is installed. It does not block other tools. In `--user` mode the daemon merges settings into `~/.claude/settings.json`.
 
 ### 2.2 Scan-only (no API key)
 
 If you only want inventory, skip section 2.3. Use a config with no `llmGateway` (even `{}`) and go to 2.4.
 
-### 2.3 Example Dex + gateway (needs Docker + API key)
+### 2.3 Example Dex + gateway (optional; needs Docker + API key)
 
 This starts the two stand-in containers from `examples/standalone/compose.yaml`. It is not part of agentdesktop.
 
@@ -174,9 +163,9 @@ agentdesktop discover
 # vscode          1.131.0 /opt/homebrew/bin/code
 ```
 
-`agentdesktop` itself is not calling Anthropic. The key, if you set one, is used by the **agentgateway** container when Claude sends a request.
+`agentdesktop` itself is not calling Anthropic. The key, if you set one, is used by the **agentgateway** container when Claude Code sends a request.
 
-### 2.6 Desktop UI
+### 2.6 Tray UI
 
 The daemon has no web UI. The tray app is a separate process:
 
@@ -238,7 +227,7 @@ Do not reuse `/tmp/agentdesktop-standalone.yaml` for the next section.
 
 The controller is the control plane: enrollment, device certs, pushed daemon YAML, inventory, telemetry, short-lived gateway JWTs. The daemon on the laptop is the hands (writes tool settings, reports inventory).
 
-This lab runs everything on one machine using `examples/claude`. In production the controller lives on Kubernetes and the daemons stay on devices.
+This lab runs everything on one machine using the `examples/claude` Compose/IdP files, with a Claude Code–only policy you write yourself. In production the controller lives on Kubernetes and the daemons stay on devices.
 
 Managed ports: Dex `5556`, fleet API `8443`, controller UI `8080`, agentgateway `4000`.
 
@@ -253,7 +242,7 @@ Writes `/tmp/agentdesktop-keys/` (controller TLS, device CA, gateway JWT key). T
 
 ### 4.2 Example Dex (optional stand-in IdP)
 
-Same idea as standalone: Dex is not agentdesktop. The checked-in controller config points `oidc.issuer` at this container. Skip this if you already have an IdP and have edited `examples/claude/controller.yaml`.
+Same idea as standalone: Dex is not agentdesktop. The controller config below points `oidc.issuer` at this container. Skip this if you already have an IdP and change the issuer URL.
 
 ```bash
 docker compose -f examples/claude/compose.yaml up -d dex
@@ -264,14 +253,54 @@ curl --fail --silent \
   > /dev/null && echo "Dex is ready"
 ```
 
-### 4.3 Controller
+### 4.3 Controller (Claude Code policy)
 
-New terminal, leave it running:
+Write the YAML the controller will push, then a controller config that watches it. Do not use the repo’s `examples/claude/claude-code.yaml` as-is.
+
+```bash
+cat > /tmp/agentdesktop-claude-code.yaml <<'EOF'
+llmGateway:
+  url: http://localhost:4000
+  authentication:
+    type: controllerJwt
+    audience: "agentgateway"
+    allowedClientIds: [claude-code]
+
+telemetry:
+  events:
+  - session.new
+  - tool.use
+
+programs:
+  claudeCode:
+    companyAnnouncements: ["Managed by Agentdesktop"]
+EOF
+
+cat > /tmp/agentdesktop-controller.yaml <<'EOF'
+fleetListen: 0.0.0.0:8443
+allowInsecureDev: true
+databaseUrl: sqlite:///tmp/agentdesktop-controller.db?mode=rwc
+tls: /tmp/agentdesktop-keys
+
+oidc:
+  issuer: http://127.0.0.1:5556/dex
+  clientId: local-public
+
+daemonConfig:
+  path: /tmp/agentdesktop-claude-code.yaml
+
+gatewayJwt:
+  privateKey: /tmp/agentdesktop-keys/gateway-jwt-key.pem
+EOF
+```
+
+`allowedClientIds` is who may mint a **gateway JWT**, not an allow list of which agents may run.
+
+New terminal, leave the controller running:
 
 ```bash
 export PATH="$HOME/.cargo/bin:$PATH"
-cd ~/gitrepos/agentdesktop
-agentdesktop-controller --config examples/claude/controller.yaml
+agentdesktop-controller --config /tmp/agentdesktop-controller.yaml
 ```
 
 You should see the fleet listener on `0.0.0.0:8443` and admin UI on `127.0.0.1:8080`.
@@ -288,30 +317,6 @@ Expected:
 
 Open [http://127.0.0.1:8080](http://127.0.0.1:8080). That is the **controller** UI (fleet), not the laptop tray app.
 
-The YAML the controller pushes is `examples/claude/claude-code.yaml`:
-
-```yaml
-llmGateway:
-  url: http://localhost:4000
-  authentication:
-    type: controllerJwt
-    audience: "agentgateway"
-    allowedClientIds: [claude-code, claude-desktop, codex, opencode]
-
-telemetry:
-  events:
-  - session.new
-  - tool.use
-
-programs:
-  claudeCode:
-    companyAnnouncements: ["Managed by Agentdesktop"]
-  claudeDesktop:
-    isLocalDevMcpEnabled: true
-```
-
-`allowedClientIds` is who may mint a **gateway JWT**, not an allow list of which agents may run.
-
 The device-side file is only how to reach the controller (`examples/claude/agentdesktop.yaml`):
 
 ```yaml
@@ -323,7 +328,7 @@ controller:
 
 ### 4.4 Example agentgateway (optional)
 
-Not part of agentdesktop. Host networking is required so this container can fetch the controller’s JWKS from `127.0.0.1:8080`. Skip if you already have a gateway and have edited `examples/claude/claude-code.yaml` (`llmGateway.url`).
+Not part of agentdesktop. Host networking is required so this container can fetch the controller’s JWKS from `127.0.0.1:8080`. Skip if you already have a gateway and have edited `/tmp/agentdesktop-claude-code.yaml` (`llmGateway.url`).
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -335,14 +340,13 @@ curl --fail --head --silent http://127.0.0.1:4000/ \
   > /dev/null && echo "agentgateway is ready"
 ```
 
-### 4.5 Enroll the device daemon
-
-This example includes Claude Desktop managed settings, so it runs as root (system daemon), not `--user`.
+### 4.5 Enroll the device daemon (`--user`)
 
 New terminal, leave it running:
 
 ```bash
-sudo "$(command -v agentdesktop)" daemon \
+export PATH="$HOME/.cargo/bin:$PATH"
+agentdesktop daemon --user \
   --config ~/gitrepos/agentdesktop/examples/claude/agentdesktop.yaml
 ```
 
@@ -351,7 +355,7 @@ Sign in:
 - Email: `admin@example.com`
 - Password: `password`
 
-The daemon creates a device key that never leaves the machine, submits a CSR after OIDC, and stores identity under `/var/lib/agentdesktop` (macOS/Windows secrets go in the OS credential store). Socket: `/var/run/agentdesktop/agentdesktop.sock`.
+The daemon creates a device key that never leaves the machine, submits a CSR after OIDC, and stores identity under `~/.local/state/agentdesktop`. Socket: `$XDG_RUNTIME_DIR/agentdesktop.sock` or `~/.local/state/agentdesktop/agentdesktop.sock`. It merges Claude Code settings into `~/.claude/settings.json`.
 
 ### 4.6 Verify
 
@@ -370,7 +374,7 @@ Laptop tray UI (talks to the local daemon, not the controller HTTP port):
 agentdesktop
 ```
 
-Run `claude`. You should see `Managed by Agentdesktop`. Claude gets a short-lived gateway JWT from the daemon; agentgateway validates it, then uses **its** Anthropic key upstream.
+Run `claude`. You should see `Managed by Agentdesktop`. Claude Code gets a short-lived gateway JWT from the daemon; agentgateway validates it, then uses **its** Anthropic key upstream.
 
 ## 5. Tear down the local managed lab
 
@@ -379,9 +383,10 @@ Ctrl-C the foreground daemon and controller, then:
 ```bash
 cd ~/gitrepos/agentdesktop
 docker compose -f examples/claude/compose.yaml down
+rm -f /tmp/agentdesktop-claude-code.yaml /tmp/agentdesktop-controller.yaml
 ```
 
-Compose down does **not** delete `/tmp/agentdesktop-keys`, `/tmp/agentdesktop-controller.db`, or `/var/lib/agentdesktop`.
+Compose down does **not** delete `/tmp/agentdesktop-keys`, `/tmp/agentdesktop-controller.db`, or `~/.local/state/agentdesktop`.
 
 ## 6. Production shape (not this lab)
 
@@ -398,13 +403,10 @@ Do not point a production daemon at `https://127.0.0.1:8443` or use `allowInsecu
 ## Troubleshooting
 
 **`agentdesktop status` cannot connect**  
-The daemon is not running, or the CLI is hitting the wrong socket. User-mode uses a home/runtime socket; the managed example uses `/var/run/agentdesktop/agentdesktop.sock`. The desktop app prefers the system socket if it exists. Override with `--socket` or `AGENTDESKTOP_SOCKET`.
+The daemon is not running, or the CLI is hitting the wrong socket. This lab’s `--user` daemon uses `$XDG_RUNTIME_DIR/agentdesktop.sock` or `~/.local/state/agentdesktop/agentdesktop.sock`. Override with `--socket` or `AGENTDESKTOP_SOCKET`.
 
 **Two daemons**  
-Stop the `--user` standalone process before `sudo agentdesktop daemon`. Check `pgrep -lf agentdesktop`.
-
-**`--user` + `programs.claudeDesktop`**  
-Claude Desktop does not read inference settings from user prefs. Remove `claudeDesktop` or run the system daemon as root.
+Stop the standalone `--user` process before starting the managed one. Check `pgrep -lf agentdesktop`.
 
 **`--once` / `--dry-run` with a controller**  
 Those flags only apply local YAML. Controller sync, telemetry, and authenticated gateways need a long-running daemon.
@@ -418,6 +420,6 @@ Enable Docker Desktop host networking. Confirm `ANTHROPIC_API_KEY` is set in the
 **No controller UI at :8080**  
 That UI is served by `agentdesktop-controller`, not by the device daemon. Standalone mode has no fleet UI.
 
-**API key errors from Claude**  
+**API key errors from Claude Code**  
 The key belongs on agentgateway, not in agentdesktop config. Standalone uses OIDC to the gateway; managed uses a controller-issued JWT. The upstream Anthropic key is still on the gateway.
 )
