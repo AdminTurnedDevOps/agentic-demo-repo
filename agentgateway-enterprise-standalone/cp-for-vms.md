@@ -163,9 +163,9 @@ You should see the change without restarting that process.
 
 Typical shapes:
 
-• Cloud VM — second instance stopped or scaled to zero; LB/ASG/MIG health check fails on the hot one; the provider boots the spare and points the VIP at it.
-• Always-on spare — cold process is running but the LB has only one backend (or keepalived/VRRP holds the VIP). Failover is “add the second backend / move the VIP,” not a wake-up.
-• Same host — systemd/watchdog restarts the binary. That’s HA of the process, not of the VM.
+- Cloud VM: second instance stopped or scaled to zero; LB/ASG/MIG health check fails on the hot one; the provider boots the spare and points the VIP at it.
+- Always-on spare: cold process is running but the LB has only one backend (or keepalived/VRRP holds the VIP). Failover is “add the second backend / move the VIP,” not a wake-up.
+- Same host: systemd/watchdog restarts the binary. That’s HA of the process, not of the VM.
 
 What you still want with the cold side so its not a blank slate:
 
