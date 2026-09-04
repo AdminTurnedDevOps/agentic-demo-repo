@@ -366,7 +366,6 @@ The daemon creates a device key that never leaves the machine, submits a CSR aft
 ### 4.6 Verify
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
 agentdesktop status
 agentdesktop config
 agentdesktop discover
