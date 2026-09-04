@@ -49,3 +49,5 @@ agentgateway -f ~/.config/agentgateway/config.yaml
 ## High Availability
 
 Because this section is for HA, doing this on your laptop won't be production-ready
+
+![](images/ha.png)
