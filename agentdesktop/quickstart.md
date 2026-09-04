@@ -208,7 +208,7 @@ rm -f /tmp/agentdesktop-standalone.yaml
 
 Do not reuse `/tmp/agentdesktop-standalone.yaml` for the next section.
 
-## 4. Controller-managed (local fleet)
+## 4. Controller/Control Plane
 
 This section will build off of what you did in section 2, except instead of just having a laptop/desktop get enrolled, you'll have a Control Plane that you can see to see all managed devices and build a configuration for said devices. This Control Plane will give you a UI to log into so you can see whats enrolled.
 
