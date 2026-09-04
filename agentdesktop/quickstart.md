@@ -42,7 +42,7 @@ Those two are defined in `examples/*/compose.yaml`. `docker compose` is just how
 
 On Docker Desktop, the managed agentgateway example uses host networking: **Settings > Resources > Network**. Linux already supports host networking.
 
-## 1. Get the binaries
+- Get the binaries
 
 **Device binary (daemon, CLI, tray app)** from [GitHub Releases](https://github.com/agentdesktop-dev/agentdesktop/releases). Put `agentdesktop` on your `PATH`.
 
@@ -163,19 +163,6 @@ If the window disappears, it is hidden: menu bar / tray → **Open Agent Desktop
 
 - **Status → Runtime**: standalone mode, daemon up
 - **Tools**: discovered harnesses, MCP names, skills, local models
-
-If `agentdesktop` with no args fails, you may have a CLI-only release binary. Use a source-built `make install` binary, or from `frontend/`:
-
-```bash
-cd ~/gitrepos/agentdesktop/frontend
-pnpm install
-AGENTDESKTOP_SOCKET="${XDG_RUNTIME_DIR:-$HOME/.local/state/agentdesktop}/agentdesktop.sock" \
-  pnpm dev:desktop
-```
-
-Point `AGENTDESKTOP_SOCKET` at the socket the daemon is using.
-
-Run `claude`. You should see the company announcement from the YAML, and traffic should use `ANTHROPIC_BASE_URL=http://127.0.0.1:4001/`.
 
 ## 3. Stop standalone before managed
 
