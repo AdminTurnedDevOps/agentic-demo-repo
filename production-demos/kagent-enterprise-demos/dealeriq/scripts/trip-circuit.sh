@@ -4,6 +4,12 @@ set -euo pipefail
 
 NS=dealeriq
 COUNT="${1:-8}"
+POD=dealeriq-circuit
+
+cleanup() {
+  kubectl delete pod "${POD}" -n "${NS}" --ignore-not-found --wait=false >/dev/null
+}
+trap cleanup EXIT
 
 for mock in dealeriq-mock-llm dealeriq-mock-llm-ok; do
   available="$(kubectl get deploy "${mock}" -n "${NS}" -o jsonpath='{.status.availableReplicas}' 2>/dev/null || true)"
@@ -26,7 +32,8 @@ svc="$(kubectl get svc dealeriq-llm -n "${NS}" -o jsonpath='{.spec.clusterIP}')"
 echo "Driving ${COUNT} mock completions at ${svc}:8082/mock-llm"
 echo "Expect 500 x3 then 200 after resetting gateway health state as documented in RUNBOOK.md."
 
-kubectl run dealeriq-circuit -n "${NS}" --rm -i --restart=Never --image=curlimages/curl:8.11.1 -- \
+kubectl delete pod "${POD}" -n "${NS}" --ignore-not-found --wait=true >/dev/null
+kubectl run "${POD}" -n "${NS}" --restart=Never --image=curlimages/curl:8.11.1 -- \
   sh -c "
     i=1
     seen_500=0
@@ -43,8 +50,19 @@ kubectl run dealeriq-circuit -n "${NS}" --rm -i --restart=Never --image=curlimag
       esac
       i=\$((i+1))
     done
-    if [ \$seen_500 -ne 1 ] || [ \$seen_200 -ne 1 ]; then
+    if [ \$seen_500 -eq 1 ] && [ \$seen_200 -eq 1 ]; then
+      echo 'DEALERIQ_CIRCUIT_RESULT=PASS'
+    else
       echo 'Expected both failing (500) and healthy (200) providers. Reset gateway health state and retry.' >&2
-      exit 1
+      echo 'DEALERIQ_CIRCUIT_RESULT=FAIL'
     fi
+    exit 0
   "
+
+kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/"${POD}" -n "${NS}" --timeout=120s >/dev/null
+output="$(kubectl logs "${POD}" -n "${NS}")"
+printf '%s\n' "${output}"
+[[ "${output}" == *"DEALERIQ_CIRCUIT_RESULT=PASS"* ]] || {
+  echo "Circuit-breaker transition was not observed" >&2
+  exit 1
+}

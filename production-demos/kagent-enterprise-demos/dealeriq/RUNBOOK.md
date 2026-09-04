@@ -61,8 +61,6 @@ hello
 
 Confirm a reply. Log out. Log in as `writer`. Open **dealer-assistant**. Send the same prompt. Confirm a reply.
 
->> SWITCH TO: agentgateway UI cost dashboard (warm traces only; do not start load yet)
-
 ---
 
 ## Demo 1: Same assistant, policy decides the tools (Governance: BYO vs. Declarative Agents)
@@ -251,7 +249,7 @@ Which truck did we match, and what was their budget?
 
 `send_customer_offer` is approval-flagged on the Agent (`requireApproval`). AccessPolicy must also allow the tool, or the assistant cannot call it.
 
-The freeze is real. Who may click Approve is not. kagent shows Approve / Reject to whoever has that chat open. Sessions are the **CHATS** list in the left sidebar, scoped to the current login. There is no Sessions tab and no manager-only approver.
+kagent shows Approve / Reject to whoever has that chat open. Sessions are the **CHATS** list in the left sidebar, scoped to the current login. There is no Sessions tab and no manager-only approver.
 
 >> SWITCH TO: kagent UI > `reader` > dealer-assistant > new chat
 
@@ -306,11 +304,11 @@ kubectl rollout status deploy/dealeriq-llm -n dealeriq --timeout=180s
 ./scripts/trip-circuit.sh
 ```
 
-**What you'll see:** Requests 1-3 return HTTP 500 (`mock llm injected 500`). Later requests return HTTP 200 (`healthy mock: failover after circuit breaker eviction`). That is the circuit breaker.
+**What you'll see:**:
 
-For another clean `500 x3` demonstration, repeat the gateway restart and rollout-status commands first. Agentgateway retains the failing provider's consecutive-failure count after an eviction expires and increases the duration of repeated evictions, so waiting five minutes alone does not reset the sequence.
-
-The proof is the **endpoint** on the gateway log, not the script alone.
+- Requests 1-3: failing provider returns 500.
+- Request 4 onward: circuit breaker evicts it and routes to the healthy provider.
+- DEALERIQ_CIRCUIT_RESULT=PASS: transition validated successfully.
 
 ```bash
 kubectl logs -n dealeriq deploy/dealeriq-llm --since=5m | grep path=/mock-llm

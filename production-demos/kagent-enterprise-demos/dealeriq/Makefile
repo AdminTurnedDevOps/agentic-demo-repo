@@ -33,6 +33,8 @@ deploy:
 	kubectl apply -f $(ROOT)gateway/mock-llm.yaml
 	kubectl apply --dry-run=client -f $(ROOT)gateway/llm-route/gateway.yaml >/dev/null
 	kubectl apply -f $(ROOT)gateway/llm-route/gateway.yaml
+	kubectl apply --dry-run=client -f $(ROOT)gateway/tracing.yaml >/dev/null
+	kubectl apply -f $(ROOT)gateway/tracing.yaml
 	kubectl apply --dry-run=client -f $(ROOT)agents/declarative >/dev/null
 	kubectl apply -f $(ROOT)agents/declarative
 	kubectl apply --dry-run=client -f $(ROOT)agents/byo/agent.yaml >/dev/null
@@ -44,6 +46,7 @@ deploy:
 	@echo "Waiting for MCPServer and Agents..."
 	kubectl wait --for=condition=Accepted enterpriseagentgatewaybackend/dealeriq-claude -n $(NS) --timeout=60s
 	kubectl wait --for=condition=Accepted enterpriseagentgatewaybackend/dealeriq-mock-llm -n $(NS) --timeout=60s
+	kubectl wait --for=jsonpath='{.status.ancestors[0].conditions[?(@.type=="Attached")].status}'=True enterpriseagentgatewaypolicy/dealeriq-llm-tracing -n $(NS) --timeout=60s
 	kubectl rollout status deploy/dealeriq-mock-llm -n $(NS) --timeout=180s
 	kubectl rollout status deploy/dealeriq-mock-llm-ok -n $(NS) --timeout=180s
 	kubectl wait --for=condition=Ready mcpserver/dealer-leads-mcp -n $(NS) --timeout=180s

@@ -44,6 +44,10 @@ for be in dealeriq-claude dealeriq-mock-llm; do
   ok "EnterpriseAgentgatewayBackend ${be} Accepted"
 done
 
+tracing="$(kubectl get enterpriseagentgatewaypolicy dealeriq-llm-tracing -n "${NS}" -o jsonpath='{.status.ancestors[0].conditions[?(@.type=="Attached")].status}')"
+[[ "${tracing}" == "True" ]] || fail "dealeriq-llm tracing policy not Attached (${tracing})"
+ok "dealeriq-llm tracing policy Attached"
+
 for mock in dealeriq-mock-llm dealeriq-mock-llm-ok; do
   mock_ready="$(kubectl get deploy "${mock}" -n "${NS}" -o jsonpath='{.status.readyReplicas}')"
   [[ "${mock_ready}" == "1" ]] || fail "${mock} not Ready (readyReplicas=${mock_ready})"
