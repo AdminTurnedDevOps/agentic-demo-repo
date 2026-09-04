@@ -26,12 +26,18 @@ export PATH="$HOME/.agentgateway/bin:$PATH"
 agentgateway --version
 ```
 
+3. Run agentgateway
+
+```
+agentgateway
+```
+
 ### Configuration
 
 1. Look in `~/.config/agentgateway`. You'll see that agentgateway, when you run it, creates a config file. You can use that for testing purposes to run agentgateway.
 
 ```
-agentgateway -f ~/.config/agentgateway/config.yaml`
+agentgateway -f ~/.config/agentgateway/config.yaml
 ```
 
 ## High Availability
