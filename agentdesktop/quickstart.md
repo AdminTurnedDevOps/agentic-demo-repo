@@ -219,6 +219,8 @@ This lab runs everything on one machine using the `examples/claude` Compose/IdP 
 
 Managed ports: Dex `5556`, fleet API `8443`, controller UI `8080`, agentgateway `4000`.
 
+Required for this lab: `/tmp/agentdesktop-controller.yaml`, which sets `oidc.issuer` to `http://127.0.0.1:5556/dex`.
+
 ### 4.1 Dev keys
 
 On macOS, Apple’s `/usr/bin/openssl` (LibreSSL) writes EC keys with explicit
@@ -240,8 +242,6 @@ rm -rf /tmp/agentdesktop-keys
 Writes `/tmp/agentdesktop-keys/` (controller TLS, device CA, gateway JWT key). The script refuses to overwrite; `rm -rf /tmp/agentdesktop-keys` to regenerate.
 
 ### 4.2 Dex
-
-Required for this lab: `/tmp/agentdesktop-controller.yaml` sets `oidc.issuer` to `http://127.0.0.1:5556/dex`. Dex is not agentdesktop; it is the stand-in IdP from `examples/claude/compose.yaml`.
 
 ```bash
 docker compose -f examples/claude/compose.yaml up -d dex
