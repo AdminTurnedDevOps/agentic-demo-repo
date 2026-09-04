@@ -380,7 +380,11 @@ Laptop tray UI (talks to the local daemon, not the controller HTTP port):
 agentdesktop
 ```
 
-Run `claude`. You should see `Managed by Agentdesktop`. Claude Code gets a short-lived gateway JWT from the daemon; agentgateway validates it, then uses **its** Anthropic key upstream.
+### 4.7 Claude Test
+
+Run `claude` in your terminal. You should see `Managed by Agentdesktop`. Claude Code gets a short-lived gateway JWT from the daemon; agentgateway validates it, then uses **its** Anthropic key upstream.
+
+![](images/claude.png)
 
 ## 5. Tear down the local managed lab
 
