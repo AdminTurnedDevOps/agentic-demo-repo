@@ -326,7 +326,9 @@ controller:
 
 ### 4.4 agentgateway
 
-Required for this lab: `/tmp/agentdesktop-claude-code.yaml` sets `llmGateway.url` to `http://localhost:4000`. agentgateway is not agentdesktop. Host networking is required so this container can fetch the controller’s JWKS from `127.0.0.1:8080`.
+Required for this lab: `/tmp/agentdesktop-claude-code.yaml` sets `llmGateway.url` to `http://localhost:4000`.
+
+This gateway is for the device that you're enrolling. When you enroll a device, it goes through a gateway so the enrollment is done in a safe and secure fashion.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
