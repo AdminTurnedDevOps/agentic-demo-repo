@@ -71,39 +71,25 @@ agentdesktop --help
 
 Standalone reads a local YAML. It does not enroll a device and does not talk to a controller.
 
-Discovery and managed settings work with **no** API key and **no** Docker. The Dex + agentgateway containers are only for the “Claude Code through a local gateway” path.
+Discovery and managed settings work with **no** API key and **no** Docker. Start there. Dex and agentgateway come later, and only if you want Claude Code to send traffic through a local gateway.
 
-### 2.1 Claude Code config (`--user`)
-
-Write a Claude Code–only config. Do not copy the repo’s `examples/standalone/config.yaml` as-is.
+### 2.1 Scan-only (no Docker, no API key)
 
 ```bash
 cat > /tmp/agentdesktop-standalone.yaml <<'EOF'
-llmGateway:
-  url: http://127.0.0.1:4001
-  authentication:
-    type: oidc
-    issuer: http://127.0.0.1:5557/dex
-    clientId: agentdesktop-local
-    scopes: [openid, email, offline_access]
-    allowInsecure: true
-
 programs:
   claudeCode:
-    useLlmGateway: true
-    companyAnnouncements: ["Using the local Agentgateway through Agentdesktop"]
+    companyAnnouncements: ["Managed by Agentdesktop"]
 EOF
 ```
 
 `programs.claudeCode` means Claude Code is **managed** if it is installed. It does not block other tools. In `--user` mode the daemon merges settings into `~/.claude/settings.json`.
 
-### 2.2 Scan-only (no API key)
+Skip to 2.4 if you only want inventory. Continue with 2.2–2.3 to add a local IdP and gateway.
 
-If you only want inventory, skip section 2.3. Use a config with no `llmGateway` (even `{}`) and go to 2.4.
+### 2.2 Example Dex + gateway (optional; needs Docker + API key)
 
-### 2.3 Example Dex + gateway (optional; needs Docker + API key)
-
-This starts the two stand-in containers from `examples/standalone/compose.yaml`. It is not part of agentdesktop.
+This starts the two stand-in containers from `examples/standalone/compose.yaml`. It is not part of agentdesktop. Standalone ports: Dex `5557`, agentgateway `4001`.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -124,7 +110,27 @@ curl --fail --head --silent --show-error \
   > /dev/null && echo "agentgateway is ready"
 ```
 
-Standalone ports: Dex `5557`, agentgateway `4001`.
+### 2.3 Claude Code config that uses Dex and the gateway
+
+Only after Dex and agentgateway are up. This YAML’s `issuer` and `url` point at the containers from 2.2.
+
+```bash
+cat > /tmp/agentdesktop-standalone.yaml <<'EOF'
+llmGateway:
+  url: http://127.0.0.1:4001
+  authentication:
+    type: oidc
+    issuer: http://127.0.0.1:5557/dex
+    clientId: agentdesktop-local
+    scopes: [openid, email, offline_access]
+    allowInsecure: true
+
+programs:
+  claudeCode:
+    useLlmGateway: true
+    companyAnnouncements: ["Using the local Agentgateway through Agentdesktop"]
+EOF
+```
 
 ### 2.4 Preview, then run the daemon
 
@@ -143,10 +149,12 @@ agentdesktop daemon \
   --user
 ```
 
-Leave it in the foreground. The browser opens for Dex sign-in:
+Leave it in the foreground. If the config includes `llmGateway.authentication.type: oidc`, the browser opens for Dex sign-in:
 
 - Email: `admin@example.com`
 - Password: `password`
+
+Scan-only configs do not open a browser.
 
 The daemon stores user-mode state under `~/.local/state/agentdesktop` and listens on a user socket (`$XDG_RUNTIME_DIR/agentdesktop.sock` or `~/.local/state/agentdesktop/agentdesktop.sock`).
 
@@ -189,7 +197,7 @@ AGENTDESKTOP_SOCKET="${XDG_RUNTIME_DIR:-$HOME/.local/state/agentdesktop}/agentde
 
 Point `AGENTDESKTOP_SOCKET` at the socket the daemon is using.
 
-Run `claude`. You should see the company announcement from the YAML, and traffic should use `ANTHROPIC_BASE_URL=http://127.0.0.1:4001/`.
+If you completed 2.2–2.3, run `claude`. You should see the company announcement from the YAML, and traffic should use `ANTHROPIC_BASE_URL=http://127.0.0.1:4001/`.
 
 ## 3. Stop standalone before managed
 
