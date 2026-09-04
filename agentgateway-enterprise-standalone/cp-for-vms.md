@@ -169,6 +169,6 @@ Typical shapes:
 
 What you still want with the cold side so its not a blank slate:
 
-• Shared Postgres (config overlay, logs, budgets, license attestation)
-• Same baseline config.yaml and session key
-• Same license
+- Shared Postgres (config overlay, logs, budgets, license attestation)
+- Same baseline config.yaml and session key
+- Same license
