@@ -1,6 +1,6 @@
 This guide will show how to install an agw ee standalone control plane on a VM or laptop/desktop
 
-## One VM
+## One VM/laptop
 
 ### Install
 
@@ -32,6 +32,12 @@ agentgateway --version
 agentgateway
 ```
 
+By default a config file will be generated for you. For example, the below:
+
+```
+loaded config from File("/Users/michaellevan/.config/agentgateway/config.yaml")
+```
+
 ### Configuration
 
 1. Look in `~/.config/agentgateway`. You'll see that agentgateway, when you run it, creates a config file. You can use that for testing purposes to run agentgateway.
@@ -41,3 +47,5 @@ agentgateway -f ~/.config/agentgateway/config.yaml
 ```
 
 ## High Availability
+
+Because this section is for HA, doing this on your laptop won't be production-ready
