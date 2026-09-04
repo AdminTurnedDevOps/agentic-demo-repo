@@ -71,9 +71,14 @@ agentdesktop --help
 
 Standalone reads a local YAML. It does not enroll a device and does not talk to a controller.
 
-Discovery and managed settings work with **no** API key and **no** Docker. Start there. Dex and agentgateway come later, and only if you want Claude Code to send traffic through a local gateway.
+Pick **one** config path, then run the daemon in 2.3.
 
-### 2.1 Scan-only (no Docker, no API key)
+- **2.1 Scan-only** — no Docker, no API key, no Dex.
+- **2.2 Claude Code through a local gateway** — Dex and agentgateway must be running before you write the OIDC YAML. That config will fail if they are not up.
+
+`programs.claudeCode` means Claude Code is **managed** if it is installed. It does not block other tools. In `--user` mode the daemon merges settings into `~/.claude/settings.json`.
+
+### 2.1 Scan-only
 
 ```bash
 cat > /tmp/agentdesktop-standalone.yaml <<'EOF'
@@ -83,13 +88,13 @@ programs:
 EOF
 ```
 
-`programs.claudeCode` means Claude Code is **managed** if it is installed. It does not block other tools. In `--user` mode the daemon merges settings into `~/.claude/settings.json`.
+Go to 2.3.
 
-Skip to 2.4 if you only want inventory. Continue with 2.2–2.3 to add a local IdP and gateway.
+### 2.2 Claude Code through a local gateway
 
-### 2.2 Example Dex + gateway (optional; needs Docker + API key)
+Requires Docker Desktop and `ANTHROPIC_API_KEY`. Start Dex (`127.0.0.1:5557`) and agentgateway (`127.0.0.1:4001`) first; the YAML below points at those addresses.
 
-This starts the two stand-in containers from `examples/standalone/compose.yaml`. It is not part of agentdesktop. Standalone ports: Dex `5557`, agentgateway `4001`.
+These containers are not agentdesktop. They come from `examples/standalone/compose.yaml`.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -110,9 +115,7 @@ curl --fail --head --silent --show-error \
   > /dev/null && echo "agentgateway is ready"
 ```
 
-### 2.3 Claude Code config that uses Dex and the gateway
-
-Only after Dex and agentgateway are up. This YAML’s `issuer` and `url` point at the containers from 2.2.
+Then write the config:
 
 ```bash
 cat > /tmp/agentdesktop-standalone.yaml <<'EOF'
@@ -132,7 +135,9 @@ programs:
 EOF
 ```
 
-### 2.4 Preview, then run the daemon
+Go to 2.3.
+
+### 2.3 Preview, then run the daemon
 
 ```bash
 agentdesktop daemon \
@@ -149,16 +154,13 @@ agentdesktop daemon \
   --user
 ```
 
-Leave it in the foreground. If the config includes `llmGateway.authentication.type: oidc`, the browser opens for Dex sign-in:
+Leave it in the foreground.
 
-- Email: `admin@example.com`
-- Password: `password`
-
-Scan-only configs do not open a browser.
+If you used 2.2, the browser opens for Dex sign-in (`admin@example.com` / `password`). If you used 2.1, it does not.
 
 The daemon stores user-mode state under `~/.local/state/agentdesktop` and listens on a user socket (`$XDG_RUNTIME_DIR/agentdesktop.sock` or `~/.local/state/agentdesktop/agentdesktop.sock`).
 
-### 2.5 Verify from another terminal
+### 2.4 Verify from another terminal
 
 ```bash
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -173,7 +175,7 @@ agentdesktop discover
 
 `agentdesktop` itself is not calling Anthropic. The key, if you set one, is used by the **agentgateway** container when Claude Code sends a request.
 
-### 2.6 Tray UI
+### 2.5 Tray UI
 
 The daemon has no web UI. The tray app is a separate process:
 
@@ -197,7 +199,7 @@ AGENTDESKTOP_SOCKET="${XDG_RUNTIME_DIR:-$HOME/.local/state/agentdesktop}/agentde
 
 Point `AGENTDESKTOP_SOCKET` at the socket the daemon is using.
 
-If you completed 2.2–2.3, run `claude`. You should see the company announcement from the YAML, and traffic should use `ANTHROPIC_BASE_URL=http://127.0.0.1:4001/`.
+If you used 2.2, run `claude`. You should see the company announcement from the YAML, and traffic should use `ANTHROPIC_BASE_URL=http://127.0.0.1:4001/`.
 
 ## 3. Stop standalone before managed
 
@@ -248,9 +250,9 @@ cd ~/gitrepos/agentdesktop
 
 Writes `/tmp/agentdesktop-keys/` (controller TLS, device CA, gateway JWT key). The script refuses to overwrite; `rm -rf /tmp/agentdesktop-keys` to regenerate.
 
-### 4.2 Example Dex (optional stand-in IdP)
+### 4.2 Dex
 
-Same idea as standalone: Dex is not agentdesktop. The controller config below points `oidc.issuer` at this container. Skip this if you already have an IdP and change the issuer URL.
+Required for this lab: `/tmp/agentdesktop-controller.yaml` sets `oidc.issuer` to `http://127.0.0.1:5556/dex`. Dex is not agentdesktop; it is the stand-in IdP from `examples/claude/compose.yaml`.
 
 ```bash
 docker compose -f examples/claude/compose.yaml up -d dex
@@ -334,9 +336,9 @@ controller:
   heartbeatInterval: 60s
 ```
 
-### 4.4 Example agentgateway (optional)
+### 4.4 agentgateway
 
-Not part of agentdesktop. Host networking is required so this container can fetch the controller’s JWKS from `127.0.0.1:8080`. Skip if you already have a gateway and have edited `/tmp/agentdesktop-claude-code.yaml` (`llmGateway.url`).
+Required for this lab: `/tmp/agentdesktop-claude-code.yaml` sets `llmGateway.url` to `http://localhost:4000`. agentgateway is not agentdesktop. Host networking is required so this container can fetch the controller’s JWKS from `127.0.0.1:8080`.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
