@@ -37,10 +37,8 @@ Those two are defined in `examples/*/compose.yaml`. `docker compose` is just how
 - Claude Code on `PATH` (`claude`)
 - For **managed** or a from-source build: Rust (see `rust-toolchain.toml`, channel `1.97`), Node.js 24.17.0 (`frontend/.nvmrc`), Corepack, and [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 - On macOS: Xcode command-line tools if missing (`xcode-select --install`)
-- Docker Desktop **only** if you follow the example Dex + agentgateway steps (it already includes `docker compose`; do not install Compose separately)
-- Anthropic API key **only** for the example agentgateway (`export ANTHROPIC_API_KEY=sk-ant-...`)
-
-Scan-only standalone needs none of Docker, Compose, or an API key.
+- Docker Desktop for the Dex + agentgateway labs (it already includes `docker compose`; do not install Compose separately)
+- Anthropic API key for the example agentgateway (`export ANTHROPIC_API_KEY=sk-ant-...`)
 
 On Docker Desktop, the managed agentgateway example uses host networking: **Settings > Resources > Network**. Linux already supports host networking.
 
@@ -69,32 +67,11 @@ agentdesktop --help
 
 ## 2. Standalone (this laptop only)
 
-Standalone reads a local YAML. It does not enroll a device and does not talk to a controller.
+Start Dex and agentgateway, then write the YAML that points at them, then run the daemon. In `--user` mode the daemon merges Claude Code settings into `~/.claude/settings.json`.
 
-Pick **one** config path, then run the daemon in 2.3.
+### 2.1 Dex and agentgateway
 
-- **2.1 Scan-only** — no Docker, no API key, no Dex.
-- **2.2 Claude Code through a local gateway** — Dex and agentgateway must be running before you write the OIDC YAML. That config will fail if they are not up.
-
-`programs.claudeCode` means Claude Code is **managed** if it is installed. It does not block other tools. In `--user` mode the daemon merges settings into `~/.claude/settings.json`.
-
-### 2.1 Scan-only
-
-```bash
-cat > /tmp/agentdesktop-standalone.yaml <<'EOF'
-programs:
-  claudeCode:
-    companyAnnouncements: ["Managed by Agentdesktop"]
-EOF
-```
-
-Go to 2.3.
-
-### 2.2 Claude Code through a local gateway
-
-Requires Docker Desktop and `ANTHROPIC_API_KEY`. Start Dex (`127.0.0.1:5557`) and agentgateway (`127.0.0.1:4001`) first; the YAML below points at those addresses.
-
-These containers are not agentdesktop. They come from `examples/standalone/compose.yaml`.
+Requires Docker Desktop and `ANTHROPIC_API_KEY`. Standalone ports: Dex `127.0.0.1:5557`, agentgateway `127.0.0.1:4001`. These containers are not agentdesktop; they come from `examples/standalone/compose.yaml`.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -115,7 +92,7 @@ curl --fail --head --silent --show-error \
   > /dev/null && echo "agentgateway is ready"
 ```
 
-Then write the config:
+### 2.2 Claude Code config
 
 ```bash
 cat > /tmp/agentdesktop-standalone.yaml <<'EOF'
@@ -135,8 +112,6 @@ programs:
 EOF
 ```
 
-Go to 2.3.
-
 ### 2.3 Preview, then run the daemon
 
 ```bash
@@ -154,9 +129,7 @@ agentdesktop daemon \
   --user
 ```
 
-Leave it in the foreground.
-
-If you used 2.2, the browser opens for Dex sign-in (`admin@example.com` / `password`). If you used 2.1, it does not.
+Leave it in the foreground. The browser opens for Dex sign-in: `admin@example.com` / `password`.
 
 The daemon stores user-mode state under `~/.local/state/agentdesktop` and listens on a user socket (`$XDG_RUNTIME_DIR/agentdesktop.sock` or `~/.local/state/agentdesktop/agentdesktop.sock`).
 
@@ -198,7 +171,7 @@ AGENTDESKTOP_SOCKET="${XDG_RUNTIME_DIR:-$HOME/.local/state/agentdesktop}/agentde
 
 Point `AGENTDESKTOP_SOCKET` at the socket the daemon is using.
 
-If you used 2.2, run `claude`. You should see the company announcement from the YAML, and traffic should use `ANTHROPIC_BASE_URL=http://127.0.0.1:4001/`.
+Run `claude`. You should see the company announcement from the YAML, and traffic should use `ANTHROPIC_BASE_URL=http://127.0.0.1:4001/`.
 
 ## 3. Stop standalone before managed
 
@@ -222,7 +195,7 @@ pgrep -lf agentdesktop
 
 If the tray app is open, **Quit** from the menu so it does not respawn a user daemon.
 
-If you started the example Dex/gateway containers, stop them (they use different ports than the managed lab):
+Stop the standalone Dex/gateway containers (they use different ports than the managed lab):
 
 ```bash
 cd ~/gitrepos/agentdesktop
