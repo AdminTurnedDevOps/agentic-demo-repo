@@ -210,7 +210,10 @@ Do not reuse `/tmp/agentdesktop-standalone.yaml` for the next section.
 
 ## 4. Controller-managed (local fleet)
 
-The controller is the control plane: enrollment, device certs, pushed daemon YAML, inventory, telemetry, short-lived gateway JWTs. The daemon on the laptop is the hands (writes tool settings, reports inventory).
+This section will build off of what you did in section 2, except instead of just having a laptop/desktop get enrolled, you'll have a Control Plane that you can see to see all managed devices and build a configuration for said devices. This Control Plane will give you a UI to log into so you can see whats enrolled.
+
+The controller is the control plane (enrollment, device certs, pushed daemon YAML, inventory, telemetry, short-lived gateway JWTs).
+The daemon on the laptop is the hands (writes tool settings, reports inventory).
 
 This lab runs everything on one machine using the `examples/claude` Compose/IdP files, with a Claude Code–only policy you write yourself. In production the controller lives on Kubernetes and the daemons stay on devices.
 
