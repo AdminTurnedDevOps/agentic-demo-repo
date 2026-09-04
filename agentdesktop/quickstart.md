@@ -139,7 +139,7 @@ agentdesktop daemon \
   --user
 ```
 
-Leave it in the foreground. The browser opens for Dex sign-in: `admin@example.com` / `password`.
+Leave it in the foreground. The browser opens for Dex sign-in: `admin@example.com` / `password`. This is so you can pass in credentials to enroll your device into agentdesk and so not just anyone can enroll a device within agentgateway.
 
 The daemon stores user-mode state under `~/.local/state/agentdesktop` and listens on a user socket (`$XDG_RUNTIME_DIR/agentdesktop.sock` or `~/.local/state/agentdesktop/agentdesktop.sock`).
 
@@ -173,6 +173,8 @@ If the window disappears, it is hidden: menu bar / tray → **Open Agent Desktop
 
 - **Status → Runtime**: standalone mode, daemon up
 - **Tools**: discovered harnesses, MCP names, skills, local models
+
+Tldr; in section 2, you have enrolled your laptop/desktop into agentdesktop to be management by your admin.
 
 ## 3. Stop standalone before managed
 
