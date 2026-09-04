@@ -328,7 +328,6 @@ curl --fail --head --silent http://127.0.0.1:4000/ \
 New terminal, leave it running:
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
 agentdesktop daemon --user \
   --config ~/gitrepos/agentdesktop/examples/claude/agentdesktop.yaml
 ```
@@ -361,15 +360,46 @@ Run `claude`. You should see `Managed by Agentdesktop`. Claude Code gets a short
 
 ## 5. Tear down the local managed lab
 
-Ctrl-C the foreground daemon and controller, then:
+This unenrolls the laptop and removes lab state. Ctrl-C the foreground daemon
+and controller (and **Quit** the tray app), then:
 
 ```bash
+# stop anything still running
+pkill -f 'agentdesktop daemon' || true
+pkill -f agentdesktop-controller || true
+
+# macOS: user LaunchAgent the tray app may have installed
+launchctl bootout "gui/$(id -u)/dev.agentdesktop.daemon.user" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/dev.agentdesktop.daemon.user.plist"
+
 cd ~/gitrepos/agentdesktop
 docker compose -f examples/claude/compose.yaml down
+docker compose -f examples/standalone/compose.yaml down
+
+# controller + device identity
+rm -rf /tmp/agentdesktop-keys /tmp/agentdesktop-controller.db
 rm -f /tmp/agentdesktop-claude-code.yaml /tmp/agentdesktop-controller.yaml
+rm -f /tmp/agentdesktop-standalone.yaml
+rm -rf "$HOME/.local/state/agentdesktop"
+rm -f "${XDG_RUNTIME_DIR:-/tmp}/agentdesktop.sock"
+
+# macOS Keychain (device TLS key + OAuth tokens)
+security delete-generic-password -s "dev.agentdesktop.device-tls-key" 2>/dev/null || true
+security delete-generic-password -s "dev.agentdesktop.device-oauth" 2>/dev/null || true
 ```
 
-Compose down does **not** delete `/tmp/agentdesktop-keys`, `/tmp/agentdesktop-controller.db`, or `~/.local/state/agentdesktop`.
+Do **not** delete `~/.claude/settings.json` (that is your Claude Code config).
+Open it and remove the keys agentdesktop added, typically:
+
+- `apiKeyHelper`
+- `companyAnnouncements`
+- `env.ANTHROPIC_BASE_URL`
+- `env.CLAUDE_CODE_API_KEY_HELPER_TTL_MS`
+
+Leave your other Claude Code settings in place.
+
+After this, the machine is not enrolled. Starting the managed lab again is a
+fresh enroll (new device key, new controller row).
 
 ## 6. Production shape (not this lab)
 
