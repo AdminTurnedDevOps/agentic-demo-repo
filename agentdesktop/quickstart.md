@@ -328,7 +328,14 @@ controller:
 
 Required for this lab: `/tmp/agentdesktop-claude-code.yaml` sets `llmGateway.url` to `http://localhost:4000`.
 
-This gateway is for the device that you're enrolling. When you enroll a device, it goes through a gateway so the enrollment is done in a safe and secure fashion.
+This is the LLM gateway for the enrolled device, not the enrollment path.
+Enrollment is the daemon signing in to Dex and getting a device cert from the
+controller (4.2, 4.3, 4.5). After that, Claude Code on that laptop sends model
+traffic here. The daemon hands it a short-lived JWT; agentgateway checks that
+JWT against the controller’s JWKS, then calls Anthropic with its own API key.
+
+Host networking is so the agentgateway container can reach `127.0.0.1:8080`
+for JWKS. Without that, JWT checks fail even if the device is enrolled.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
