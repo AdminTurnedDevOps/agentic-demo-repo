@@ -401,7 +401,7 @@ Leave your other Claude Code settings in place.
 After this, the machine is not enrolled. Starting the managed lab again is a
 fresh enroll (new device key, new controller row).
 
-## 6. Production shape (not this lab)
+## 6. Production shape
 
 Production is the same split: daemons on laptops, controller in the cluster.
 
