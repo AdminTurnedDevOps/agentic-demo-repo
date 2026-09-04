@@ -154,8 +154,12 @@ The daemon has no web UI. The tray app is a separate process:
 ```bash
 agentdesktop
 ```
+![](images/tray1)
+![](images/tray2)
 
-No subcommand. If the window disappears, it is hidden: menu bar / tray → **Open Agent Desktop**.
+If the window disappears, it is hidden: menu bar / tray → **Open Agent Desktop**.
+
+![](images/tray3)
 
 - **Status → Runtime**: standalone mode, daemon up
 - **Tools**: discovered harnesses, MCP names, skills, local models
