@@ -328,7 +328,7 @@ controller:
 
 Required for this lab: `/tmp/agentdesktop-claude-code.yaml` sets `llmGateway.url` to `http://localhost:4000`.
 
-This is the LLM gateway for the enrolled device, not the enrollment path.
+This is the LLM gateway for the enrolled device.
 Enrollment is the daemon signing in to Dex and getting a device cert from the
 controller (4.2, 4.3, 4.5). After that, Claude Code on that laptop sends model
 traffic here. The daemon hands it a short-lived JWT; agentgateway checks that
