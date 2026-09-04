@@ -272,7 +272,6 @@ EOF
 New terminal, leave the controller running:
 
 ```bash
-export PATH="$HOME/.cargo/bin:$PATH"
 agentdesktop-controller --config /tmp/agentdesktop-controller.yaml
 ```
 
