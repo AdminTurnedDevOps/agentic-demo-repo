@@ -1,0 +1,25 @@
+apiVersion: ate.dev/v1alpha1
+kind: ActorTemplate
+metadata:
+  name: gpu-agent
+  namespace: ate-demo-gpu
+spec:
+  sandboxClass: gvisor
+  workerSelector:
+    matchLabels:
+      workload: gpu
+  containers:
+  - name: gpu-agent
+    image: gcr.io/example/gpu-agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    readyz:
+      httpGet:
+        path: /readyz
+        port: 80
+  resources:
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  snapshotsConfig:
+    location: gs://example-bucket/ate-demo-gpu/
+    onPause: Full
+    onCommit: Full
