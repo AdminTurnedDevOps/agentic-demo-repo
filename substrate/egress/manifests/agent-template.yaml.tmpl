@@ -1,0 +1,34 @@
+# ateapipb.ActorTemplate (protojson). Not a Kubernetes CRD.
+# Create with: kubectl ate create actor-template -f <rendered>
+# Placeholders: ${BUCKET_NAME} ${WORKLOAD_IMAGE} ${ANTHROPIC_API_KEY}
+metadata:
+  atespace: egress-agent
+  name: claude-microvm
+workerSelector:
+  matchLabels:
+    workload: claude-egress
+containers:
+- name: claude
+  image: ${WORKLOAD_IMAGE}
+  env:
+  - name: ACTOR_NAME
+    value: "claude"
+  - name: TASK
+    value: "Tell me one short, surprising fact about microVMs. One sentence."
+  - name: INTERVAL_SECONDS
+    value: "20"
+  - name: ANTHROPIC_API_KEY
+    value: "${ANTHROPIC_API_KEY}"
+resources:
+  limits:
+  - name: cpu
+    quantity: "2"
+  - name: memory
+    quantity: 2Gi
+snapshotsConfig:
+  onPause: SNAPSHOT_CONTENT_SCOPE_FULL
+  onCommit: SNAPSHOT_CONTENT_SCOPE_FULL
+  storageLocation: gs://${BUCKET_NAME}/ate-demo-egress-agent/
+sandboxConfig:
+  sandboxClass: SANDBOX_CLASS_MICROVM
+  configName: microvm

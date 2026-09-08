@@ -1,0 +1,62 @@
+# Overlay for deploy/atenet-egress when --atenet-router=agentgateway.
+# Same as substrate's atenet-egress-agentgateway-substrate-config, plus
+# frontend tracing (stock overlay is access-log only; the egress container
+# also needs AGENTGATEWAY_OTLP_ADDRESS — see the lab).
+#
+# Apply: kubectl apply -f atenet-egress-agentgateway-config.yaml
+# Then:  kubectl -n ate-system rollout restart deploy/atenet-egress
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atenet-egress-agentgateway-substrate-config
+  namespace: ate-system
+data:
+  config.yaml: |
+    # yaml-language-server: $schema=https://agentgateway.dev/schema/config
+    frontendPolicies:
+      accessLog:
+        add:
+          substrate.connect.authority: source.connectHeaders["host"]
+      tracing:
+        host: $AGENTGATEWAY_OTLP_ADDRESS
+        protocol: grpc
+        randomSampling: "1.0"
+        resources:
+          service.name: '"atenet-egress"'
+    binds:
+    - port: 8443
+      tunnelProtocol: connect
+      listeners:
+      - protocol: HTTPS
+        tls:
+          cert: /run/servicedns.podcert.ate.dev/credential-bundle.pem
+          key: /run/servicedns.podcert.ate.dev/credential-bundle.pem
+          root: /run/actor-id-ca-certs/ca.crt
+        routes: []
+    - mode: internal
+      protocol: AUTO
+      listeners:
+      - protocol: TLS
+        hostname: "*"
+        tcpRoutes:
+        - backends:
+          - dynamic:
+              target: source.connectHeaders["host"]
+      - protocol: HTTP
+        routes:
+        - policies:
+            substrateEgress:
+              host: api.ate-system.svc:443
+              policies:
+                backendTLS:
+                  cert: /run/podidentity.podcert.ate.dev/credential-bundle.pem
+                  key: /run/podidentity.podcert.ate.dev/credential-bundle.pem
+                  root: /run/servicedns-ca/trust-bundle.pem
+          backends:
+          - dynamic:
+              target: source.connectHeaders["host"]
+      - protocol: TCP
+        tcpRoutes:
+        - backends:
+          - dynamic:
+              target: source.connectHeaders["host"]

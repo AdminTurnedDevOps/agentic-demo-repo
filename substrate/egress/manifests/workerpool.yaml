@@ -1,0 +1,23 @@
+# MicroVM WorkerPool for the egress lab's Claude agent.
+# Apply with: ko apply -f workerpool.yaml
+# Requires: nodes labeled ate.dev/sandboxClass=microvm, and
+# hack/install-microvm-deps.sh --install (cluster-wide SandboxConfig `microvm`).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ate-demo-egress-agent
+---
+apiVersion: ate.dev/v1alpha1
+kind: WorkerPool
+metadata:
+  name: claude-egress
+  namespace: ate-demo-egress-agent
+  labels:
+    workload: claude-egress
+spec:
+  replicas: 1
+  sandboxClass: microvm
+  workerImage: ko://github.com/agent-substrate/substrate/cmd/ateom-microvm
+  template:
+    nodeSelector:
+      ate.dev/sandboxClass: microvm

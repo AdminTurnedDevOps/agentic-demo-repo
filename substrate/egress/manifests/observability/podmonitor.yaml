@@ -1,0 +1,43 @@
+# Scrape agentgateway's Prometheus endpoint on atenet-egress (port 15020).
+# Requires kube-prometheus-stack with
+# prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false
+# (same setting as the Substrate observability lab).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: atenet-egress-agentgateway
+  namespace: monitoring
+  labels:
+    app: atenet-egress
+spec:
+  namespaceSelector:
+    matchNames:
+    - ate-system
+  selector:
+    matchLabels:
+      app: atenet-egress
+  podMetricsEndpoints:
+  - portNumber: 15020
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: atenet-router-agentgateway
+  namespace: monitoring
+  labels:
+    app: atenet-router
+spec:
+  namespaceSelector:
+    matchNames:
+    - ate-system
+  selector:
+    matchLabels:
+      app: atenet-router
+  podMetricsEndpoints:
+  - portNumber: 15020
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
