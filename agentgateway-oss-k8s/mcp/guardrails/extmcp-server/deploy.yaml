@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-mcp
+  namespace: agentgateway-system
+  labels:
+    app: ext-mcp
+spec:
+  selector:
+    app: ext-mcp
+  ports:
+    - name: grpc
+      port: 4445
+      targetPort: 9001
+      protocol: TCP
+      appProtocol: kubernetes.io/h2c
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ext-mcp
+  namespace: agentgateway-system
+  labels:
+    app: ext-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ext-mcp
+  template:
+    metadata:
+      labels:
+        app: ext-mcp
+    spec:
+      containers:
+        - name: ext-mcp
+          image: python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          workingDir: /tmp/extmcp
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            # Comma-separated GitHub orgs/users. Empty = skip owner checks.
+            - name: ALLOWED_OWNERS
+              value: ""
+          ports:
+            - name: grpc
+              containerPort: 9001
+            - name: health
+              containerPort: 8080
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              mkdir -p /tmp/extmcp
+              cp /src/server.py /src/ext_mcp.proto /src/requirements.txt /tmp/extmcp/
+              pip install --no-cache-dir -r /tmp/extmcp/requirements.txt
+              python -m grpc_tools.protoc -I/tmp/extmcp --python_out=/tmp/extmcp --grpc_python_out=/tmp/extmcp /tmp/extmcp/ext_mcp.proto
+              exec python /tmp/extmcp/server.py
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: src
+              mountPath: /src
+              readOnly: true
+      volumes:
+        - name: src
+          configMap:
+            name: extmcp-github-policy
