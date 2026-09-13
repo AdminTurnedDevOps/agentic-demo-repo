@@ -188,33 +188,17 @@ echo "$MCP_ADDR"
 
 ## 2. Baseline (no guardrails)
 
-Confirm GitHub Copilot MCP is reachable and that write tools are in the list.
+One `initialize` is enough to confirm the gateway can reach GitHub Copilot MCP.
 
 ```bash
-HDRS=(-H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H 'MCP-Protocol-Version: 2025-03-26')
-
-export MCP_SESSION_ID=$(curl -s -D - "$MCP_ADDR" "${HDRS[@]}" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"guardrails-demo","version":"1.0.0"}}}' \
-  | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r')
-echo "session: $MCP_SESSION_ID"
-
-curl -s "$MCP_ADDR" "${HDRS[@]}" -H "mcp-session-id: $MCP_SESSION_ID" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
-
-curl -s "$MCP_ADDR" "${HDRS[@]}" -H "mcp-session-id: $MCP_SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
-  | sed -n 's/^data: //p' | jq -r '.result.tools[].name' | sort
+curl -s "$MCP_ADDR" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-03-26' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"guardrails-demo","version":"1.0.0"}}}'
 ```
 
-Expect write tools such as `issue_write`, `push_files`, `create_or_update_file` next to read tools such as `get_me`, `issue_read`, `get_file_contents`. The default GitHub Copilot toolset includes both.
-
-```bash
-curl -s "$MCP_ADDR" "${HDRS[@]}" -H "mcp-session-id: $MCP_SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_me","arguments":{}}}' \
-  | sed -n 's/^data: //p' | jq
-```
-
-`get_me` should return the GitHub user for the PAT.
+A JSON-RPC result (often SSE-framed as `data: {...}`) means the backend is reachable. Failures here are PAT, TLS, or routing — not guardrails.
 
 ## 3. Deploy the ExtMCP policy server
 
