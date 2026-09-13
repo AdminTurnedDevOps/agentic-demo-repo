@@ -2,7 +2,7 @@
 """ExtMCP policy server for the GitHub Copilot MCP guardrails demo.
 
 Implements agentgateway.dev.ext_mcp.ExtMcp:
-  CheckRequest  — deny GitHub write tools and out-of-allowlist owners
+  CheckRequest  — deny GitHub write tools
   CheckResponse — strip denied tools from tools/list and mark survivors
 
 Proto: https://github.com/agentgateway/agentgateway/blob/main/crates/protos/proto/ext_mcp.proto
@@ -53,13 +53,6 @@ DENIED_TOOLS = frozenset(
 DESC_SUFFIX = " [guarded]"
 
 
-def allowed_owners() -> set[str]:
-    raw = os.environ.get("ALLOWED_OWNERS", "").strip()
-    if not raw:
-        return set()
-    return {part.strip().lower() for part in raw.split(",") if part.strip()}
-
-
 def decode_json(raw: bytes | None) -> dict[str, Any]:
     if not raw:
         return {}
@@ -75,11 +68,6 @@ def tool_name(params: dict[str, Any]) -> str:
     return name if isinstance(name, str) else ""
 
 
-def tool_arguments(params: dict[str, Any]) -> dict[str, Any]:
-    args = params.get("arguments")
-    return args if isinstance(args, dict) else {}
-
-
 def is_denied_tool(name: str) -> bool:
     if not name:
         return False
@@ -88,24 +76,13 @@ def is_denied_tool(name: str) -> bool:
     return name.endswith("_write")
 
 
-def owner_deny_reason(arguments: dict[str, Any], owners: set[str]) -> str | None:
-    if not owners:
-        return None
-    owner = arguments.get("owner")
-    if not isinstance(owner, str) or not owner:
-        return None
-    if owner.lower() in owners:
-        return None
-    return f"owner {owner} is not in ALLOWED_OWNERS"
-
-
-def request_deny_reason(method: str, params: dict[str, Any], owners: set[str]) -> str | None:
+def request_deny_reason(method: str, params: dict[str, Any]) -> str | None:
     if method != "tools/call":
         return None
     name = tool_name(params)
     if is_denied_tool(name):
         return f"tool {name} is not allowed"
-    return owner_deny_reason(tool_arguments(params), owners)
+    return None
 
 
 def mutate_tools_list(result: dict[str, Any]) -> dict[str, Any]:
@@ -158,8 +135,7 @@ class ExtMcpServicer:
 
         method = request.method
         params = decode_json(request.mcp_request)
-        owners = allowed_owners()
-        reason = request_deny_reason(method, params, owners)
+        reason = request_deny_reason(method, params)
         log.info(
             "CheckRequest method=%s services=%s tool=%s deny=%s",
             method,
@@ -238,12 +214,7 @@ def main() -> None:
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
     ext_mcp_pb2_grpc.add_ExtMcpServicer_to_server(ExtMcpServicer(), server)
     server.add_insecure_port(listen)
-    log.info(
-        "extmcp listening on %s denied_tools=%s allowed_owners=%s",
-        listen,
-        sorted(DENIED_TOOLS),
-        sorted(allowed_owners()) or "(any)",
-    )
+    log.info("extmcp listening on %s denied_tools=%s", listen, sorted(DENIED_TOOLS))
     server.start()
     server.wait_for_termination()
 

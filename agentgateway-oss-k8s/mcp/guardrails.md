@@ -1,6 +1,6 @@
 # MCP Guardrails (ExtMCP) with GitHub Copilot MCP
 
-Tldr; MCP guardrails (ExtMCP) call an external gRPC policy server at the JSON-RPC method layer, not the HTTP layer. The server can pass, mutate, or deny individual MCP methods such as `tools/call` and `tools/list`. This demo fronts the GitHub Copilot MCP server (`api.githubcopilot.com`) and uses a small ExtMCP policy server to block GitHub write tools before they reach GitHub, hide those tools from `tools/list`, and optionally restrict `owner` arguments to an allowlist.
+Tldr; MCP guardrails (ExtMCP) call an external gRPC policy server at the JSON-RPC method layer, not the HTTP layer. The server can pass, mutate, or deny individual MCP methods such as `tools/call` and `tools/list`. This demo fronts the GitHub Copilot MCP server (`api.githubcopilot.com`) and uses a small ExtMCP policy server to block GitHub write tools before they reach GitHub and hide those tools from `tools/list`.
 
 Docs:
 
@@ -42,7 +42,7 @@ sequenceDiagram
     participant GH as GitHub Copilot MCP
     Client->>AGW: tools/call issue_write
     AGW->>Ext: CheckRequest (method, tool, params, headers)
-    alt Write tool or owner not allowed
+    alt Write tool not allowed
         Ext-->>AGW: AuthorizationError PERMISSION_DENIED
         AGW-->>Client: JSON-RPC error -32001
     else Read tool allowed
@@ -57,7 +57,7 @@ sequenceDiagram
 
 This demo attaches one processor to the GitHub Copilot backend:
 
-- `tools/call: Request` — deny write tools (`issue_write`, `push_files`, `create_or_update_file`, …) and optional out-of-allowlist `owner` values
+- `tools/call: Request` — deny write tools (`issue_write`, `push_files`, `create_or_update_file`, …)
 - `tools/list: Response` — drop those write tools from the list and append ` [guarded]` to remaining descriptions so mutation is visible
 
 Policy source: `mcp/guardrails/extmcp-server/`.
@@ -65,7 +65,7 @@ Policy source: `mcp/guardrails/extmcp-server/`.
 ## Prerequisites
 
 - Kubernetes cluster with a LoadBalancer or the ability to port-forward
-- `kubectl`, `curl`, `jq`
+- `kubectl`, `curl`
 - agentgateway **v1.3.0+** (ExtMCP shipped in 1.3). Current charts:
 
 ```bash
@@ -202,7 +202,9 @@ A JSON-RPC result (often SSE-framed as `data: {...}`) means the backend is reach
 
 ## 3. Deploy the ExtMCP policy server
 
-The sample server implements `CheckRequest` / `CheckResponse` from `ext_mcp.proto`. It listens on gRPC h2c `:9001` and HTTP health `:8080`.
+`server.py` is the policy process. `deploy.yaml` is the Kubernetes wrapper that runs it in the cluster: a **Deployment** (pod on `python:3.12-slim` that installs deps, compiles `ext_mcp.proto`, and execs `server.py`) and a **Service** named `ext-mcp` on port `4445` with `appProtocol: kubernetes.io/h2c`. Agentgateway calls that Service; without it the later `AgentgatewayPolicy` has no policy server to dial.
+
+The ConfigMap is the source the pod mounts (`server.py`, proto, `requirements.txt`). Apply the ConfigMap first, then `deploy.yaml`.
 
 ```bash
 kubectl -n agentgateway-system create configmap extmcp-github-policy \
@@ -215,15 +217,7 @@ kubectl apply -f guardrails/extmcp-server/deploy.yaml
 kubectl -n agentgateway-system rollout status deploy/ext-mcp --timeout=180s
 ```
 
-First Ready can take a minute: the demo image is `python:3.12-slim` and compiles the proto on start. `appProtocol: kubernetes.io/h2c` on the Service is required so agentgateway dials cleartext HTTP/2.
-
-Optional: pin GitHub `owner` values the policy server will allow on tools that take `owner` (`get_file_contents`, `issue_read`, …):
-
-```bash
-kubectl -n agentgateway-system set env deploy/ext-mcp ALLOWED_OWNERS='your-org,your-user'
-```
-
-Empty `ALLOWED_OWNERS` skips that check. Write tools are always denied.
+First Ready can take a minute while pip and `protoc` run. `kubernetes.io/h2c` is required so agentgateway dials cleartext HTTP/2 (gRPC), not HTTP/1.1.
 
 ## 4. Attach guardrails to the GitHub backend
 
@@ -261,9 +255,20 @@ EOF
 | `tools/call: Request` | Gate or mutate before GitHub |
 | `tools/list: Response` | Filter / annotate after GitHub returns the catalog |
 
-Processors run in list order; the first deny short-circuits. MCP auth (if you add JWT later) runs before request-phase processors and is not re-run after mutation.
+`processors` is an ordered list. This demo has one. If you add more, they run top to bottom and the first **Deny** stops the rest.
 
-Bound the gRPC callout. Without a timeout a cold ExtMCP connection can hang instead of engaging `failureMode`:
+MCP authentication (JWT / OAuth on the MCP route), if you add it later, runs **before** request-phase ExtMCP. A processor that mutates `params` does not make agentgateway re-check that auth.
+
+### Timeout on the ExtMCP callout
+
+The guardrails policy above tells agentgateway *who* to call (`ext-mcp:4445`). It does **not** set a deadline. By default the gRPC call to the policy server waits forever. A cold or stuck ExtMCP pod then hangs `tools/call` / `tools/list` instead of failing closed after a few seconds.
+
+These two objects add that deadline:
+
+1. **`AgentgatewayPolicy` `ext-mcp-timeout`** — `backend.http.requestTimeout: 5s` on the `ext-mcp` **Service**. After 5s the callout is treated as a failure, and `failureMode: FailClosed` on the guardrails processor denies the MCP method.
+2. **`HTTPRoute` `ext-mcp-route`** — a dummy route so the `ext-mcp` Service is actually in this proxy’s data plane. A Service-targeted policy only attaches after some route on the Gateway references that Service. The hostname `ext-mcp.internal` is a placeholder; nothing should send MCP traffic there.
+
+Clients still call `http://$GATEWAY_IP:3000/mcp`. This route is not the GitHub MCP path.
 
 ```bash
 kubectl apply -f - <<EOF
@@ -298,150 +303,21 @@ spec:
 EOF
 ```
 
-The `ext-mcp.internal` route exists only so the Service is in the proxy data plane and the timeout policy can attach. Clients keep calling `/mcp`.
-
 ## 5. Verify
 
-Start a **new** MCP session after the policy is programmed. Streamable HTTP responses are SSE-framed; `sed -n 's/^data: //p'` unwraps them. Guardrail denials are plain JSON (no `data:` prefix).
-
-```bash
-HDRS=(-H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H 'MCP-Protocol-Version: 2025-03-26')
-
-export MCP_SESSION_ID=$(curl -s -D - "$MCP_ADDR" "${HDRS[@]}" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"guardrails-demo","version":"1.0.0"}}}' \
-  | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r')
-echo "session: $MCP_SESSION_ID"
-
-curl -s "$MCP_ADDR" "${HDRS[@]}" -H "mcp-session-id: $MCP_SESSION_ID" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
-```
-
-### `tools/list` is filtered and annotated
-
-```bash
-curl -s "$MCP_ADDR" "${HDRS[@]}" -H "mcp-session-id: $MCP_SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
-  | sed -n 's/^data: //p' | jq -r '.result.tools[] | "\(.name)\t\(.description)"'
-```
-
-Expect:
-
-- No `issue_write`, `push_files`, `create_or_update_file`, `delete_file`, `create_pull_request`, …
-- Remaining descriptions end with ` [guarded]`
-
-### Allowed `tools/call` still hits GitHub
-
-```bash
-curl -s "$MCP_ADDR" "${HDRS[@]}" -H "mcp-session-id: $MCP_SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_me","arguments":{}}}' \
-  | sed -n 's/^data: //p' | jq
-```
-
-`get_me` is not in the denylist, so ExtMCP passes and GitHub returns the user.
-
-### Denied `tools/call` never reaches GitHub
-
-```bash
-curl -s -D - "$MCP_ADDR" "${HDRS[@]}" -H "mcp-session-id: $MCP_SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"issue_write","arguments":{"method":"create","owner":"octocat","repo":"hello-world","title":"should be blocked"}}}'
-```
-
-HTTP status is **200**. Body is a JSON-RPC error (not SSE):
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 4,
-  "error": {
-    "code": -32001,
-    "message": "tool issue_write is not allowed"
-  }
-}
-```
-
-`-32001` is ExtMCP `PERMISSION_DENIED`. Confirm the policy server saw the deny and GitHub was not called:
-
-```bash
-kubectl -n agentgateway-system logs deploy/ext-mcp --tail=20
-```
-
-Look for `CheckRequest method=tools/call ... tool=issue_write deny=tool issue_write is not allowed`.
-
-### Optional owner allowlist
-
-If you set `ALLOWED_OWNERS`, a read tool whose `arguments.owner` is outside that set is also denied in the request phase:
-
-```bash
-curl -s "$MCP_ADDR" "${HDRS[@]}" -H "mcp-session-id: $MCP_SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_file_contents","arguments":{"owner":"octocat","repo":"hello-world","path":"README.md"}}}'
-```
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 5,
-  "error": {
-    "code": -32001,
-    "message": "owner octocat is not in ALLOWED_OWNERS"
-  }
-}
-```
-
-## MCP Inspector
+The write-tool list is **not** in the `AgentgatewayPolicy`. That YAML only sends `tools/call` / `tools/list` to ExtMCP. The names are in `DENIED_TOOLS` in `guardrails/extmcp-server/server.py` (`issue_write`, `push_files`, anything ending in `_write`, …). `CheckRequest` denies those calls; `CheckResponse` drops them from `tools/list` and appends ` [guarded]` to the rest.
 
 ```bash
 npx modelcontextprotocol/inspector#0.18.0
 ```
 
-Connect to `http://$GATEWAY_IP:3000/mcp` (Streamable HTTP). List Tools: write tools gone, descriptions tagged `[guarded]`. Call `get_me`: success. Call `issue_write`: JSON-RPC error from the gateway, not from GitHub.
+Connect to `http://$GATEWAY_IP:3000/mcp` (Streamable HTTP).
 
-## ExtMCP vs CEL MCP authorization
+- **List Tools** — names in `DENIED_TOOLS` are gone. Remaining descriptions end with `[guarded]`.
+- **Call `get_me`** — succeeds (GitHub user for the PAT).
+- **Call `issue_write`** — JSON-RPC error `-32001` / `tool issue_write is not allowed`. GitHub is not called.
 
-| | `backend.mcp.authorization` | MCP guardrails (ExtMCP) |
-| --- | --- | --- |
-| Where | In-proxy CEL | External gRPC `ExtMcp` service |
-| `tools/list` | Drop items that fail the rule | Mutate or drop in `CheckResponse` |
-| `tools/call` | Allow / deny | Pass / mutate `params` / deny |
-| Arguments | CEL on `mcp.tool.name` (and JWT). `mcp.tool.arguments` is for post-request logs/traces, not RBAC | Full JSON `params` in `CheckRequest` |
-| Mutation | No | Yes (`params` or `result`) |
-| Failure mode | N/A | `FailClosed` / `FailOpen` |
-
-This GitHub Copilot path is ExtMCP because the policy server both **denies** write tools and **rewrites** `tools/list`. A name-only allowlist can stay in CEL; see `cost/token-cost-opt-demos/demo4-mcp-savings/mcp-savings.md`.
-
-## Troubleshooting
-
-**`tools/call` hangs**
-
-No callout deadline, or ExtMCP is still installing pip/proto. Confirm `ext-mcp` is Ready and `ext-mcp-timeout` is applied. First call can be slow while the gRPC connection warms.
-
-**Every call denied after the policy is attached**
-
-`FailClosed` plus an unreachable ExtMCP server. Check:
-
-```bash
-kubectl -n agentgateway-system get deploy,svc,po -l app=ext-mcp
-kubectl -n agentgateway-system logs deploy/ext-mcp
-kubectl -n agentgateway-system get agentgatewaypolicy mcp-guardrails -o yaml
-```
-
-The Service must use `appProtocol: kubernetes.io/h2c`.
-
-**Write tools still appear in `tools/list`**
-
-Policy not attached to this backend, or `tools/list` is not in `methods` as `Response` / `Full`. Agentgateway calls ExtMCP once per backend for fanout list methods.
-
-**Deny returns HTTP 403 / non-200**
-
-On agentgateway 1.4+, request-phase ExtMCP denials are HTTP 200 + JSON-RPC error. Upgrade if the client drops the session on a non-2xx.
-
-**NACKs / policy ignored**
-
-```bash
-agctl proxy config all
-kubectl get agentgatewaypolicy -n agentgateway-system
-```
-
-`backend.mcp.guardrails` only targets MCP backends (`AgentgatewayBackend` with `spec.mcp`).
+If List Tools is unchanged and nothing says `[guarded]`, ExtMCP is not on the path: policy not attached, `ext-mcp` not Ready, or Inspector is not using the gateway URL.
 
 ## Cleanup
 

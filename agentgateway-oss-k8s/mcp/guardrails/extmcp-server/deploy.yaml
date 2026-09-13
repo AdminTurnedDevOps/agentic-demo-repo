@@ -40,9 +40,6 @@ spec:
           env:
             - name: PYTHONUNBUFFERED
               value: "1"
-            # Comma-separated GitHub orgs/users. Empty = skip owner checks.
-            - name: ALLOWED_OWNERS
-              value: ""
           ports:
             - name: grpc
               containerPort: 9001
