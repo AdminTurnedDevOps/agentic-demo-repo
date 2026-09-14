@@ -1,0 +1,33 @@
+apiVersion: kagent.dev/v1alpha3
+kind: Harness
+metadata:
+  name: hermes
+  namespace: kagent
+spec:
+  byo: {}
+  workload:
+    image: northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/kagent-hermes@sha256:fb5d180ae3395dbde44ce33c5d5533eed3281770d96191376d928815f5290a7a
+    command:
+      - /usr/local/bin/kagent-hermes
+  substrate:
+    workerPoolRef:
+      name: kagent-default
+    snapshotPolicy:
+      location: gs://ate-snapshots-field-engineering-us-substrate-mlevan/kagent/hermes
+  allowedAgentTemplates:
+    selector:
+      matchLabels:
+        kagent.dev/harness: hermes
+---
+apiVersion: kagent.dev/v1alpha3
+kind: AgentTemplate
+metadata:
+  name: hermes-assistant
+  namespace: kagent
+  labels:
+    kagent.dev/harness: hermes
+spec:
+  modelConfig:
+    name: default-model-config
+  description: A Hermes agent running through a kagent BYO Harness on Agent Substrate.
+  systemPrompt: You are a helpful assistant running with Hermes Agent.
