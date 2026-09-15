@@ -1,6 +1,16 @@
 # Agentregistry Enterprise Tracing
 
-Agentregistry Enterprise stores traces in ClickHouse and displays them in the AgentRegistry UI under **Tracing**. Workloads send OTLP data to the AgentRegistry telemetry collector, and the collector writes traces to the `otel_traces_json` ClickHouse table.
+Agentregistry Enterprise stores traces in ClickHouse and displays them in the AgentRegistry UI under **Tracing**.
+
+As of **v2026.9.0**, kagent-managed agents export traces to the kagent
+collector (`platformdb.otel_traces_json`). Token usage and Tracing use
+`WITH` / `WITH RECURSIVE` CTEs that cannot run through a ClickHouse
+`remote()` view. Point AgentRegistry at a **local** view of that table on
+the kagent ClickHouse instance. See [README.md](README.md).
+
+The rest of this page is the chart-based setup (bundled ClickHouse +
+collector) used when AgentRegistry owns the trace pipeline itself — for
+example AWS Bedrock AgentCore or other non-kagent runtimes.
 
 This guide documents the setup needed for both in-cluster runtimes, such as kagent, and external runtimes, such as AWS Bedrock AgentCore.
 
