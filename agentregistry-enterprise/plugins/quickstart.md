@@ -1,4 +1,4 @@
-# Plugins Quickstart (Agent Registry Enterprise)
+# Plugins Quickstart (Agentregistry Enterprise)
 
 Lite guide: **create / list / use** a Plugin on Agent Registry Enterprise.
 
