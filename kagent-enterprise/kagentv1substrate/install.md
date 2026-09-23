@@ -8,6 +8,7 @@ It multiplexes a large set of idle Actors onto a set of warm Workers (Workers ar
 2. Solo kagent license key
 3. Provider (OpenAI, Anthropic, etc.) license key
 4. `PodCertificateRequest` enabled on the cluster, `ClusterTrustBundle`, and the corresponding projected-volume support on the nodes. PLEASE NOTE: The `PodCertificateRequest` gate will no longer be needed with k8s v1.37 and above.
+5. **for GKE**: workload identity turned on so Actor Snapshots can be written to Cloud Storage
 
 ## What Gets Installed
 
