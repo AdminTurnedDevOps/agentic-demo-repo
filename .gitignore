@@ -18,6 +18,7 @@ fine-tuning/deepseek/results
 
 !kagent-enterprise/
 !kagent-enterprise/**
+kagent-enterprise/kagentv1substrate/
 
 *kagent-enterprise/kagent-ee-gke*
 
