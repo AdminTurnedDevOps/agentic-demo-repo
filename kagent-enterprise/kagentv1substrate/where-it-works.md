@@ -7,6 +7,8 @@ To use Substrate, `PodCertificateRequest` needs to be enabled, and this is doen 
 
 ## Where It May Or May Not Work
 
+PLEASE NOTE: The `PodCertificateRequest` gate will no longer be needed with k8s v1.37 and above.
+
 AKS and EKS.
 
 EKS: AWS lists Kubernetes 1.36 as its newest available version. Upstream Kubernetes leaves `PodCertificateRequest` off by default through 1.36. EKS permits extra kubelet arguments through node launch templates, but that cannot enable the API on the managed control plane.

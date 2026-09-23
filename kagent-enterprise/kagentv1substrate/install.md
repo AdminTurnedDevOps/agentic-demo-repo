@@ -7,7 +7,7 @@ It multiplexes a large set of idle Actors onto a set of warm Workers (Workers ar
 1. k8s v1.36 and above
 2. Solo kagent license key
 3. Provider (OpenAI, Anthropic, etc.) license key
-4. `PodCertificateRequest` enabled on the cluster, `ClusterTrustBundle`, and the corresponding projected-volume support on the nodes.
+4. `PodCertificateRequest` enabled on the cluster, `ClusterTrustBundle`, and the corresponding projected-volume support on the nodes. PLEASE NOTE: The `PodCertificateRequest` gate will no longer be needed with k8s v1.37 and above.
 
 ## What Gets Installed
 
