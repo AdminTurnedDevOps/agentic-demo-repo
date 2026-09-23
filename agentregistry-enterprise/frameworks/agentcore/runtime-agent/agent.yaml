@@ -1,0 +1,10 @@
+apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: runtime-agent
+  tag: "0.1.0"
+spec:
+  description: "Strands chat agent on AgentCore Runtime. Calls Amazon Bedrock and has current_time and calculate tools."
+  source:
+    image: "northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/runtime-agent:0.1.0"
+    protocol: HTTP
