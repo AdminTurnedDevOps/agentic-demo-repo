@@ -1,238 +1,254 @@
-# OpenFGA Permissions for Substrate Actors
+# Run OpenFGA permissions in front of Substrate Actors
 
-## Goal
+This lab runs an **OSS agentgateway** in front of the Substrate router. It
+checks OpenFGA before forwarding to Substrate, so a denied call to a suspended
+Actor does not wake it. Alice can invoke `tool-a`; Bob and `tool-b` are denied.
+The same permission remains valid when `tool-a` suspends and resumes onto a
+different worker. Grant and revoke permissions without restarting an Actor.
 
-Demonstrate that permission belongs to a logical Actor, not to whichever warm
-worker pod happens to run it. A caller may invoke one suspended Actor but not
-another; a denied request must not wake its target. Granting or revoking a
-relationship changes the decision without restarting the gateway or an Actor.
-
-**Use agentgateway OSS.** Agent Substrate already supports it as its ingress
-and egress dataplane with `--atenet-router=agentgateway`. Its ingress route uses
-the `substrateIngress` policy to resolve `ate-target-actor` and resume the Actor.
-The agentgateway configuration schema also supports an `extAuthz` route policy;
-an external authorization service can consult OpenFGA before ingress resolves
-the Actor. This is an integration to build, **not** an existing Substrate
-OpenFGA feature or a built-in agentgateway OpenFGA policy.
-
-This is a **lab design**, not a working installation recipe: the authorization
-service, OpenFGA deployment, tuple management, and gateway policy wiring in
-this document have not yet been implemented. Do not claim a permission boundary
-until the negative and bypass tests below pass.
-
-## Architecture
+This is a working **user-to-Actor** lab. A verified Actor-to-Actor caller is
+not yet available at Substrate ingress; see [Actor-to-Actor extension](#actor-to-actor-extension).
 
 ```text
-Authenticated client
-  -> atenet-router / agentgateway OSS
-       -> extAuthz adapter -> OpenFGA Check(caller, can_invoke, target UID)
-       -> deny: 403; no Substrate ResumeActor
-       -> allow: existing substrateIngress policy -> ateapi ResumeActor
-                    -> worker's atunnel -> target Actor
-
-Actor caller (phase 2 only)
-  -> Substrate egress gateway (authenticates Actor certificate + live UID)
-  -> trusted identity bridge -> same ingress authorization path
+client (short-lived Kubernetes service-account token)
+  -> lab agentgateway OSS (:8080)
+     -> HTTP extAuthz adapter -> Kubernetes TokenReview (caller)
+                           -> Substrate GetActor (current target UID)
+                           -> OpenFGA Check(user, can_invoke, actor:UID)
+     -> allow: Substrate atenet-router -> ResumeActor -> worker -> Actor
+     -> deny: HTTP 403; Substrate router never sees the request
 ```
 
-The OpenFGA process and authorization adapter must run as **always-available
-Kubernetes services**, not suspendable Actors: authorization cannot depend on
-first waking the service that makes authorization decisions. Keep OpenFGA's
-storage separate from the Actor snapshot store. Do not expose OpenFGA's
-administrative or tuple-write endpoints to Actors.
+The lab gateway is **separate** from Substrate's agentgateway dataplane. The
+Substrate installation may use its existing `--atenet-router=agentgateway`
+option; that route still handles Actor wake and tunnel forwarding. A separate
+gateway lets us add authorization without replacing Substrate's ConfigMap or
+restarting its shared router. An `AgentgatewayPolicy` Gateway API CRD does not
+configure Substrate's static agentgateway sidecar.
 
-### Why agentgateway, and which one?
+## Prerequisites
 
-The Substrate installer selects the existing agentgateway **dataplane sidecar**
-for `atenet-router` (and for `atenet-egress`). It is configured by
-`manifests/ate-install/components/agentgateway/configmap.yaml`, not by a
-Gateway API `AgentgatewayPolicy` CRD. Its `substrateIngress` route is already
-the point that wakes Actors. Extend that route with an `extAuthz` policy only
-after verifying that authorization executes **before** `substrateIngress`;
-if the order cannot be guaranteed, put an independently deployed agentgateway
-OSS Gateway API `Gateway`/`HTTPRoute` with `AgentgatewayPolicy.spec.traffic.extAuth`
-in front of `atenet-router` instead. The second gateway's adapter makes the
-decision before the request ever reaches Substrate's router. These are two
-different configuration surfaces; do not apply a Gateway API policy to the
-Substrate sidecar and assume it took effect.
+- A working Substrate cluster with the [counter demo](https://github.com/agent-substrate/substrate/blob/main/demos/counter/README.md), `kubectl-ate`, and permission to create an isolated namespace, two demo service accounts, and a TokenReview ClusterRole/Binding.
+- `kubectl`, `helm`, Python 3, Docker with Buildx, and a registry to which you can push an adapter image. Keep your current Kubernetes context pointed at the intended cluster; the commands below create resources there.
+- Kubernetes PodCertificate and ClusterTrustBundle support as used by the installed Substrate API. The adapter mounts the same service-DNS trust bundle and calls `api.ate-system.svc:443` with a projected service-account JWT for audience `api.ate-system.svc`. The default Substrate auth configuration trusts that audience; if yours does not, configure the adapter and server to agree first.
 
-For either approach, restrict direct access to `atenet-router` (including its
-CONNECT listeners). Otherwise clients can bypass the policy by talking to the
-router directly. HTTPS/mTLS, Service exposure, and NetworkPolicies need an
-explicit threat-model review before calling the result secure.
+All commands in this guide run from `substrate/policy-and-permission/openfga/`
+in this repository, except where a command explicitly says to use the
+Substrate checkout. On kind, to install Substrate with agentgateway as its
+dataplane, use `./hack/install-ate-kind.sh --deploy-ate-system
+--atenet-router=agentgateway` **from the Substrate checkout**. Do not run its
+cluster-creation script against an existing kind cluster: it recreates the
+selected cluster. This lab also works when Substrate uses its default Envoy
+dataplane; the *front* gateway remains OSS agentgateway in either case.
 
-## Scenario and OpenFGA model
+## 1. Create the Actors and OpenFGA
 
-Start with the [counter demo](https://github.com/agent-substrate/substrate/blob/main/demos/counter/README.md):
-create two counter Actors, `tool-a` and `tool-b`, in `ate-demo-counter`. Use a
-human caller `user:alice` for phase 1. Later add a `planner` Actor as a caller
-for phase 2. Use **Substrate Actor metadata UIDs**, not `atespace/name`, as
-OpenFGA Actor IDs: a deleted Actor recreated with the same name must not inherit
-the old Actor's grants. The target name from the routing header is only a lookup
-key; the adapter resolves it against the Substrate API and checks the returned
-UID. Do not trust a client-supplied UID.
+Install the counter fixture if it is not already present (from the Substrate
+checkout, use the installer appropriate to your cluster; on kind:
+`./hack/install-ate-kind.sh --deploy-demo-counter`). Then run:
 
-Proposed OpenFGA DSL (schema 1.1):
-
-```fga
-model
-  schema 1.1
-
-type user
-
-type actor
-  relations
-    define allowed_caller: [user, actor]
-    define can_invoke: allowed_caller
+```sh
+kubectl ate create actor tool-a -a ate-demo-counter --template counter
+kubectl ate create actor tool-b -a ate-demo-counter --template counter
+kubectl ate get actor tool-a -a ate-demo-counter -o json
+kubectl ate get actor tool-b -a ate-demo-counter -o json
 ```
 
-For illustration, substitute actual UIDs read from
-`kubectl ate get actor <name> -a ate-demo-counter -o yaml`:
+Creation leaves Actors suspended. This lab addresses each Actor by its
+Substrate-generated metadata UID in OpenFGA, so reusing an Actor's name after
+deletion does not inherit its permissions.
 
-```yaml
-- user: user:alice
-  relation: allowed_caller
-  object: actor:<tool-a-uid>
-- user: actor:<planner-uid>
-  relation: allowed_caller
-  object: actor:<tool-a-uid>
+Deploy OpenFGA v1.21.0 with Helm chart 0.3.15 and a single in-memory replica:
+
+```sh
+make setup
+kubectl -n openfga-actors get pods
 ```
 
-The second tuple is for phase 2 only. The corresponding Check requests are:
+`make setup` creates only the lab namespace and its Helm release. The in-memory
+store is intentionally disposable: if the OpenFGA pod restarts, rerun the
+bootstrap and then run
+`kubectl -n openfga-actors rollout restart deployment/openfga-actors-auth`
+so the adapter picks up the new store/model IDs.
+Do not expose this unauthenticated OpenFGA Service outside the cluster. For a
+persistent deployment, replace the in-memory datastore with a separately
+configured persistent OpenFGA backend.
 
-```text
-Check(user="user:alice", relation="can_invoke", object="actor:<tool-a-uid>") -> true
-Check(user="user:alice", relation="can_invoke", object="actor:<tool-b-uid>") -> false
-Check(user="actor:<planner-uid>", relation="can_invoke", object="actor:<tool-a-uid>") -> true (phase 2)
+Port-forward OpenFGA in a **second terminal**:
+
+```sh
+kubectl -n openfga-actors port-forward svc/openfga 8082:8080
 ```
 
-Keep the first model small. A subsequent chapter could grant a whole Atespace
-access through a parent relationship, but individual grants make the allow,
-deny, and revocation behavior much easier to demonstrate. Store/model IDs and
-tuple writes are operator-owned; pin the model ID used for checks and test the
-model with OpenFGA's `fga model test` before loading real relationships.
+Back in the first terminal, bootstrap the store, model, and Alice's one grant:
 
-## Lab implementation
+```sh
+python3 bootstrap.py
+python3 manage.py check alice tool-a  # allowed: true
+python3 manage.py check alice tool-b  # allowed: false
+```
 
-1. Bring up Substrate with the agentgateway dataplane and deploy the counter
-   fixture. For a disposable kind environment, follow the Substrate README's
-   cluster creation instructions first, then from the Substrate checkout run:
+`bootstrap.py` reads the live Actor UIDs via `kubectl ate`, writes the model in
+[`model.json`](openfga/model.json), seeds `user:alice` -> `actor:<tool-a-uid>`
+and creates the `openfga-actors-ids` ConfigMap. Run it once per OpenFGA store;
+each invocation creates a new store. The adapter looks up the **current** UID
+via Substrate `GetActor` on every request, not via this bootstrap snapshot.
 
-   ```sh
-   ./hack/install-ate-kind.sh --deploy-ate-system --atenet-router=agentgateway
-   ./hack/install-ate-kind.sh --deploy-demo-counter
-   kubectl ate create actor tool-a -a ate-demo-counter --template counter
-   kubectl ate create actor tool-b -a ate-demo-counter --template counter
-   kubectl ate get actor tool-a -a ate-demo-counter -o yaml
-   kubectl ate get actor tool-b -a ate-demo-counter -o yaml
-   ```
+## 2. Build and deploy the authorization adapter and gateway
 
-   The installer selects the dataplane at installation time. Do not run the
-   kind cluster creation script on an existing cluster without checking it:
-   that script recreates its selected cluster. On an existing installation,
-   plan the dataplane change separately rather than applying these commands
-   blindly.
+Choose a **new, pullable** registry tag. For example, use your registry path
+and a unique tag rather than overwriting an existing image:
 
-2. Deploy a pinned OpenFGA version and persistent store as Kubernetes
-   infrastructure. Create a store, publish the model above, record its model
-   ID, and write only Alice-to-`tool-a` initially. Keep OpenFGA credentials in
-   a Secret and provide the adapter with a scoped credential and the store and
-   model IDs. Use the existing enterprise ReBAC example linked below for an
-   *adapter pattern*, not for Enterprise CRDs or an unpinned Helm deployment.
+```sh
+export IMAGE="YOUR_REGISTRY/openfga-actors-auth:v0.1.0-unique"
+make build IMAGE="$IMAGE"
+make deploy IMAGE="$IMAGE"
+kubectl -n openfga-actors get deploy,svc
+```
 
-3. Implement a small ext-authz adapter with a bounded request timeout. For
-   phase 1, it must verify the caller's JWT (issuer, signature, audience,
-   expiry), derive a stable subject from trusted claims, parse the untrusted
-   `ate-target-actor` value as `<atespace>/<name>`, fetch the current Actor from
-   `ateapi`, and query OpenFGA with its UID. Return allow only for an explicit
-   positive Check. Invalid credentials are unauthenticated; missing permission
-   is forbidden; OpenFGA or Substrate lookup failures fail closed. Never accept
-   `x-actor-id`, `x-user`, or the routing header as proof of caller identity.
-   Authenticate the adapter's connections to `ateapi` using Substrate's
-   supported credentials. If implementing an HTTP instead of gRPC ext-authz
-   adapter, use the matching agentgateway protocol configuration and validate
-   its request/response contract against the version deployed.
+`make build` pushes a multi-architecture image. `make deploy` uses the image
+reference to apply the adapter Deployment and the pinned agentgateway v1.5.0
+Deployment. The adapter is in
+[`adapter/server.py`](openfga/adapter/server.py); its wire-compatible subset of
+Substrate `GetActor` is in
+[`adapter/ateapi_subset.proto`](openfga/adapter/ateapi_subset.proto).
+Confirm those proto field numbers against the Substrate checkout if using a
+different API revision.
 
-4. Attach the adapter to the Substrate agentgateway ingress route ahead of
-   resume. The existing route already has `substrateIngress` under `policies`
-   in `manifests/ate-install/components/agentgateway/configmap.yaml` (ordinary
-   and CONNECT-reentered routes). Protect **both** paths, or deliberately
-   disable the CONNECT listener for this lab. Keep the stock
-   `substrateIngress` and dynamic `atunnel` backend behavior intact. Verify
-   policy execution order in the pinned agentgateway build by denying a call
-   to a suspended Actor and observing that it remains suspended; a config
-   schema accepting both policies is not proof of their execution order. If
-   that fails, use the separate OSS gateway described above, with access to
-   the underlying router restricted to that gateway.
+The gateway configuration in [`gateway.yaml`](openfga/gateway.yaml) forwards
+`authorization` and `ate-target-actor` **to extAuthz**, then removes the
+client's bearer token before the request reaches the Actor. The adapter calls
+the Kubernetes TokenReview API with audience `openfga-actors`; only the
+`openfga-actors/alice` and `openfga-actors/bob` service accounts are recognized.
+It fails closed if OpenFGA or Substrate is unavailable. The gateway itself
+also denies when the adapter is unavailable. Its HTTP ext-authz timeout is
+10 seconds so three backend lookups can complete on a cold connection.
 
-5. Exercise the table below by making requests through the **protected**
-   gateway endpoint. A request to the existing Substrate router uses
-   `ate-target-actor: ate-demo-counter/tool-a` or `/tool-b`. The public gateway
-   must preserve or derive that target only after its own authentication and
-   policy check; it must not let callers change it after the decision. For a
-   JWT-authenticated test client, supply `Authorization: Bearer <token>` over
-   HTTPS. Capture the adapter decision and the Actor state before/after each
-   request; do not rely on the HTTP status alone.
+Port-forward the **lab** gateway in a third terminal:
 
-| Test | Expected result |
-| --- | --- |
-| Alice -> suspended `tool-a` | Allow, `ResumeActor`, counter increments. |
-| Alice -> suspended `tool-b` | Deny, no resume, counter unchanged. |
-| Missing/forged JWT or caller-ID header | Deny; header does not create an identity. |
-| Remove Alice -> `tool-a` tuple | Next request denied without a rollout. |
-| Restore tuple, suspend `tool-a`, call again | Allowed; counter state survives a full snapshot restore, possibly on another worker. |
-| Delete and recreate `tool-a` under the same name | Denied until a tuple is granted for its new UID. |
-| Stop OpenFGA | Fail closed; no target wakes. |
-| Call the underlying router directly | Must be blocked by deployment access controls. |
-| CONNECT ingress, if enabled | Same authorization and no-wake-on-deny behavior. |
+```sh
+kubectl -n openfga-actors port-forward svc/openfga-actors-gateway 18080:8080
+```
 
-Substrate does not automatically suspend an idle Actor. Use
-`kubectl ate suspend actor tool-a -a ate-demo-counter` when setting up the wake tests, and check its
-state before issuing the next request. If you use the same one-worker pool for
-both counters, suspend the running Actor before attempting to wake the other.
+## 3. Run the allow / deny / revoke demonstration
 
-## Phase 2: real Actor-to-Actor permission
+Issue two short-lived tokens for the lab's Kubernetes service accounts:
 
-The `planner` Actor can send HTTP to another Actor through the router, but
-today Substrate's ingress treats request headers as untrusted, and its egress
-gateway's authenticated Actor identity is **not propagated to ingress**. The
-current `ActorIdentity.MintJWT` endpoint does not yet cross-check the caller
-against the requested Actor. Do not demonstrate Actor-to-Actor security by
-having the planner set `x-actor-id: planner`.
+```sh
+ALICE_TOKEN=$(kubectl -n openfga-actors create token alice --audience=openfga-actors)
+BOB_TOKEN=$(kubectl -n openfga-actors create token bob --audience=openfga-actors)
+```
 
-To implement the second phase, bridge the **verified** egress identity
-(Actor UID from the certificate and a live-Actor lookup) into the ingress
-authorization request through a trusted, non-spoofable channel. For example,
-have a trusted gateway component issue a short-lived, audience-bound assertion
-to ingress after verifying the egress certificate; ingress must validate the
-assertion and never accept caller-supplied versions of it. Bind the target
-reference to the check, prevent direct router bypass, and test replay,
-spoofing, UID rotation, and a caller that is no longer RUNNING. This bridge is
-**new work**: the existing agentgateway `substrateEgress` authentication policy
-does not by itself implement peer authorization.
+Keep these tokens out of files and logs. Send the **same** POST the counter
+demo uses, but through the protected gateway:
 
-Once the identity bridge exists, write the `planner` -> `tool-a` tuple and
-repeat the allow/deny/revoke tests with the planner making the call. The
-OpenFGA model already supports an Actor as a subject; the missing piece is a
-trusted proof that the request came from that Actor. This distinction is the
-main teaching point of the second phase.
+```sh
+curl -i -X POST -H "Authorization: Bearer $ALICE_TOKEN" \
+  -H 'ate-target-actor: ate-demo-counter/tool-a' http://127.0.0.1:18080/
+kubectl ate get actor tool-a -a ate-demo-counter
+```
 
-## Cleanup and limitations
+Expected: `200`, incremented counter, `tool-a` RUNNING. Now show that
+permission is selective (suspend `tool-a` first if the shared WorkerPool has
+only one worker):
 
-Remove only this lab's Actors, grants, model/store, adapter and OpenFGA
-resources, and any lab-specific gateway configuration. Delete or suspend
-running Actors according to the installed `kubectl-ate` CLI's requirements;
-do not tear down a shared Substrate installation. Never run a blanket cluster
-cleanup command against an existing cluster. The prototype is HTTP request
-authorization, not general authorization for the `ateapi` Control RPCs,
-snapshot storage, or arbitrary non-HTTP Actor traffic. On long-lived streams,
-the decision is made at admission; revocation does not retroactively close an
-established connection.
+```sh
+kubectl ate suspend actor tool-a -a ate-demo-counter
+curl -i -X POST -H "Authorization: Bearer $ALICE_TOKEN" \
+  -H 'ate-target-actor: ate-demo-counter/tool-b' http://127.0.0.1:18080/
+kubectl ate get actor tool-b -a ate-demo-counter
+curl -i -X POST -H "Authorization: Bearer $BOB_TOKEN" \
+  -H 'ate-target-actor: ate-demo-counter/tool-a' http://127.0.0.1:18080/
+```
 
-## References
+Expected: both calls return `403`, and `tool-b` stays SUSPENDED. Calling with
+no bearer token returns `401`. No denied request should cause a Substrate
+`ResumeActor` event. Changing an `x-user` header must not change the result.
 
-- [Substrate agentgateway ingress configuration](https://github.com/agent-substrate/substrate/blob/main/manifests/ate-install/components/agentgateway/configmap.yaml) and [egress demo/dataplane selection](https://github.com/agent-substrate/substrate/blob/main/demos/egress/README.md).
-- [Substrate router trust boundaries](https://github.com/agent-substrate/substrate/blob/main/cmd/atenet/internal/router/README.md) and [authentication limitations](https://github.com/agent-substrate/substrate/blob/main/docs/authentication.md).
-- [agentgateway standalone configuration schema](https://agentgateway.dev/schema/config) (`extAuthz` and `substrateIngress` route policies); [OSS Kubernetes policy example](https://github.com/agentgateway/agentgateway/tree/main/controller/test/e2e/testdata) (verify the installed CRD before applying an example).
-- [OpenFGA modeling](https://openfga.dev/docs/modeling/getting-started), [Check API](https://openfga.dev/docs/getting-started/perform-check), and [model tests](https://openfga.dev/docs/modeling/testing).
-- [Existing OpenFGA adapter example in this repo](../../agentgateway-enterprise/security/authz/rebac/mcp-rebac-demo/) uses Enterprise-specific policies; do not apply them to agentgateway OSS.
+Grant Bob access and then revoke Alice's access (the OpenFGA port-forward from
+step 1 must still be running):
+
+```sh
+python3 manage.py grant bob tool-b
+curl -i -X POST -H "Authorization: Bearer $BOB_TOKEN" \
+  -H 'ate-target-actor: ate-demo-counter/tool-b' http://127.0.0.1:18080/
+kubectl ate suspend actor tool-b -a ate-demo-counter
+python3 manage.py revoke alice tool-a
+curl -i -X POST -H "Authorization: Bearer $ALICE_TOKEN" \
+  -H 'ate-target-actor: ate-demo-counter/tool-a' http://127.0.0.1:18080/
+```
+
+Expected: Bob's new grant permits the wake; Alice's revoked call returns
+`403` while `tool-a` stays suspended. Re-grant Alice, call again, and compare
+the counter: its in-memory and durable counts survive Substrate's full-state
+snapshot, regardless of which worker executes the Actor.
+
+```sh
+python3 manage.py grant alice tool-a
+curl -i -X POST -H "Authorization: Bearer $ALICE_TOKEN" \
+  -H 'ate-target-actor: ate-demo-counter/tool-a' http://127.0.0.1:18080/
+```
+
+## Verify locally and clean up
+
+The following checks run locally without changing your cluster. Only the
+explicitly named temporary containers are started; the `docker stop` command
+removes them because they were started with `--rm`:
+
+```sh
+make test
+docker run --rm -d --name openfga-actors-local -p 18082:8080 \
+  openfga/openfga:v1.21.0 run --datastore-engine memory
+python3 integration_test.py
+docker stop openfga-actors-local
+docker run --rm cr.agentgateway.dev/agentgateway:v1.5.0 --validate-only \
+  -c "$(kubectl create --dry-run=client -f gateway.yaml -o jsonpath='{.data.config\.yaml}')"
+kubectl apply --dry-run=client \
+  -f namespace.yaml -f auth.yaml -f gateway.yaml
+```
+
+If the lab port-forward is still using `8082`, local model verification uses
+`18082` so the two do not conflict. `make test` builds and runs adapter unit
+tests; `integration_test.py` creates a disposable OpenFGA store and checks
+grant, deny, cross-target deny and revocation. To remove **only the lab
+resources you created** after stopping the port-forwards:
+
+```sh
+kubectl ate suspend actor tool-a -a ate-demo-counter  # only if running
+kubectl ate suspend actor tool-b -a ate-demo-counter  # only if running
+kubectl ate delete actor tool-a -a ate-demo-counter
+kubectl ate delete actor tool-b -a ate-demo-counter
+make clean
+```
+
+`make clean` deletes the lab gateway/adapter, the lab TokenReview binding,
+the `openfga` Helm release, and the dedicated `openfga-actors` namespace. It
+does not uninstall Substrate or the shared counter template/pool.
+
+## Actor-to-Actor extension
+
+OpenFGA's model permits `actor:<planner-uid>` as the subject of an
+`allowed_caller` relationship. **Do not use an Actor-controlled header to
+demonstrate that grant.** Substrate currently authenticates the outbound
+Actor at its egress gateway using a certificate and live-Actor lookup, but
+does not convey that verified caller identity to ingress. A real peer-call
+extension needs a trusted identity bridge between those gateways before the
+adapter can use `actor:<planner-uid>` as its subject. Substrate's existing
+`MintJWT` endpoint does not yet verify that the requester owns the claimed
+Actor. This lab's executable test uses Kubernetes-authenticated human/demo
+principals; the Actor relationship is a next integration step, not a property
+of this deployment.
+
+## Scope
+
+The lab gateway Service is ClusterIP and reached from your machine via
+port-forward. **Direct access to `atenet-router` bypasses this lab gateway**;
+restrict it with cluster network policy and external exposure controls before
+using this pattern as an actual security boundary. Likewise, protect
+OpenFGA's API and tuple-write credentials outside this isolated lab. This
+configuration gates ordinary HTTP requests, not Substrate Control RPCs or
+the separate CONNECT ingress listener. Check the pinned [agentgateway
+configuration schema](https://agentgateway.dev/schema/config), [Substrate's
+router trust model](https://github.com/agent-substrate/substrate/blob/main/cmd/atenet/internal/router/README.md), and [OpenFGA Check
+API](https://openfga.dev/docs/getting-started/perform-check) if adapting it
+to another deployment.
