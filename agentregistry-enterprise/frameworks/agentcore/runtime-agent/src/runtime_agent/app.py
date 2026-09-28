@@ -1,16 +1,19 @@
 """HTTP Strands agent for AgentCore Runtime.
 
-AgentRegistry's chat UI posts ``{"prompt": "<user text>"}`` and reads a
-string ``{"output": "<reply>"}``. This app also accepts the nested
-``{"input": {"prompt": "..."}}`` shape used by curl.
+AgentRegistry chat sends the user text as a plain-text body. Curl and the
+harness path send JSON ``{"prompt": "<user text>"}``. Both are accepted.
+
+The reply is plain text. A JSON object body is shown in the chat UI as a
+tool card ("Unknown Source") because the UI treats JSON objects as data parts.
 """
 
 import logging
 import os
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, ValidationError
 from strands import Agent
 from strands.models import BedrockModel
 
@@ -41,8 +44,25 @@ class InvocationBody(BaseModel):
     text: str | None = None
 
 
+def prompt_from_body(raw: bytes) -> str:
+    """Read a prompt from JSON or from the plain text AgentRegistry chat sends.
+
+    Non-harness HTTP agents receive the A2A text part unchanged, with
+    content type text/plain. Declaring a JSON body model turns that into
+    FastAPI's 422, which AgentCore surfaces as a 424.
+    """
+    text = raw.decode("utf-8", errors="replace").strip()
+    if not text:
+        return ""
+    try:
+        body = InvocationBody.model_validate_json(text)
+    except (ValidationError, ValueError):
+        return text
+    return extract_prompt(body)
+
+
 def extract_prompt(body: InvocationBody) -> str:
-    """Pull user text out of the payload shapes AgentRegistry and curl send."""
+    """Pull user text out of the JSON payload shapes."""
     if isinstance(body.prompt, str) and body.prompt.strip():
         return body.prompt.strip()
     if isinstance(body.input, str) and body.input.strip():
@@ -99,10 +119,8 @@ def ping() -> dict[str, str]:
     return {"status": "Healthy"}
 
 
-@app.post("/invocations")
-def invoke(body: InvocationBody) -> dict[str, str]:
-    """Run one conversational turn and return ``{"output": "<text>"}``."""
-    prompt = extract_prompt(body)
+def run_prompt(prompt: str) -> str:
+    """Run one conversational turn and return the reply text."""
     if not prompt:
         raise HTTPException(status_code=400, detail="provide a non-empty prompt")
     try:
@@ -110,4 +128,10 @@ def invoke(body: InvocationBody) -> dict[str, str]:
     except Exception as error:
         logger.exception("Agent invocation failed")
         raise HTTPException(status_code=500, detail="agent invocation failed") from error
-    return {"output": reply_text(result.message)}
+    return reply_text(result.message)
+
+
+@app.post("/invocations", response_class=PlainTextResponse)
+async def invoke(request: Request) -> PlainTextResponse:
+    """Accept plain text or a JSON prompt envelope and answer in plain text."""
+    return PlainTextResponse(run_prompt(prompt_from_body(await request.body())))

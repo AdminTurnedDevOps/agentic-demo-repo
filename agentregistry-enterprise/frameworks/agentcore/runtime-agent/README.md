@@ -4,9 +4,11 @@ A Strands agent that Agentregistry deploys to **AgentCore Runtime**. It is a rea
 
 The container speaks the contract Agentregistry's chat UI already uses:
 
-- `POST /invocations` with `{"prompt":"<user text>"}`
-- response `{"output":"<reply text>"}`
+- `POST /invocations` with the chat text as a plain body, or JSON `{"prompt":"<user text>"}`
+- response is the reply as plain text, not a JSON object
 - `GET /ping`
+
+AgentRegistry chat forwards the message as plain text. A JSON-only handler rejects that with HTTP 422, and AgentCore reports it as a 424.
 
 Nested `{"input":{"prompt":"..."}}` is also accepted.
 
@@ -24,8 +26,8 @@ AgentCore requires a Linux ARM64 image.
 ```bash
 export AWS_REGION=us-east-1
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export ECR_REPOSITORY=agentregistry/runtime-agent
-export IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:0.1.0"
+export ECR_REPOSITORY=mlevan/runtime-agent
+export IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:0.1.2"
 
 aws ecr describe-repositories --region "$AWS_REGION" \
   --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || \
@@ -46,7 +48,7 @@ arctl apply -f agent.yaml
 arctl apply -f deploy.yaml
 ```
 
-`deploy.yaml` targets `Runtime` `AWS`. Change `runtimeRef.name` if yours is different.
+`deploy.yaml` targets `Runtime` `aws`. Change `runtimeRef.name` if yours is different.
 
 Chat from the AgentRegistry instance page. Ask "what time is it?" or "what is (12 + 8) / 4" to exercise the tools.
 

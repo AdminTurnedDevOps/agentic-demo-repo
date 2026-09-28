@@ -9,4 +9,4 @@ spec:
   targetRef:
     kind: Agent
     name: runtime-agent
-    tag: "0.1.0"
+    tag: "0.1.2"

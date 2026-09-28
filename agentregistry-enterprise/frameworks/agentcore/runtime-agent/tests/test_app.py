@@ -2,8 +2,16 @@ import ast
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
-from runtime_agent.app import InvocationBody, extract_prompt, invoke, reply_text
+from runtime_agent.app import (
+    InvocationBody,
+    app,
+    extract_prompt,
+    prompt_from_body,
+    reply_text,
+    run_prompt,
+)
 from runtime_agent.tools import _eval, calculate, current_time
 
 
@@ -41,9 +49,17 @@ def test_current_time_is_utc() -> None:
     assert current_time().endswith("+00:00")
 
 
+def test_prompt_from_plain_text() -> None:
+    assert prompt_from_body(b"hi") == "hi"
+
+
+def test_prompt_from_json_envelope() -> None:
+    assert prompt_from_body(b'{"prompt":"hi"}') == "hi"
+
+
 def test_invoke_requires_prompt() -> None:
     with pytest.raises(HTTPException) as error:
-        invoke(InvocationBody())
+        run_prompt("")
     assert error.value.status_code == 400
 
 
@@ -57,4 +73,24 @@ def test_invoke_returns_string_output(monkeypatch: pytest.MonkeyPatch) -> None:
             return _Result()
 
     monkeypatch.setattr("runtime_agent.app.get_agent", lambda: _Agent())
-    assert invoke(InvocationBody(prompt="2+2")) == {"output": "four"}
+    assert run_prompt("2+2") == "four"
+
+
+def test_plain_text_invocation_is_not_422(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Result:
+        message = {"role": "assistant", "content": [{"text": "hello"}]}
+
+    class _Agent:
+        def __call__(self, prompt: str) -> _Result:
+            assert prompt == "hi"
+            return _Result()
+
+    monkeypatch.setattr("runtime_agent.app.get_agent", lambda: _Agent())
+    response = TestClient(app).post(
+        "/invocations",
+        content=b"hi",
+        headers={"content-type": "text/plain; charset=utf-8"},
+    )
+    assert response.status_code == 200
+    assert response.text == "hello"
+    assert response.headers["content-type"].startswith("text/plain")
