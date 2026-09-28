@@ -5,7 +5,7 @@ metadata:
 spec:
   runtimeRef:
     kind: Runtime
-    name: AWS
+    name: aws
   targetRef:
     kind: Agent
     name: runtime-agent

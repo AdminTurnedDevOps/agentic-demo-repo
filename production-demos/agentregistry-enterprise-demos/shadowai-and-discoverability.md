@@ -44,3 +44,11 @@ AgentCore runtime programmatically: https://github.com/solo-io/field-agentic-lab
 ## Cataloging Of Agentic Resources
 
 - Show how to see/create resources within the **Catalog** tab
+
+## Access Policy
+
+1. Open Access Policies in the dashboard
+2. See the configuration that's available
+3. Log out
+4. Log in with `mlevan-svc`
+5. Show whats available with the "read-only" user.
