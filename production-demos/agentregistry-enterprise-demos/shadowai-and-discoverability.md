@@ -75,7 +75,7 @@ The pipeline runs as **mlevan-svc**, the non-admin user from [HITL](#hitl), so i
 Add the API URL as a repo secret (run from the repo that holds the workflow):
 
 ```bash
-gh secret set ARCTL_API_BASE_URL --body "http://34.138.72.241:12121"
+gh secret set ARCTL_API_BASE_URL --body "http://$YOUR_AGENTREGISTRY_URL$:12121"
 ```
 
 ### Before each demo: refresh the token secret
