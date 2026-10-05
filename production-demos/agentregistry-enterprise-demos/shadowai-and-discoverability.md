@@ -52,3 +52,14 @@ AgentCore runtime programmatically: https://github.com/solo-io/field-agentic-lab
 3. Log out
 4. Log in with `mlevan-svc`
 5. Show whats available with the "read-only" user.
+
+## Resource Deployment
+
+Two methods:
+
+1. Via the UI
+2. With `arctl`
+
+For example, with `arctl`, you can use the agentregistry API to add Prompts, Skills, etc. to the catalog (along with runtimes and any other object in agentregistry)
+
+![example](https://github.com/solo-io/field-agentic-labs/blob/main/agentregistry-enterprise/040-prompts.md)
