@@ -1,0 +1,49 @@
+name: agentregistry-apply
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ARCTL_VERSION: v2026.9.0
+  ARCTL_API_BASE_URL: ${{ secrets.ARCTL_API_BASE_URL }}
+  ARCTL_API_TOKEN: ${{ secrets.ARCTL_API_TOKEN }}
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install arctl
+        run: |
+          curl -fsSL https://storage.googleapis.com/agentregistry-enterprise/install.sh | ARCTL_VERSION="${ARCTL_VERSION}" sh
+          echo "${HOME}/.arctl/bin" >> "${GITHUB_PATH}"
+
+      - name: Show pipeline identity
+        run: arctl user whoami
+
+      - name: Write the Prompt manifest
+        run: |
+          cat > "${RUNNER_TEMP}/prompt.yaml" <<'EOF'
+          apiVersion: ar.dev/v1alpha1
+          kind: Prompt
+          metadata:
+            name: cicd-demo-prompt
+            tag: "1.0.0"
+          spec:
+            description: "Delivered by GitHub Actions; approved by a registry admin"
+            content: |
+              You are an internal IT helpdesk assistant.
+              Escalate anything involving credentials to a human.
+          EOF
+
+      - name: Dry run (pull request)
+        if: github.event_name == 'pull_request'
+        run: arctl apply --dry-run -f "${RUNNER_TEMP}/prompt.yaml"
+
+      - name: Apply (main)
+        if: github.event_name != 'pull_request'
+        run: arctl apply -f "${RUNNER_TEMP}/prompt.yaml"

@@ -66,7 +66,57 @@ For example, with `arctl`, you can use the agentregistry API to add Prompts, Ski
 
 ## CICD
 
+The below will go over how to create access and deployment for CICD via GitHub Actions.
+
+### Setup (one time)
+
+The pipeline runs as **mlevan-svc**, the non-admin user from [HITL](#hitl), so its applies are staged for approval. No new Entra app is needed: the pipeline uses a short-lived mlevan-svc access token stored as a repo secret.
+
+Add the API URL as a repo secret (run from the repo that holds the workflow):
+
+```bash
+gh secret set ARCTL_API_BASE_URL --body "http://34.138.72.241:12121"
+```
+
+### Before each demo: refresh the token secret
+
+The access token expires after about an hour, so do this shortly before you demo.
+
+1. Get a token with the device-code login [here](https://github.com/AdminTurnedDevOps/agentic-demo-repo/blob/main/agentregistry-enterprise/entra-auth/token-auth.md). The script exports `ARCTL_API_TOKEN`.
+2. Confirm it's the right identity: `Superuser` must be `false` and the `HITL_SUBMITTER_GROUP` role must show as `configured`:
+
+   ```bash
+   arctl user whoami
+   ```
+
+3. Store it as the repo secret:
+
+   ```bash
+   gh secret set ARCTL_API_TOKEN --body "${ARCTL_API_TOKEN}"
+   ```
+
+> If the pipeline's **Show pipeline identity** step fails with `401 Unauthorized`, the token expired. Repeat these steps and re-run the workflow.
+
+### Workflow
+
+Go to `.github/workflows/agentregistry-apply.yaml` to see the pipeline
+
+### Demo flow
+
+1. Open GitHub
+2. Go to the repo
+3. Go to Actions
+4. See the pipeline
+
+Once complete, delete the secret. Its encrypted in a GitHub Secret, but no point in leaving it around.
+
+```bash
+gh secret delete ARCTL_API_TOKEN.
+```
+
 ## HITL
+
+The below shows a full approval process/Human-In-The-Loop for creating resources.
 
 ### Access Policy
 
