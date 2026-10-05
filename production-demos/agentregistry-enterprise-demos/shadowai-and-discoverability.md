@@ -63,3 +63,107 @@ Two methods:
 For example, with `arctl`, you can use the agentregistry API to add Prompts, Skills, etc. to the catalog (along with runtimes and any other object in agentregistry)
 
 [example](https://github.com/solo-io/field-agentic-labs/blob/main/agentregistry-enterprise/040-prompts.md)
+
+## CICD
+
+## HITL
+
+### Access Policy
+
+Governance human-in-the-loop: a non-admin can **submit** a catalog change, but nothing reaches the production catalog until a registry admin **approves** it. Every step lands in the audit log.
+
+```bash
+Entra group object ID of the NON-admin demo user
+export HITL_SUBMITTER_GROUP="45cade63-b7a8-401a-b818-5cc06167729b"
+```
+
+Confirm the gate is on (output should be `true`):
+
+```bash
+kubectl -n agentregistry-system get configmap agentregistry-enterprise \
+  -o jsonpath='{.data.REQUIRE_CREATE_APPROVAL}{"\n"}'
+```
+
+Log in as admin and give the submitter group permission to publish prompts. Without `registry:publish` the submission is denied outright, not staged.
+
+```bash
+arctl apply -f - <<EOF
+apiVersion: ar.dev/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: hitl-demo-submitters
+spec:
+  description: "HITL demo - non-admins can submit prompts; approval required"
+  principals:
+    - kind: Role
+      name: "${HITL_SUBMITTER_GROUP}"
+  rules:
+    - actions:
+        - "registry:read"
+        - "registry:publish"
+        - "registry:edit"
+      resources:
+        - kind: prompt
+          name: "*"
+EOF
+```
+
+### 1. Submit as the non-admin user
+
+Log in as the non-admin (use a private browser window for the device-code sign-in so you don't reuse the admin session). You can find the login [here](https://github.com/AdminTurnedDevOps/agentic-demo-repo/blob/main/agentregistry-enterprise/entra-auth/token-auth.md)
+
+Check the user to ensure its not the admin user
+
+```bash
+arctl user whoami
+```
+
+Submit a prompt:
+
+```bash
+arctl apply -f - <<'EOF'
+apiVersion: ar.dev/v1alpha1
+kind: Prompt
+metadata:
+  name: hitl-demo-prompt
+  tag: "1.0.0"
+spec:
+  description: "HITL demo - submitted by a non-admin, needs approval"
+  content: |
+    You are a customer support assistant.
+    Never share account numbers or internal ticket IDs.
+EOF
+```
+
+Expected output: the change is **staged**, not created:
+
+```text
+✓ Prompt/hitl-demo-prompt (1.0.0) staged
+```
+
+Show it isn't in the production catalog (shoudl show `resource not found`):
+
+```bash
+arctl get prompt hitl-demo-prompt --tag "1.0.0"
+```
+
+### 2. Approve as admin
+
+**UI path:**
+1. Log in as the admin
+2. Note the notifications bell in the top bar (pending requests)
+3. Go to **Catalog**, find `hitl-demo-prompt`, and click **Approve**
+
+Expected: `"status": "approved"` for the item.
+
+### 3. Show the audit trail
+
+Every submit, approve, revoke, and withdraw is emitted as an `approval` audit event (submitter, approver, resource, state):
+
+```bash
+kubectl -n agentregistry-system logs deploy/agentregistry-audit-debug --since=30m \
+  | grep -A16 'event.activity: Str(approval)' \
+  | grep -E 'event\.action|approval\.(state|submitter)|actor\.name|resource\.(kind|name|tag)'
+```
+
+Look for `event.action: Str(submit)` from the non-admin, then `Str(approve)` (and `Str(revoke)` if you ran step 3) from the admin.
