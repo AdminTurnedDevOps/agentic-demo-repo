@@ -1,0 +1,42 @@
+# Scene 5: cost and runaway control.
+# A per-member token rate limit on model calls: each member (jwt.sub) gets
+# 25,000 input tokens per minute across every agent acting for them. A normal
+# claim uses about 14,000. A looping agent trips it within seconds and gets 429.
+apiVersion: ratelimit.solo.io/v1alpha1
+kind: RateLimitConfig
+metadata:
+  name: claims-member-tokens
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  raw:
+    descriptors:
+      - key: member
+        rateLimit:
+          unit: MINUTE
+          requestsPerUnit: 25000
+    rateLimits:
+      - actions:
+          - cel:
+              expression: 'jwt.sub'
+              key: member
+        type: TOKEN
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-llm-token-limit
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: claims-llm
+  traffic:
+    entRateLimit:
+      global:
+        rateLimitConfigRefs:
+          - name: claims-member-tokens

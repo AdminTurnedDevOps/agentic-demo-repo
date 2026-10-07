@@ -1,0 +1,42 @@
+# One gateway for every call the agent makes: MCP tools and the model.
+# ClusterIP only: the agent is in-cluster and demo scripts use port-forward.
+# One replica so failover health state and the audit log live in one pod.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayParameters
+metadata:
+  name: claims-gateway-config
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  logging:
+    level: info
+    format: json
+  service:
+    spec:
+      type: ClusterIP
+  deployment:
+    spec:
+      replicas: 1
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: claims-gateway
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  gatewayClassName: enterprise-agentgateway
+  infrastructure:
+    parametersRef:
+      group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayParameters
+      name: claims-gateway-config
+  listeners:
+    - name: http
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same

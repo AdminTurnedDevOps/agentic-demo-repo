@@ -1,0 +1,55 @@
+# Scene 6: the audit record. One structured access-log line per MCP tool call
+# and per model call, plus traces to the Solo Enterprise telemetry collector.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-gateway-audit
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: claims-gateway
+  frontend:
+    accessLog:
+      attributes:
+        add:
+          - name: audit.member
+            expression: 'default(jwt.sub, "none")'
+          - name: audit.agent
+            expression: 'has(jwt.act) ? jwt.act.sub : ("x-agent-name" in request.headers ? request.headers["x-agent-name"] + " (declared)" : "none")'
+          - name: audit.token_issuer
+            expression: 'default(jwt.iss, "none")'
+          - name: audit.mcp_method
+            expression: 'default(mcp.methodName, "")'
+          - name: audit.tool
+            expression: 'default(mcp.tool.name, "")'
+          - name: audit.tool_args
+            expression: 'has(mcp.tool) && has(mcp.tool.arguments) ? toJson(mcp.tool.arguments) : ""'
+          - name: audit.submission
+            expression: 'default(mcp.tool.arguments.submission_id, "")'
+          - name: audit.member_record
+            expression: 'default(mcp.tool.arguments.member_id, "")'
+          - name: audit.model_requested
+            expression: 'default(llm.requestModel, "")'
+          - name: audit.model_served
+            expression: 'default(llm.responseModel, "")'
+          - name: audit.provider
+            expression: 'default(llm.provider, "")'
+          - name: audit.tokens
+            expression: 'default(llm.totalTokens, 0)'
+          - name: audit.cost_usd
+            expression: 'default(llm.cost.total, 0.0)'
+          - name: audit.status
+            expression: 'response.code'
+    tracing:
+      backendRef:
+        group: ""
+        kind: Service
+        name: solo-enterprise-telemetry-collector
+        namespace: agentgateway-system
+        port: 4317
+      protocol: GRPC
+      randomSampling: "true"

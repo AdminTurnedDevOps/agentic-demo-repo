@@ -1,0 +1,18 @@
+# Generic wording. Add the five initiative names under "Where we are" if you want them on screen.
+# Lines starting with # are not shown.
+Where we are
+  - Agent Gateway is selected. The enterprise rollout is not operational yet.
+  - Five named initiatives are waiting on this rollout.
+
+Open items, plainly
+  - Workload identity. Today the agent proves who it is with its Kubernetes
+    service account, and tool calls carry a 5-minute token for "this member,
+    via this agent". Mesh-issued workload identity (SPIFFE / proof-of-possession
+    tokens) is not deployed, and model calls only carry a self-declared agent
+    name. That needs a topology decision.
+  - The Arize rollout (part 2) is an open item.
+
+The asks
+  1. Fund the rollout.
+  2. Name an owner.
+  3. Confirm the topology and the workload identity approach.

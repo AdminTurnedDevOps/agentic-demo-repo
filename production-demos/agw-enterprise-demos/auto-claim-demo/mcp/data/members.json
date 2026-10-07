@@ -1,0 +1,60 @@
+[
+  {
+    "member_id": "M-1001",
+    "name": "Dana Whitfield",
+    "date_of_birth": "1984-03-17",
+    "ssn": "078-05-1120",
+    "phone": "(512) 555-0142",
+    "email": "dana.whitfield@example.com",
+    "payment_card_on_file": "4111 1111 1111 1111",
+    "address": "4410 Ridgeline Dr, Austin, TX 78731",
+    "policy": {
+      "policy_number": "TX-AUTO-GOLD-A41",
+      "tier": "Gold",
+      "status": "active",
+      "effective": "2026-01-01",
+      "expires": "2026-12-31",
+      "vehicle": {
+        "year": 2023,
+        "make": "Subaru",
+        "model": "Outback",
+        "vin": "4S4BTANC5P3112458"
+      },
+      "coverages": {
+        "collision": {"included": true, "deductible_usd": 500},
+        "comprehensive": {"included": true, "deductible_usd": 250},
+        "rental_reimbursement": {"included": true, "per_day_usd": 40, "max_days": 30},
+        "roadside": {"included": true}
+      }
+    }
+  },
+  {
+    "member_id": "M-1002",
+    "name": "Marcus Reyes",
+    "date_of_birth": "1991-11-02",
+    "ssn": "219-09-9999",
+    "phone": "(737) 555-0198",
+    "email": "marcus.reyes@example.com",
+    "payment_card_on_file": "5555 5555 5555 4444",
+    "address": "1802 E 6th St, Austin, TX 78702",
+    "policy": {
+      "policy_number": "TX-AUTO-STD-B07",
+      "tier": "Standard",
+      "status": "active",
+      "effective": "2026-04-15",
+      "expires": "2027-04-14",
+      "vehicle": {
+        "year": 2019,
+        "make": "Toyota",
+        "model": "Tacoma",
+        "vin": "3TMCZ5AN2KM245119"
+      },
+      "coverages": {
+        "collision": {"included": true, "deductible_usd": 1000},
+        "comprehensive": {"included": false, "deductible_usd": null},
+        "rental_reimbursement": {"included": false},
+        "roadside": {"included": true}
+      }
+    }
+  }
+]

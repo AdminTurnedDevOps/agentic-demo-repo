@@ -1,0 +1,8 @@
+# Generic wording. Replace with the real GenAI Audit Finding titles if you have them.
+# Lines starting with # are not shown.
+How this record answers the GenAI Audit Findings
+
+  Attribution     -> every AI action is tied to a member and an acting agent
+  Tool control    -> every tool call shows its arguments and the allow/deny decision
+  Model usage     -> the approved model served, tokens used, and limits enforced (429)
+  Input controls  -> every guardrail rejection is recorded (403, reason Guardrail)

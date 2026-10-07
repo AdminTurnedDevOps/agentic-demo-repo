@@ -1,0 +1,8 @@
+# Rendered manifests and resolved persona IDs (make personas / make render)
+.generated/
+__pycache__/
+*.pyc
+
+# The repo root ignores *.txt*; these are part of the demo
+!mcp/requirements.txt
+!talk/*.txt

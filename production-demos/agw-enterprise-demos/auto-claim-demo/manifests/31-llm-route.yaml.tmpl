@@ -1,0 +1,104 @@
+# Approved models only. Each provider pins its model, so whatever model name
+# the agent asks for, the gateway serves an approved one.
+# Priority group 1: Bedrock. Priority group 2: OpenAI (used when Bedrock is evicted).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata:
+  name: claims-llm
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  ai:
+    groups:
+      - providers:
+          - name: primary-bedrock
+            bedrock:
+              model: ${BEDROCK_MODEL}
+              region: ${BEDROCK_REGION}
+      - providers:
+          - name: fallback-openai
+            openai:
+              model: ${OPENAI_MODEL}
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-llm-primary-auth
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayBackend
+      name: claims-llm
+      sectionName: primary-bedrock
+  backend:
+    auth:
+      aws:
+        secretRef:
+          name: bedrock-secret
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-llm-fallback-auth
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayBackend
+      name: claims-llm
+      sectionName: fallback-openai
+  backend:
+    auth:
+      secretRef:
+        name: openai-secret
+---
+# Evict a provider that fails (5xx, including an unreachable endpoint), then
+# fail over to the next priority group. Only upstream failures count: the
+# gateway's own guardrail 403s and rate-limit 429s must never evict a provider.
+# Health state is per gateway pod.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-llm-failover-health
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayBackend
+      name: claims-llm
+  backend:
+    health:
+      unhealthyCondition: "response.code >= 500"
+      eviction:
+        consecutiveFailures: 1
+        duration: 120s
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: claims-llm
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  parentRefs:
+    - name: claims-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1/chat/completions
+      timeouts:
+        request: "120s"
+      backendRefs:
+        - group: enterpriseagentgateway.solo.io
+          kind: EnterpriseAgentgatewayBackend
+          name: claims-llm

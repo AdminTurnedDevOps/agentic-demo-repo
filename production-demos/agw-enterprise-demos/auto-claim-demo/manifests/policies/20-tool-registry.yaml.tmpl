@@ -1,0 +1,27 @@
+# Scene 3: tool registry and permissions. Rendered by scripts/render.sh, which
+# fills ADJUSTER_SUBS with the Keycloak subject IDs of adjuster-tier users.
+#
+# - Read tools: any member the agent is acting for.
+# - open_claim (a write): adjuster tier only.
+# - Everything else on the server (issue_payment, export_member_records):
+#   not registered, so it is hidden from tools/list and denied on tools/call.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-tool-registry
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayBackend
+      name: claims-mcp
+  backend:
+    mcp:
+      authorization:
+        action: Allow
+        policy:
+          matchExpressions:
+            - 'mcp.tool.name in ["get_member_policy", "check_coverage_rules", "assess_photos", "draft_member_reply"]'
+            - 'mcp.tool.name == "open_claim" && jwt.sub in ${ADJUSTER_SUBS}'

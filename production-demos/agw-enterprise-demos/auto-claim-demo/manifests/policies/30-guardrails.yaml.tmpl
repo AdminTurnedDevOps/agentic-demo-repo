@@ -1,0 +1,72 @@
+# Scene 4: prompt injection and data protection, on every model call.
+#
+# Request side (before anything reaches a model provider):
+#   1. Reject known injection phrasing found in tool output (claim documents).
+#   2. AWS Bedrock Guardrails on user messages and tool output (prompt-attack
+#      filter, payment-redirection denied topic).
+#   3. Mask SSNs, card numbers, and phone numbers in tool output.
+# Response side (before the answer reaches the agent):
+#   4. Mask SSNs, card numbers, emails, and phone numbers.
+# Rendered by scripts/render.sh with the Bedrock guardrail ID, version, region.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-llm-guardrails
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: claims-llm
+  backend:
+    ai:
+      entPromptGuard:
+        request:
+          - regex:
+              action: Reject
+              matches:
+                - '(?i)ignore (all )?(previous|prior|above) instructions'
+                - '(?i)system note to the ai assistant'
+                - '(?i)do not (mention|tell|disclose) (this|the payment)'
+            scope:
+              - ToolOutput
+              - Messages
+            response:
+              statusCode: 403
+              message: "Blocked by agentgateway: claim content contains instructions aimed at the AI assistant (possible prompt injection)."
+          - bedrockGuardrails:
+              identifier: ${BEDROCK_GUARDRAIL_ID}
+              version: "${BEDROCK_GUARDRAIL_VERSION}"
+              region: ${BEDROCK_REGION}
+              policies:
+                auth:
+                  aws:
+                    secretRef:
+                      name: bedrock-secret
+            # Untrusted content only. Bedrock's prompt-attack filter flags system
+            # prompts themselves ("You are ..."), so the agent's own instructions
+            # are not sent to it.
+            scope:
+              - Messages
+              - ToolOutput
+            response:
+              statusCode: 403
+              message: "Blocked by AWS Bedrock Guardrails via agentgateway."
+          - regex:
+              action: Mask
+              builtins:
+                - Ssn
+                - CreditCard
+                - PhoneNumber
+            scope:
+              - ToolOutput
+        response:
+          - regex:
+              action: Mask
+              builtins:
+                - Ssn
+                - CreditCard
+                - Email
+                - PhoneNumber

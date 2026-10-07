@@ -1,0 +1,33 @@
+# Enables the agentgateway token-exchange STS (RFC 8693) inside the existing
+# enterprise-agentgateway controller. Applied with `helm upgrade --reuse-values`
+# by scripts/enable-sts.sh, which shows the rendered diff and asks first.
+# Rendered by scripts/render.sh with KEYCLOAK_REALM_URL (your OIDC realm).
+#
+# Keys under tokenExchange other than the validator lists are serialized into
+# KGW_AGENTGATEWAY_TOKEN_EXCHANGE_CONFIG as-is (chart template: omit ... | toJson).
+tokenExchange:
+  enabled: true
+  # Must include the scheme: the STS builds its discovery and JWKS URLs from it,
+  # and kagent's STS client follows token_endpoint from discovery.
+  issuer: "http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777"
+  # Delegated tokens the agent receives are valid for five minutes.
+  tokenExpiration: "5m"
+  # Keycloak and kagent subject tokens carry no may_act claim, so the STS cannot
+  # check "this member allowed this agent". Demo shortcut; see README "Not production".
+  skipMayActClaimValidation: true
+  subjectValidators:
+    # The member's session token that kagent forwards to the agent.
+    - validatorType: remote
+      issuer: "kagent.kagent"
+      remoteConfig:
+        url: "http://kagent-controller.kagent.svc.cluster.local:8083/jwks.json"
+    # The member's login token from your OIDC realm (Keycloak).
+    - validatorType: remote
+      issuer: "${KEYCLOAK_REALM_URL}"
+      remoteConfig:
+        url: "${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs"
+  # The agent proves who it is with its Kubernetes ServiceAccount token.
+  actorValidators:
+    - validatorType: k8s
+  apiValidators:
+    - validatorType: k8s

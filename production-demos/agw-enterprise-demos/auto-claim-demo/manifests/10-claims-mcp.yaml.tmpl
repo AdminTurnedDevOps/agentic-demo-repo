@@ -1,0 +1,59 @@
+# The auto-claims MCP server, deployed declaratively through kagent (kmcp).
+# It serves seven tools; only five are approved in the gateway tool registry.
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: claims-mcp
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/name: claims-mcp
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  transportType: http
+  timeout: 60s
+  httpTransport:
+    targetPort: 3000
+    path: /mcp
+  deployment:
+    image: ${MCP_IMAGE}
+    imagePullPolicy: Always
+    port: 3000
+    cmd: python
+    args:
+      - /app/server.py
+    env:
+      HOST: "0.0.0.0"
+      PORT: "3000"
+    imagePullSecrets:
+      - name: regcred
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+---
+# Only the claims gateway may reach the MCP server, so the agent cannot go
+# around the gateway. Enforced only on clusters with NetworkPolicy enabled.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: claims-mcp-gateway-only
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: claims-mcp
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              gateway.networking.k8s.io/gateway-name: claims-gateway
+      ports:
+        - protocol: TCP
+          port: 3000

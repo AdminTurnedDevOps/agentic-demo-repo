@@ -1,0 +1,120 @@
+# Scene 2: identity and on-behalf-of access.
+#
+# Front door (/a2a/claims-agent): only a signed-in member (Keycloak login token)
+#   may start work. No identity, no agent.
+# Tools (/mcp): only short-lived delegated tokens minted by the agentgateway STS,
+#   and only when claims-agent is the actor. The member's login token is not
+#   accepted here: the agent must exchange it first.
+# Model (/v1/chat/completions): the member's identity is required on every model
+#   call (kagent forwards the member token with apiKeyPassthrough).
+# Rendered by scripts/render.sh with KEYCLOAK_REALM_URL (your OIDC realm).
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata:
+  name: sts-jwks
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  static:
+    host: enterprise-agentgateway.agentgateway-system.svc.cluster.local
+    port: 7777
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-a2a-identity
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: claims-a2a
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: ${KEYCLOAK_REALM_URL}
+          jwks:
+            remote:
+              url: ${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
+---
+# The gateway strips a validated bearer token by default. Passthrough hands the
+# member's (already verified) token to claims-agent, so the agent can exchange it.
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-a2a-member-passthrough
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: enterpriseagentgateway.solo.io
+      kind: EnterpriseAgentgatewayBackend
+      name: claims-agent-a2a
+  backend:
+    auth:
+      passthrough: {}
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-mcp-identity
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: claims-mcp
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
+          jwks:
+            remote:
+              backendRef:
+                group: enterpriseagentgateway.solo.io
+                kind: EnterpriseAgentgatewayBackend
+                name: sts-jwks
+              # No leading slash: a leading slash leaves the policy PartiallyValid.
+              jwksPath: .well-known/jwks.json
+    authorization:
+      action: Allow
+      policy:
+        matchExpressions:
+          - 'has(jwt.act) && jwt.act.sub == "system:serviceaccount:auto-claims:claims-agent"'
+---
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayPolicy
+metadata:
+  name: claims-llm-identity
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: claims-llm
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: ${KEYCLOAK_REALM_URL}
+          jwks:
+            remote:
+              url: ${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs
+        - issuer: http://enterprise-agentgateway.agentgateway-system.svc.cluster.local:7777
+          jwks:
+            remote:
+              backendRef:
+                group: enterpriseagentgateway.solo.io
+                kind: EnterpriseAgentgatewayBackend
+                name: sts-jwks
+              jwksPath: .well-known/jwks.json

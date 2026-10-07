@@ -1,0 +1,23 @@
+# Scene 5 (failover): simulate a regional Bedrock outage by pointing the primary
+# provider at a region whose endpoint does not resolve. The first request fails
+# (503) and evicts Bedrock; the next requests are served by the OpenAI fallback.
+# Restore with: ./demo.sh reset (or scripts/scene5-failover.sh restore)
+apiVersion: enterpriseagentgateway.solo.io/v1alpha1
+kind: EnterpriseAgentgatewayBackend
+metadata:
+  name: claims-llm
+  namespace: auto-claims
+  labels:
+    app.kubernetes.io/part-of: auto-claim-demo
+spec:
+  ai:
+    groups:
+      - providers:
+          - name: primary-bedrock
+            bedrock:
+              model: ${BEDROCK_MODEL}
+              region: us-outage-1
+      - providers:
+          - name: fallback-openai
+            openai:
+              model: ${OPENAI_MODEL}
