@@ -1,0 +1,59 @@
+# HPA that scales the burst WorkerPool on how many of its workers are full.
+#
+# External + AverageValue:
+#   desiredReplicas = ceil( at_capacity / averageValue )
+# at_capacity = max(ate_workerpool_workers{namespace, name, state="at_capacity"}),
+# served by prometheus-adapter.yaml.
+#
+# averageValue 0.7 keeps ~30% of the pool idle. With 6 hot actors the climb is
+# 2 -> 3 -> 5 -> 8 and stops at 8 (not ceil(6/0.7) = 9): at 8 replicas the
+# ratio 6 / (0.7 * 8) ~= 1.07 is inside the HPA's default 10% tolerance.
+# That idle headroom is what lets the next resume land without parking.
+#
+# Adapted from the upstream demo (demos/autoscaled-workerpool/hpa-kind.yaml).
+# Differences: lab namespace/pool names, maxReplicas 10, and a 60s scale-down
+# window (upstream: 300s) so the lab doesn't make you wait 5 minutes.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: burst
+  namespace: ate-lab-burst
+spec:
+  scaleTargetRef:
+    apiVersion: ate.dev/v1alpha1
+    kind: WorkerPool
+    name: burst
+  minReplicas: 2          # warm floor
+  maxReplicas: 10
+  metrics:
+  - type: External
+    external:
+      metric:
+        name: ate_workerpool_workers
+        selector:
+          matchLabels:
+            # Pool names are only unique per namespace: pin both.
+            ate_workerpool_namespace: ate-lab-burst
+            ate_workerpool_name: burst
+            ate_worker_state: at_capacity
+      target:
+        type: AverageValue
+        averageValue: "0.7"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      selectPolicy: Max
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 10
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      selectPolicy: Max
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 30

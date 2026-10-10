@@ -1,0 +1,38 @@
+# ActorTemplate for the burst lab. This is NOT a Kubernetes object: it is the
+# protojson form of ateapipb.ActorTemplate, created through the ate API.
+#
+# Rendered with envsubst (only the two variables below are substituted):
+#   envsubst '${COUNTER_IMAGE} ${BUCKET_NAME}' < manifests/actortemplate.yaml.tmpl \
+#     | kubectl ate create actor-template -f -
+#
+# The atespace ate-lab-burst must exist first (kubectl ate create atespace ate-lab-burst).
+#
+# The workload is the upstream counter demo (demos/counter in the Substrate
+# repo). Every reply prints the sandbox IP, an in-memory count, and a file
+# count, so you can see which worker served a request and that state survived.
+
+metadata:
+  atespace: ate-lab-burst
+  name: burst
+workerSelector:
+  matchLabels:
+    workload: burst
+containers:
+- name: counter
+  image: ${COUNTER_IMAGE}
+  command:
+  - /ko-app/counter
+  # Polled on every wakeup (cold boot or restore). Resume returns only once
+  # /readyz answers 200, so a routed request never hits a half-restored actor.
+  wakeupProbe:
+    httpGet:
+      path: /readyz
+      port: 80
+snapshotConfig:
+  # Process memory + rootfs + volumes: the in-memory count keeps climbing
+  # across suspend/resume, which makes worker hand-offs easy to see.
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
+  storageLocation: gs://${BUCKET_NAME}/ate-lab-burst/
+sandboxConfig:
+  sandboxClass: SANDBOX_CLASS_GVISOR
+  configName: gvisor-default

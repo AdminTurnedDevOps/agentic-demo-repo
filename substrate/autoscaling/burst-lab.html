@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burst Without 503s</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800;900&family=Overpass+Mono:wght@400;600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: car-park signage. A blue entrance plate, then "the lot" (a live model of the pool),
+   then the runbook as a level directory down the left with the work on the right. */
+:root {
+  --concrete: #e3e6ea;      /* page ground, cool grey biased toward the sign blue */
+  --slab: #f1f3f5;          /* raised surfaces */
+  --ink: #161a21;
+  --ink-2: #4b5462;
+  --rule: #c3c9d1;
+  --sign: #1d4f9f;          /* parking-sign blue, the one accent */
+  --sign-ink: #ffffff;
+  --amber: #c98a06;         /* sodium light: parked / waiting */
+  --amber-soft: #f3dfb0;
+  --stop: #c2352c;          /* 504 */
+  --go: #1d7a4b;            /* 200 */
+  --caution: #b45309;       /* 429 */
+  --grey: #6b7280;          /* 503 */
+  --paint: #d8a600;         /* worker divider paint */
+  --code-bg: #e9ecf0;
+  --f-display: "Overpass", "Highway Gothic", "Arial Narrow", sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-data: "Overpass Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --step--1: 0.84rem; --step-0: 1rem; --step-1: 1.2rem; --step-2: 1.55rem; --step-3: 2.2rem; --step-4: clamp(2.4rem, 6vw, 4.2rem);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --concrete: #12151a; --slab: #1a1f26; --ink: #e5e8ec; --ink-2: #9aa4b2; --rule: #2e3540;
+  --sign: #3f74cc; --sign-ink: #ffffff; --amber: #e9ad35; --amber-soft: #3d3016;
+  --stop: #e2584e; --go: #3aa86c; --caution: #e0883a; --grey: #8c95a3; --paint: #c99a12; --code-bg: #0e1115;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --concrete: #12151a; --slab: #1a1f26; --ink: #e5e8ec; --ink-2: #9aa4b2; --rule: #2e3540;
+  --sign: #3f74cc; --sign-ink: #ffffff; --amber: #e9ad35; --amber-soft: #3d3016;
+  --stop: #e2584e; --go: #3aa86c; --caution: #e0883a; --grey: #8c95a3; --paint: #c99a12; --code-bg: #0e1115;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--concrete); color: var(--ink); font-family: var(--f-body); font-size: var(--step-0); line-height: 1.55; }
+.wrap { max-width: 1200px; margin: 0 auto; padding-inline: clamp(16px, 4vw, 40px); padding-block: 28px 80px; }
+h1, h2, h3 { font-family: var(--f-display); line-height: 1.05; text-wrap: balance; margin: 0; }
+p { margin: 0; max-width: 66ch; }
+a { color: var(--sign); text-underline-offset: 3px; }
+code, kbd { font-family: var(--f-data); font-size: 0.88em; }
+:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.label { font-family: var(--f-display); font-weight: 800; font-size: var(--step--1); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+
+/* ---------- entrance plate ---------- */
+.plate { display: grid; grid-template-columns: auto 1fr; gap: clamp(14px, 3vw, 28px); align-items: center;
+  background: var(--sign); color: var(--sign-ink); padding: clamp(18px, 3vw, 28px); border-radius: 6px;
+  box-shadow: inset 0 0 0 4px var(--sign), inset 0 0 0 7px rgba(255,255,255,.9); }
+.plate .p { font-family: var(--f-display); font-weight: 900; font-size: clamp(3.4rem, 10vw, 6.4rem); line-height: .8;
+  width: 1.15em; height: 1.15em; display: grid; place-items: center; background: var(--sign-ink); color: var(--sign); border-radius: 4px; padding-top: .1em; }
+.plate h1 { font-weight: 900; font-size: var(--step-4); letter-spacing: -0.01em; }
+.plate .sub { margin-top: 10px; font-size: var(--step-1); max-width: 60ch; opacity: .95; }
+.plate .meta { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--f-data); font-size: var(--step--1); opacity: .9; }
+@media (max-width: 560px) { .plate { grid-template-columns: 1fr; } }
+
+.lede { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 28px; margin-block: 30px 34px; align-items: start; }
+.lede p + p { margin-top: 10px; }
+.legend { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; font-size: var(--step--1); }
+.code-tag { font-family: var(--f-display); font-weight: 900; font-size: 1.05rem; min-width: 3.1em; text-align: center; padding: 3px 6px 1px; border-radius: 3px; color: #fff; }
+.c200 { background: var(--go); } .c429 { background: var(--caution); } .c503 { background: var(--grey); } .c504 { background: var(--stop); }
+@media (max-width: 820px) { .lede { grid-template-columns: 1fr; } }
+
+/* ---------- the lot (simulator) ---------- */
+.lot { background: var(--slab); border: 1px solid var(--rule); border-radius: 6px; padding: clamp(14px, 2.5vw, 24px); display: grid; gap: 18px; }
+.lot-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 20px; align-items: baseline; }
+.lot-head h2 { font-size: var(--step-3); font-weight: 900; }
+.model-note { font-size: var(--step--1); color: var(--ink-2); max-width: 70ch; }
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.preset { font: 700 var(--step--1)/1.2 var(--f-body); border: 2px solid var(--ink); background: transparent; color: var(--ink); padding: 7px 11px; border-radius: 3px; cursor: pointer; text-align: left; }
+.preset small { display: block; font-weight: 400; color: var(--ink-2); font-family: var(--f-data); font-size: .74rem; margin-top: 2px; }
+.preset:hover { background: var(--concrete); }
+.preset[aria-pressed="true"] { background: var(--ink); color: var(--slab); }
+.preset[aria-pressed="true"] small { color: var(--rule); }
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end; }
+.ctl { display: grid; gap: 5px; }
+.seg { display: inline-flex; border: 2px solid var(--ink); border-radius: 3px; overflow: hidden; }
+.seg button { font: 600 var(--step--1)/1 var(--f-body); background: transparent; color: var(--ink); border: 0; padding: 8px 11px; cursor: pointer; }
+.seg button + button { border-left: 2px solid var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--sign); color: var(--sign-ink); }
+.ctl input[type="range"] { width: 150px; accent-color: var(--sign); }
+.ctl output { font-family: var(--f-data); font-size: var(--step--1); }
+.run { display: flex; gap: 8px; margin-left: auto; }
+.btn { font: 800 var(--step-0)/1 var(--f-display); letter-spacing: .03em; border: 2px solid var(--sign); background: var(--sign); color: var(--sign-ink); padding: 10px 16px 8px; border-radius: 3px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--sign); }
+
+.board { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 900px) { .board { grid-template-columns: 1fr; } }
+.zone { display: grid; gap: 8px; min-width: 0; }
+.zone-title { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.clock { font-family: var(--f-data); font-size: var(--step-1); font-variant-numeric: tabular-nums; }
+
+/* workers: painted dividers on concrete */
+.bays { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; background: var(--concrete); border: 1px solid var(--rule); border-radius: 3px; padding: 10px 6px 6px; }
+.bay { position: relative; height: 92px; border-left: 3px solid var(--paint); display: grid; place-items: center; padding: 4px; }
+.bay:nth-child(5n) { border-right: 3px solid var(--paint); }
+.bay .wid, .bay .wst { position: absolute; left: 7px; right: 4px; font-family: var(--f-data); font-size: .66rem; line-height: 1.2; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bay .wid { top: 4px; color: var(--ink); font-weight: 600; }
+.bay .wst { bottom: 4px; }
+.bay.closed { background: repeating-linear-gradient(-45deg, transparent 0 7px, color-mix(in srgb, var(--ink-2) 18%, transparent) 7px 9px); }
+.bay.starting { background: repeating-linear-gradient(-45deg, transparent 0 7px, color-mix(in srgb, var(--amber) 35%, transparent) 7px 10px); }
+.car { max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--f-display); font-weight: 900; font-size: 1.25rem; padding: 6px 10px 3px; border-radius: 3px; background: var(--sign); color: var(--sign-ink); transition: opacity .25s; }
+.car.resuming { background: transparent; color: var(--amber); outline: 3px solid var(--amber); }
+.car.suspending { opacity: .45; }
+.bays-foot { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--step--1); color: var(--ink-2); }
+.bays-foot b { font-family: var(--f-data); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.queue { min-height: 54px; border: 2px dashed var(--amber); border-radius: 3px; padding: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; background: color-mix(in srgb, var(--amber-soft) 45%, transparent); }
+.queue .empty { color: var(--ink-2); font-size: var(--step--1); align-self: center; }
+.ticket { display: grid; gap: 3px; min-width: 76px; background: var(--slab); border: 1px solid var(--amber); border-radius: 3px; padding: 5px 7px; }
+.ticket b { font-family: var(--f-display); font-weight: 900; }
+.ticket span { font-family: var(--f-data); font-size: .7rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ticket i { display: block; height: 4px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+.ticket i::after { content: ""; display: block; height: 100%; width: var(--left, 100%); background: var(--amber); }
+
+.tally { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tally div { display: flex; justify-content: space-between; align-items: center; gap: 6px; background: var(--concrete); border-radius: 3px; padding: 5px 7px 5px 5px; }
+.tally output { font-family: var(--f-data); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.ticker-box { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px; background: var(--code-bg); max-height: 252px; overflow-y: auto; }
+table.ticker { border-collapse: collapse; width: 100%; font-family: var(--f-data); font-size: .8rem; font-variant-numeric: tabular-nums; }
+.ticker th, .ticker td { padding: 4px 9px; text-align: right; white-space: nowrap; }
+.ticker th { position: sticky; top: 0; background: var(--code-bg); color: var(--ink-2); font-weight: 600; border-bottom: 1px solid var(--rule); }
+.ticker th:first-child, .ticker td:first-child, .ticker th:nth-child(2), .ticker td:nth-child(2) { text-align: left; }
+.ticker td.bad { color: var(--stop); font-weight: 600; }
+.ticker td.warn { color: var(--caution); font-weight: 600; }
+.summary { font-family: var(--f-data); font-size: .8rem; white-space: pre; overflow-x: auto; background: var(--code-bg); border-radius: 3px; padding: 10px 12px; margin: 0; }
+.chart-box { border: 1px solid var(--rule); border-radius: 3px; background: var(--concrete); }
+canvas#chart { display: block; width: 100%; height: 190px; }
+.chart-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .78rem; color: var(--ink-2); padding: 0 2px; }
+.chart-key span::before { content: ""; display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; background: var(--k); }
+.chart-key span.dash::before { background: repeating-linear-gradient(90deg, var(--k) 0 4px, transparent 4px 7px); }
+.chart-key span.bar::before { height: 9px; width: 9px; }
+
+/* ---------- runbook ---------- */
+.runbook { display: grid; grid-template-columns: 228px minmax(0, 1fr); gap: 40px; margin-top: 54px; }
+@media (max-width: 900px) { .runbook { grid-template-columns: 1fr; gap: 20px; } }
+.directory { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); align-self: start; }
+@media (max-width: 900px) { .directory { position: static; } }
+.directory h2 { font-size: var(--step-1); font-weight: 900; margin-bottom: 10px; }
+.directory ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.directory a { display: grid; grid-template-columns: 2.1em 1fr auto; gap: 8px; align-items: center; text-decoration: none; color: var(--ink); padding: 5px 6px; border-radius: 3px; font-size: .92rem; line-height: 1.25; }
+.directory a:hover { background: var(--slab); }
+.directory .lvl { font-family: var(--f-display); font-weight: 900; text-align: center; background: var(--ink); color: var(--concrete); border-radius: 2px; padding: 3px 0 1px; font-size: .85rem; }
+.directory .tick { width: 15px; height: 15px; border: 2px solid var(--rule); border-radius: 2px; }
+.directory li.done .tick { background: var(--go); border-color: var(--go); }
+.directory li.done .lvl { background: var(--go); }
+.directory .progress { margin-top: 12px; font-size: var(--step--1); color: var(--ink-2); }
+@media (max-width: 900px) { .directory ol { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
+
+.stage { padding-block: 26px 30px; border-top: 3px solid var(--ink); display: grid; gap: 14px; scroll-margin-top: 16px; }
+.stage:first-child { border-top: 0; padding-top: 0; }
+.stage-head { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; }
+.stage-head .lvl { font-family: var(--f-display); font-weight: 900; font-size: var(--step-2); background: var(--ink); color: var(--concrete); min-width: 1.7em; text-align: center; padding: 6px 6px 2px; border-radius: 3px; }
+.stage-head h3 { font-size: var(--step-2); font-weight: 800; }
+.stage-head .act { display: block; font-family: var(--f-display); font-weight: 800; font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--sign); margin-bottom: 4px; }
+.done-toggle { display: inline-flex; gap: 7px; align-items: center; font-size: var(--step--1); color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.done-toggle input { width: 18px; height: 18px; accent-color: var(--go); }
+.stage ul { margin: 0; padding-left: 1.2em; max-width: 66ch; display: grid; gap: 6px; }
+.stage .try { justify-self: start; font: 700 var(--step--1)/1 var(--f-body); border: 2px solid var(--amber); color: var(--ink); background: color-mix(in srgb, var(--amber-soft) 60%, transparent); padding: 8px 12px; border-radius: 3px; cursor: pointer; }
+.stage .try:hover { background: var(--amber-soft); }
+
+.cmd { position: relative; background: var(--code-bg); border-radius: 3px; border: 1px solid var(--rule); }
+.cmd pre { margin: 0; padding: 12px 14px; overflow-x: auto; font-family: var(--f-data); font-size: .82rem; line-height: 1.6; tab-size: 2; }
+.cmd .copy { position: absolute; top: 6px; right: 6px; font: 600 .74rem/1 var(--f-body); background: var(--slab); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 8px; cursor: pointer; }
+.cmd .copy.ok { border-color: var(--go); color: var(--go); }
+.cmd .lang { position: absolute; top: 9px; right: 62px; font-family: var(--f-data); font-size: .68rem; color: var(--ink-2); }
+.note { font-size: var(--step--1); color: var(--ink-2); max-width: 66ch; }
+.warn-plate { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; background: var(--amber-soft); border: 2px solid var(--amber); border-radius: 3px; padding: 10px 12px; max-width: 72ch; font-size: .94rem; }
+.warn-plate .tri { width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 21px solid var(--amber); margin-top: 2px; position: relative; }
+.warn-plate .tri::after { content: "!"; position: absolute; left: -3px; top: 5px; font: 900 .8rem/1 var(--f-display); color: var(--ink); }
+
+.envform { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .envform { grid-template-columns: 1fr; } }
+.envform label { display: grid; gap: 4px; font-size: var(--step--1); color: var(--ink-2); }
+.envform input { font: 400 .85rem var(--f-data); padding: 8px 9px; border: 2px solid var(--rule); border-radius: 3px; background: var(--slab); color: var(--ink); min-width: 0; }
+.envform input:focus { border-color: var(--sign); outline: none; }
+
+.calc { display: grid; gap: 10px; background: var(--slab); border: 1px solid var(--rule); border-radius: 3px; padding: 14px; }
+.calc-in { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end; }
+.calc table { border-collapse: collapse; font-family: var(--f-data); font-size: .8rem; font-variant-numeric: tabular-nums; }
+.calc th, .calc td { padding: 4px 12px 4px 0; text-align: left; white-space: nowrap; }
+.calc th { color: var(--ink-2); font-weight: 600; border-bottom: 1px solid var(--rule); }
+.calc .tbl { overflow-x: auto; }
+.calc .verdict { font-size: .94rem; }
+
+.diagram { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px; background: var(--slab); }
+.diagram svg { display: block; min-width: 720px; width: 100%; height: auto; }
+.diagram .box { fill: var(--concrete); stroke: var(--ink); stroke-width: 2; }
+.diagram .box.router { fill: var(--sign); stroke: var(--sign); }
+.diagram text { font-family: var(--f-body); font-size: 14px; fill: var(--ink); }
+.diagram .router-t { fill: var(--sign-ink); font-weight: 700; }
+.diagram .small { font-family: var(--f-data); font-size: 11px; fill: var(--ink-2); }
+.diagram .edge { stroke: var(--ink); stroke-width: 2; fill: none; }
+.diagram .edge.cap { stroke: var(--amber); stroke-dasharray: 6 5; }
+.diagram .arrow { fill: var(--ink); }
+.diagram .arrow.cap { fill: var(--amber); }
+
+.compare { overflow-x: auto; }
+.compare table { border-collapse: collapse; min-width: 520px; font-size: .92rem; }
+.compare th, .compare td { text-align: left; padding: 7px 14px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.compare th { font-family: var(--f-display); font-weight: 800; font-size: var(--step--1); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+
+footer { margin-top: 50px; padding-top: 16px; border-top: 3px solid var(--ink); display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: var(--step--1); color: var(--ink-2); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="plate" aria-labelledby="t">
+    <div class="p" aria-hidden="true">P</div>
+    <div>
+      <h1 id="t">Burst Without 503s</h1>
+      <p class="sub">Request parking and an autoscaled WorkerPool on Agent Substrate. Six agents, two warm workers, and the two mechanisms that keep requests from failing when demand outruns the pool.</p>
+      <div class="meta"><span>GKE Standard</span><span>Substrate ea273bda+</span><span>router: agentgateway</span><span>atespace: ate-lab-burst</span></div>
+    </div>
+  </header>
+
+  <section class="lede" aria-label="Overview">
+    <div>
+      <p>When more agents want to run than you have warm workers, Substrate has two answers on two time scales. The <strong>router parks</strong> a request for a few seconds while a worker frees up. An <strong>HPA grows the WorkerPool</strong> when the pool stays full.</p>
+      <p>The lab runs each one alone, shows where each one fails, then runs both together. Try it in the model below first, then run it for real with the runbook.</p>
+    </div>
+    <div>
+      <div class="label" style="margin-bottom:8px">What the router returns</div>
+      <div class="legend">
+        <span class="code-tag c200">200</span><span>Served. Slow ones waited in the lot first.</span>
+        <span class="code-tag c504">504</span><span>Parked, but the budget ran out before a worker freed up.</span>
+        <span class="code-tag c429">429</span><span>Pool full and parking is off: rejected immediately.</span>
+        <span class="code-tag c503">503</span><span>Lot full, actor mid-transition, or a stale cached worker.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== THE LOT ===================== -->
+  <section class="lot" id="lot" aria-labelledby="lot-h">
+    <div class="lot-head">
+      <h2 id="lot-h">The Demo</h2>
+    </div>
+
+    <div class="presets" role="group" aria-label="Lab scenarios">
+      <button class="preset" data-preset="act1" aria-pressed="false">Scenario 1 · churn<small>parking 5s · no HPA</small></button>
+      <button class="preset" data-preset="act1c" aria-pressed="false">Scenario 1c · parking off<small>churn · no HPA</small></button>
+      <button class="preset" data-preset="act2" aria-pressed="false">Scenario 2 · hold<small>parking 5s · no HPA</small></button>
+      <button class="preset" data-preset="act3" aria-pressed="false">Scenario 3 · HPA<small>hold · parking 5s</small></button>
+      <button class="preset" data-preset="act4" aria-pressed="false">Scenario 4 · bridge<small>hold · parking 90s · HPA</small></button>
+    </div>
+
+    <div class="controls">
+      <div class="ctl"><span class="label">Load mode</span>
+        <div class="seg" data-ctl="mode"><button data-v="churn">churn</button><button data-v="hold">hold</button></div></div>
+      <div class="ctl"><span class="label">Park budget</span>
+        <div class="seg" data-ctl="budget"><button data-v="0">off</button><button data-v="5">5s</button><button data-v="30">30s</button><button data-v="90">90s</button></div></div>
+      <div class="ctl"><span class="label">HPA</span>
+        <div class="seg" data-ctl="hpa"><button data-v="0">off</button><button data-v="1">on</button></div></div>
+      <div class="ctl"><label class="label" for="podstart">Worker pod start</label>
+        <span><input type="range" id="podstart" min="5" max="60" step="5" value="20"> <output id="podstart-o">20s</output></span></div>
+      <div class="ctl"><span class="label">Speed</span>
+        <div class="seg" data-ctl="speed"><button data-v="1">1×</button><button data-v="5">5×</button><button data-v="15">15×</button></div></div>
+      <div class="run">
+        <button class="btn" id="runbtn">Run</button>
+        <button class="btn ghost" id="resetbtn">Reset</button>
+      </div>
+    </div>
+
+    <div class="board">
+      <div class="zone">
+        <div class="zone-title"><span class="label">WorkerPool burst · workers</span><span class="clock" id="clock">t = 0.0s</span></div>
+        <div class="bays" id="bays" aria-live="off"></div>
+        <div class="bays-foot">
+          <span>spec / ready <b id="poolsr">2 / 2</b></span>
+          <span>at_capacity (last scrape) <b id="atcap">0</b></span>
+          <span>HPA <b id="hpastate">off</b></span>
+        </div>
+        <div class="zone-title" style="margin-top:6px"><span class="label">Parked requests · bar = budget left</span><span class="clock" id="parkedn" style="font-size:.9rem">0 parked</span></div>
+        <div class="queue" id="queue"><span class="empty">Nothing waiting.</span></div>
+        <div class="tally" aria-label="Totals">
+          <div><span class="code-tag c200">200</span><output id="n200">0</output></div>
+          <div><span class="code-tag c504">504</span><output id="n504">0</output></div>
+          <div><span class="code-tag c429">429</span><output id="n429">0</output></div>
+          <div><span class="code-tag c503">503</span><output id="n503">0</output></div>
+        </div>
+      </div>
+      <div class="zone">
+        <span class="label">burst.sh ticker · per 5s window</span>
+        <div class="ticker-box"><table class="ticker"><thead><tr><th>t</th><th>pool s/r</th><th>200</th><th>429</th><th>503</th><th>504</th></tr></thead><tbody id="ticker"></tbody></table></div>
+        <pre class="summary" id="summary">Pick a scenario, then Run.</pre>
+      </div>
+    </div>
+
+    <div class="zone">
+      <div class="chart-box"><canvas id="chart" aria-label="Pool size and failures over time"></canvas></div>
+      <div class="chart-key">
+        <span style="--k: var(--sign)">ready workers</span>
+        <span class="dash" style="--k: var(--ink-2)">spec.replicas (HPA target)</span>
+        <span class="bar" style="--k: var(--stop)">504 per 5s</span>
+        <span class="bar" style="--k: var(--caution)">429 per 5s</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RUNBOOK ===================== -->
+  <div class="runbook">
+    <nav class="directory" aria-label="Lab levels">
+      <h2>Level directory</h2>
+      <ol id="dir"></ol>
+      <p class="progress" id="progress"></p>
+    </nav>
+
+    <main id="stages">
+
+
+      <section class="stage" id="s-env" data-title="Environment and images">
+        <div class="stage-head"><span class="lvl">1</span><h3>Environment and images</h3></div>
+        <p>Fill these in once. The export block below updates as you type and stays in this browser.</p>
+        <div class="envform">
+          <label for="env-dir">SUBSTRATE_DIR<input id="env-dir" spellcheck="false" placeholder="~/gitrepos/substrate"></label>
+          <label for="env-repo">KO_DOCKER_REPO<input id="env-repo" spellcheck="false" placeholder="gcr.io/&lt;project-id&gt;/ate-images"></label>
+          <label for="env-bucket">BUCKET_NAME<input id="env-bucket" spellcheck="false" placeholder="&lt;your-snapshot-bucket&gt;"></label>
+        </div>
+        <div class="cmd"><span class="lang">bash</span><pre id="envblock"></pre></div>
+        <p>Build the worker image and the counter workload from the checkout you installed from, so the worker matches the control plane. <code>ko</code> prints each pushed reference with its digest.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="images"></pre></div>
+        <p class="note">Images from an older install are stale: the ateom, atelet and ate-api protocol changes often. Rebuilding is cheap because <code>ko</code> skips unchanged layers.</p>
+      </section>
+
+      <section class="stage" id="s-deploy" data-title="Pool, atespace, template">
+        <div class="stage-head"><span class="lvl">2</span><h3>Pool, atespace and template</h3></div>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="deploy"></pre></div>
+        <p>Creating the template builds the golden snapshot. Wait until <code>GOLDEN TAG</code> is filled in:</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="golden"></pre></div>
+      </section>
+
+      <section class="stage" id="s-actors" data-title="Six actors">
+        <div class="stage-head"><span class="lvl">3</span><h3>Six actors, two workers</h3></div>
+        <p>Oversubscribed 3:1. All six start <code>ACTOR_STATE_SUSPENDED</code>. Keep the helper; you reset to "everything suspended" between scenarios.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="actors"></pre></div>
+      </section>
+
+      <section class="stage" id="s-mon" data-title="Prometheus and adapter">
+        <div class="stage-head"><span class="lvl">4</span><h3>Prometheus and prometheus-adapter</h3></div>
+        <div class="diagram" role="img" aria-label="Request path from burst.sh through the agentgateway router to ate-api-server and the WorkerPool; capacity loop from ate-api-server metrics through Prometheus, prometheus-adapter and the HPA back to the WorkerPool">
+          <svg viewBox="0 0 940 250" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker>
+              <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow cap" d="M0,0 L10,5 L0,10 z"/></marker>
+            </defs>
+            <text x="16" y="24" class="small">REQUEST PATH · seconds</text>
+            <rect class="box" x="16" y="38" width="150" height="56" rx="3"/><text x="91" y="62" text-anchor="middle">burst.sh</text><text x="91" y="80" text-anchor="middle" class="small">6 actor loops</text>
+            <rect class="box router" x="226" y="38" width="210" height="56" rx="3"/><text x="331" y="62" text-anchor="middle" class="router-t">atenet-router</text><text x="331" y="80" text-anchor="middle" class="router-t" style="font-size:12px;font-weight:400">agentgateway · parks up to budget</text>
+            <rect class="box" x="496" y="38" width="170" height="56" rx="3"/><text x="581" y="62" text-anchor="middle">ate-api-server</text><text x="581" y="80" text-anchor="middle" class="small">ResumeActor</text>
+            <rect class="box" x="736" y="38" width="188" height="56" rx="3"/><text x="830" y="62" text-anchor="middle">WorkerPool burst</text><text x="830" y="80" text-anchor="middle" class="small">worker pods</text>
+            <path class="edge" d="M166 66 H222" marker-end="url(#ah)"/>
+            <path class="edge" d="M436 66 H492" marker-end="url(#ah)"/>
+            <path class="edge" d="M666 66 H732" marker-end="url(#ah)"/>
+            <text x="16" y="146" class="small">CAPACITY LOOP · tens of seconds</text>
+            <rect class="box" x="226" y="170" width="150" height="56" rx="3"/><text x="301" y="194" text-anchor="middle">Prometheus</text><text x="301" y="212" text-anchor="middle" class="small">scrape 15s</text>
+            <rect class="box" x="426" y="170" width="190" height="56" rx="3"/><text x="521" y="194" text-anchor="middle">prometheus-adapter</text><text x="521" y="212" text-anchor="middle" class="small">external.metrics.k8s.io</text>
+            <rect class="box" x="666" y="170" width="120" height="56" rx="3"/><text x="726" y="194" text-anchor="middle">HPA</text><text x="726" y="212" text-anchor="middle" class="small">sync ~15s</text>
+            <path class="edge cap" d="M581 94 V130 H301 V166" marker-end="url(#ahc)"/>
+            <text x="440" y="124" class="small">ate_workerpool_workers{at_capacity}</text>
+            <path class="edge cap" d="M376 198 H422" marker-end="url(#ahc)"/>
+            <path class="edge cap" d="M616 198 H662" marker-end="url(#ahc)"/>
+            <path class="edge cap" d="M786 198 H830 V98" marker-end="url(#ahc)"/>
+            <text x="838" y="160" class="small">/scale</text>
+          </svg>
+        </div>
+        <p>Preflight first, so you don't take over another adapter's APIService. Then deploy Prometheus (scrapes <code>ate-system</code> only) and the adapter.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="monitoring"></pre></div>
+        <p>Leave a Prometheus port-forward running for the rest of the lab, then check targets, the HPA's input metric, and the router's agentgateway metrics on <code>:15020</code>.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="promcheck"></pre></div>
+      </section>
+
+      <section class="stage" id="s-act1" data-title="Parking absorbs contention">
+        <div class="stage-head"><span class="lvl">5</span><h3><span class="act">Scenario 1</span>Parking absorbs short contention</h3></div>
+        <p>Check the router's parking settings. <code>router-parking.sh</code> sets how long agentgateway holds a request waiting for a free worker, or turns that off. It writes the router ConfigMap and restarts the router.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="status"></pre></div>
+        <p><strong>Watch one request park.</strong> Port-forward the router, fill both workers, then request a third actor. It hangs. Suspend <code>a1</code> from another terminal within 5 seconds and the hanging request returns <code>200</code>. Wait longer and it returns <code>504</code>.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="park1"></pre></div>
+        <p><strong>Churn load.</strong> Each actor runs request then suspend, so workers keep coming back. Expect zero failures; the <code>200s over 1s</code> line counts requests that parked and then got served.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="churn"></pre></div>
+        <button class="try" data-preset="act1">Run Scenario 1 in the model</button>
+        <p><strong>Parking off.</strong> Mostly <code>429</code>s now: agentgateway turns "no free worker" into <code>429 rate limited</code> instead of waiting. A few <code>503</code>s come from actors caught mid-suspend.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="off"></pre></div>
+        <button class="try" data-preset="act1c">Run "parking off" in the model</button>
+        <div class="warn-plate"><span class="tri" aria-hidden="true"></span><span>Each <code>router-parking.sh</code> change restarts the router. That kills manual port-forwards and drops requests parked at that moment, because agentgateway drains for about 5s here. Change settings between runs. <code>burst.sh</code> opens its own forward each run.</span></div>
+        <p class="note">agentgateway caches an actor's worker for 5s. In churn mode the next request often lands on the old worker, which answers <code>421</code> stale; agentgateway drops the entry and resolves again. A rare <code>503</code> in churn is that retry running out.</p>
+      </section>
+
+      <section class="stage" id="s-act2" data-title="Parking is not capacity">
+        <div class="stage-head"><span class="lvl">6</span><h3><span class="act">Scenario 2</span>Parking is not capacity</h3></div>
+        <p><code>hold</code> mode never suspends. The first two actors to land keep both workers. The other four park, wait out the 5s budget, get <code>504</code>, and try again. The pool stays at 2/2. Parking delays the failure; it does not prevent it.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="hold60"></pre></div>
+        <button class="try" data-preset="act2">Run Scenario 2 in the model</button>
+      </section>
+
+      <section class="stage" id="s-act3" data-title="The HPA adds capacity">
+        <div class="stage-head"><span class="lvl">7</span><h3><span class="act">Scenario 3</span>The HPA adds capacity</h3></div>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="hpa"></pre></div>
+        <p><code>at_capacity</code> counts full workers, so it can never exceed the replica count. The HPA can't see actors still waiting for a worker; each step grows the pool by at most <code>1 / averageValue</code>. It also ignores a ratio within 10% of target. Try the numbers:</p>
+        <div class="calc">
+          <div class="calc-in">
+            <div class="ctl"><label class="label" for="calc-n">Hot actors</label><span><input type="range" id="calc-n" min="1" max="10" value="6"> <output id="calc-n-o">6</output></span></div>
+            <div class="ctl"><span class="label">averageValue</span><div class="seg" data-ctl="calcav"><button data-v="0.5">0.5</button><button data-v="0.7">0.7</button><button data-v="1">1.0</button></div></div>
+          </div>
+          <div class="tbl"><table><thead><tr><th>HPA step</th><th>replicas</th><th>at_capacity</th><th>ratio</th><th>decision</th></tr></thead><tbody id="calc-body"></tbody></table></div>
+          <p class="verdict" id="calc-verdict"></p>
+        </div>
+        <p>Re-run the burst that failed in Scenario 2 and watch <code>pool s/r</code> climb while <code>504</code>s fall to zero. The summary's <code>failure window</code> is your time to absorb the burst.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="hold180"></pre></div>
+        <button class="try" data-preset="act3">Run Scenario 3 in the model</button>
+        <p>Scale back down before Scenario 4. After the 60s window the HPA removes 2 workers every 30s until it reaches 2.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="scaledown"></pre></div>
+        <div class="warn-plate"><span class="tri" aria-hidden="true"></span><span>Scale-down lets the Deployment pick which worker pods to delete. A busy worker gets SIGTERM passed into its sandbox without a snapshot first. Suspend actors before scaling down.</span></div>
+      </section>
+
+      <section class="stage" id="s-act4" data-title="Budget covers scale-up">
+        <div class="stage-head"><span class="lvl">8</span><h3><span class="act">Scenario 4</span>Size the park budget to cover scale-up</h3></div>
+        <p>Scenario 3's <code>504</code>s came from the climb: a parked request gives up after 5s, but each HPA step takes longer. A 90s budget lets parked requests wait for the new workers. agentgateway uses the budget as the whole deadline for its <code>ResumeActor</code> retries, and it has no default request timeout, so nothing else cuts the wait short.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="budget"></pre></div>
+        <ul>
+          <li><strong>504s:</strong> far fewer. Requests wait in the lot until a worker arrives.</li>
+          <li><strong>Latency:</strong> p95 and max for <code>200</code>s go up. Callers need client timeouts longer than the budget.</li>
+          <li><strong>Still seeing 504s?</strong> The climb to the last worker took longer than the budget. Raise it, lower <code>averageValue</code> for bigger steps, or raise <code>minReplicas</code>.</li>
+        </ul>
+        <button class="try" data-preset="act4">Run Scenario 4 in the model</button>
+      </section>
+
+      <section class="stage" id="s-prom" data-title="Read it in Prometheus">
+        <div class="stage-head"><span class="lvl">9</span><h3>Read it in Prometheus</h3></div>
+        <p>Run these at <code>localhost:9091/graph</code> across the time of Scenarios 1 to 4.</p>
+        <div class="cmd"><span class="lang">promql</span><pre data-cmd="q1"></pre></div>
+        <p>Pool occupancy by worker state: the HPA's input.</p>
+        <div class="cmd"><span class="lang">promql</span><pre data-cmd="q2"></pre></div>
+        <p>Requests resolving through ate-api right now. Short spikes are normal; a gauge that stays up all run means requests are waiting for workers that never free up.</p>
+        <div class="cmd"><span class="lang">promql</span><pre data-cmd="q3"></pre></div>
+        <p><code>ok</code> means a worker was found. <code>resume_error</code> means agentgateway gave up: here almost always a <code>504</code>, or <code>429</code> with parking off. The reason isn't labelled, so match it against <code>burst.sh</code>'s counts or the router log.</p>
+        <div class="cmd"><span class="lang">promql</span><pre data-cmd="q4"></pre></div>
+        <p>p95 time to a worker for served requests, including time parked. The top bucket is 80s, so a 90s budget's slowest waits show as <code>+Inf</code>.</p>
+        <div class="compare">
+          <table>
+            <thead><tr><th>You see</th><th>It means</th></tr></thead>
+            <tbody>
+              <tr><td><code>at_capacity == replicas</code>, parked gauge stays up, <code>resume_error</code> rising</td><td>Short on capacity (Scenario 2)</td></tr>
+              <tr><td>Mostly <code>ok</code>, p95 time to a worker rising</td><td>Parking covering for scale-up (Scenario 4)</td></tr>
+              <tr><td>Router log shows <code>grpc.code=DeadlineExceeded</code></td><td>Park budget ran out</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="logs"></pre></div>
+      </section>
+
+      <section class="stage" id="s-clean" data-title="Cleanup">
+        <div class="stage-head"><span class="lvl">10</span><h3>Cleanup</h3></div>
+        <p><code>make clean</code> removes the HPA first so it stops writing replicas, resets the router's parking, then deletes actors, template, atespace, monitoring and the pool. It leaves snapshot objects in GCS; check that prefix yourself before deleting anything.</p>
+        <div class="cmd"><span class="lang">bash</span><pre data-cmd="clean"></pre></div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <span>Lab source: <code>agentic-demo-repo/substrate/autoscaling</code></span>
+    <span>Upstream: <code>demos/autoscaled-workerpool</code>, agentgateway <code>http/substrate/ingress.rs</code></span>
+    <span>Substrate is pre-1.0; check field names against your install.</span>
+  </footer>
+</div>
+
+<!-- Commands live here as raw text so nothing needs HTML escaping. -->
+<script type="text/plain" id="cmd-images">
+export ATEOM_IMAGE=$(cd "$SUBSTRATE_DIR" && \
+  ./hack/run-tool.sh ko build --platform=linux/amd64 ./cmd/ateom-gvisor)
+export COUNTER_IMAGE=$(cd "$SUBSTRATE_DIR" && \
+  ./hack/run-tool.sh ko build --platform=linux/amd64 ./demos/counter)
+
+echo "ATEOM_IMAGE=$ATEOM_IMAGE"
+echo "COUNTER_IMAGE=$COUNTER_IMAGE"
+</script>
+<script type="text/plain" id="cmd-deploy">
+# Namespace + 2-worker WorkerPool
+envsubst '${ATEOM_IMAGE}' < manifests/workerpool.yaml.tmpl | kubectl apply -f -
+kubectl -n ate-lab-burst rollout status deployment/burst --timeout=10m
+
+# Atespace + ActorTemplate (through the ate API)
+kubectl ate create atespace ate-lab-burst
+envsubst '${COUNTER_IMAGE} ${BUCKET_NAME}' < manifests/actortemplate.yaml.tmpl \
+  | kubectl ate create actor-template -f -
+</script>
+<script type="text/plain" id="cmd-golden">
+kubectl ate get actor-templates -a ate-lab-burst
+
+# or poll until the golden snapshot is ready (up to 15 minutes)
+for i in $(seq 1 180); do
+  out=$(kubectl ate get actor-template burst -a ate-lab-burst -o yaml)
+  echo "$out" | grep -q 'errorMessage:' && { echo "$out"; break; }
+  echo "$out" | grep -q 'goldenTag:' && { echo "golden snapshot ready"; break; }
+  sleep 5
+done
+
+kubectl ate get workers -n ate-lab-burst
+</script>
+<script type="text/plain" id="cmd-actors">
+for i in 1 2 3 4 5 6; do
+  kubectl ate create actor "a$i" -a ate-lab-burst --template burst
+done
+kubectl ate get actors -a ate-lab-burst
+
+suspend_all() {
+  for i in 1 2 3 4 5 6; do
+    kubectl ate suspend actor "a$i" -a ate-lab-burst >/dev/null 2>&1 || true
+  done
+  kubectl ate get actors -a ate-lab-burst
+}
+</script>
+<script type="text/plain" id="cmd-status">
+./scripts/router-parking.sh status
+# ==> requestParking in ate-system/atenet-router-agentgateway-config ({} = agentgateway defaults)
+#     set:       {}
+#     effective: budget=5s max=1024 retryInterval=100ms retryFactor=1.1
+</script>
+<script type="text/plain" id="cmd-park1">
+# terminal 1
+kubectl -n ate-system port-forward svc/atenet-router 8000:80
+
+# terminal 2: fill both workers, then park a3
+curl -s -H "ate-target-actor: ate-lab-burst/a1" http://localhost:8000
+curl -s -H "ate-target-actor: ate-lab-burst/a2" http://localhost:8000
+curl -s -w '-> HTTP %{http_code} in %{time_total}s\n' \
+  -H "ate-target-actor: ate-lab-burst/a3" http://localhost:8000
+
+# terminal 3, within 5 seconds
+kubectl ate suspend actor a1 -a ate-lab-burst
+</script>
+<script type="text/plain" id="cmd-churn">
+suspend_all
+./scripts/burst.sh -m churn -d 45
+</script>
+<script type="text/plain" id="cmd-off">
+./scripts/router-parking.sh off      # sets requestParking.max: 0, restarts the router
+./scripts/burst.sh -m churn -d 45
+./scripts/router-parking.sh default
+suspend_all
+</script>
+<script type="text/plain" id="cmd-hold60">
+./scripts/burst.sh -m hold -d 60
+./scripts/router-parking.sh status   # in another terminal: parked gauge stays above zero
+suspend_all
+</script>
+<script type="text/plain" id="cmd-monitoring">
+kubectl get apiservice v1beta1.external.metrics.k8s.io 2>/dev/null \
+  && echo "STOP: an external-metrics adapter already exists" \
+  || echo "OK: external metrics API is free"
+
+kubectl apply -f manifests/prometheus.yaml
+kubectl -n ate-lab-burst-monitoring rollout status deployment/prometheus --timeout=5m
+kubectl apply -f manifests/prometheus-adapter.yaml
+kubectl -n ate-lab-burst-monitoring rollout status deployment/prometheus-adapter --timeout=5m
+kubectl wait --for=condition=Available apiservice/v1beta1.external.metrics.k8s.io --timeout=5m
+</script>
+<script type="text/plain" id="cmd-promcheck">
+kubectl -n ate-lab-burst-monitoring port-forward svc/prometheus 9091:9090   # leave running
+
+curl -s localhost:9091/api/v1/targets \
+  | jq -r '.data.activeTargets[] | "\(.labels.app)\t\(.labels.pod)\t\(.health)"'
+# expect ate-api-server (x2) and atenet-router, all "up"
+
+kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/ate-lab-burst/ate_workerpool_workers?labelSelector=ate_worker_state%3Dat_capacity,ate_workerpool_namespace%3Date-lab-burst,ate_workerpool_name%3Dburst" \
+  | jq '.items[] | {metricLabels, value}'
+
+curl -s localhost:9091/api/v1/label/__name__/values \
+  | jq -r '.data[] | select(startswith("agentgateway_substrate") or startswith("agentgateway_atenet_router"))'
+</script>
+<script type="text/plain" id="cmd-hpa">
+kubectl apply -f manifests/hpa.yaml
+kubectl -n ate-lab-burst get hpa burst      # wait for TARGETS to show a value, not <unknown>
+kubectl -n ate-lab-burst get hpa burst -w   # leave running in a spare terminal
+</script>
+<script type="text/plain" id="cmd-hold180">
+./scripts/burst.sh -m hold -d 180
+kubectl ate get workers -n ate-lab-burst
+</script>
+<script type="text/plain" id="cmd-scaledown">
+suspend_all
+kubectl -n ate-lab-burst get workerpool burst -w   # wait for 2
+</script>
+<script type="text/plain" id="cmd-budget">
+./scripts/router-parking.sh budget 90
+./scripts/burst.sh -m hold -d 180
+./scripts/router-parking.sh default
+suspend_all
+</script>
+<script type="text/plain" id="cmd-q1">
+max by (ate_worker_state) (
+  ate_workerpool_workers{ate_workerpool_namespace="ate-lab-burst", ate_workerpool_name="burst"}
+)
+</script>
+<script type="text/plain" id="cmd-q2">
+max(agentgateway_substrate_request_parking_active)
+</script>
+<script type="text/plain" id="cmd-q3">
+sum by (ate_router_outcome) (
+  increase(agentgateway_atenet_router_route_duration_seconds_count[2m]))
+</script>
+<script type="text/plain" id="cmd-q4">
+histogram_quantile(0.95, sum by (le) (
+  rate(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok"}[1m])))
+</script>
+<script type="text/plain" id="cmd-logs">
+kubectl -n ate-system logs deploy/atenet-router | grep "substrate ResumeActor failed"
+</script>
+<script type="text/plain" id="cmd-clean">
+make clean
+
+gcloud storage ls "gs://${BUCKET_NAME}/ate-lab-burst/"
+# gcloud storage rm -r "gs://${BUCKET_NAME}/ate-lab-burst/"
+</script>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("burstlab:" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("burstlab:" + k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+  };
+
+  /* ---------------- commands + copy ---------------- */
+  $$("pre[data-cmd]").forEach(pre => {
+    const src = document.getElementById("cmd-" + pre.dataset.cmd);
+    pre.textContent = src ? src.textContent.replace(/^\n+|\s+$/g, "") : "";
+  });
+  function addCopy(box) {
+    const b = document.createElement("button");
+    b.className = "copy"; b.type = "button"; b.textContent = "Copy";
+    b.addEventListener("click", () => {
+      const pre = box.querySelector("pre");
+      const text = pre.textContent;
+      const done = () => { b.textContent = "Copied"; b.classList.add("ok"); setTimeout(() => { b.textContent = "Copy"; b.classList.remove("ok"); }, 1400); };
+      const fallback = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Selected"; };
+      try { navigator.clipboard.writeText(text).then(done, fallback); } catch { fallback(); }
+    });
+    box.appendChild(b);
+  }
+  $$(".cmd").forEach(addCopy);
+
+  /* ---------------- env form ---------------- */
+  const envIds = { "env-dir": ["SUBSTRATE_DIR", "~/gitrepos/substrate"], "env-repo": ["KO_DOCKER_REPO", "gcr.io/<project-id>/ate-images"], "env-bucket": ["BUCKET_NAME", "<your-snapshot-bucket>"] };
+  function renderEnv() {
+    const lines = Object.entries(envIds).map(([id, [name, ph]]) => {
+      const v = $("#" + id).value.trim() || ph;
+      return `export ${name}=${/\s/.test(v) ? JSON.stringify(v) : v}`;
+    });
+    lines.push("", "cd ~/gitrepos/agentic-demo-repo/substrate/autoscaling");
+    $("#envblock").textContent = lines.join("\n");
+  }
+  Object.keys(envIds).forEach(id => {
+    const el = $("#" + id);
+    el.value = store.get(id, "");
+    el.addEventListener("input", () => { store.set(id, el.value); renderEnv(); });
+  });
+  renderEnv();
+
+  /* ---------------- directory + progress ---------------- */
+  const stages = $$(".stage");
+  const doneSet = new Set(store.get("done", []));
+  const dir = $("#dir");
+  stages.forEach(st => {
+    const lvl = st.querySelector(".lvl").textContent;
+    const li = document.createElement("li");
+    li.innerHTML = `<a href="#${st.id}"><span class="lvl">${lvl}</span><span></span><span class="tick" aria-hidden="true"></span></a>`;
+    li.querySelector("a span:nth-child(2)").textContent = st.dataset.title;
+    dir.appendChild(li);
+    const lab = document.createElement("label");
+    lab.className = "done-toggle";
+    lab.innerHTML = `<input type="checkbox" id="done-${st.id}"> Done`;
+    st.querySelector(".stage-head").appendChild(lab);
+    const cb = lab.querySelector("input");
+    cb.checked = doneSet.has(st.id);
+    cb.addEventListener("change", () => { cb.checked ? doneSet.add(st.id) : doneSet.delete(st.id); store.set("done", [...doneSet]); paintProgress(); });
+  });
+  function paintProgress() {
+    $$("#dir li").forEach((li, i) => li.classList.toggle("done", doneSet.has(stages[i].id)));
+    $("#progress").textContent = `${doneSet.size} of ${stages.length} levels done`;
+  }
+  paintProgress();
+
+  /* ---------------- HPA calculator (pure) ---------------- */
+  // Mirrors the HPA controller for an External AverageValue metric:
+  // ratio = metric / (target * current); skip within 10% tolerance; else desired = ceil(metric / target),
+  // clamped to [min, max] and to the scale-up policy max(2x, +10).
+  function hpaClimb(hot, target, min = 2, max = 10, start = 2) {
+    const rows = []; let cur = start;
+    for (let step = 1; step <= 12; step++) {
+      const atcap = Math.min(hot, cur);
+      const ratio = atcap / (target * cur);
+      let decision, next = cur;
+      if (Math.abs(ratio - 1) <= 0.1) decision = "within 10% tolerance, hold";
+      else {
+        next = Math.min(Math.max(Math.ceil(atcap / target - 1e-9), min), max, Math.max(cur * 2, cur + 10));
+        decision = next === cur ? (cur === max ? "at maxReplicas" : "no change") : `scale to ${next}`;
+      }
+      rows.push({ step, cur, atcap, ratio, decision, next });
+      if (next === cur) break;
+      cur = next;
+    }
+    return rows;
+  }
+  window.__hpaClimb = hpaClimb;
+  let calcAv = 0.7;
+  function renderCalc() {
+    const n = +$("#calc-n").value; $("#calc-n-o").textContent = n;
+    const rows = hpaClimb(n, calcAv);
+    $("#calc-body").innerHTML = rows.map(r => `<tr><td>${r.step}</td><td>${r.cur}</td><td>${r.atcap}</td><td>${r.ratio.toFixed(2)}</td><td>${r.decision}</td></tr>`).join("");
+    const last = rows[rows.length - 1];
+    const idle = last.cur - Math.min(n, last.cur);
+    const waiting = Math.max(0, n - last.cur);
+    const syncs = rows.filter(r => r.next !== r.cur).length;
+    $("#calc-verdict").textContent = waiting
+      ? `Settles at ${last.cur} workers with ${waiting} actor${waiting > 1 ? "s" : ""} still waiting: maxReplicas is the limit.`
+      : `Settles at ${last.cur} workers after ${syncs} scale-up${syncs === 1 ? "" : "s"}, leaving ${idle} idle as headroom.`;
+  }
+  $("#calc-n").addEventListener("input", renderCalc);
+
+  /* ---------------- segmented controls ---------------- */
+  const cfg = { mode: "hold", budget: 5, hpa: 0, speed: 5, podStart: 20, duration: 60 };
+  function setSeg(name, val) {
+    $$(`.seg[data-ctl="${name}"] button`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === String(val))));
+  }
+  $$(".seg").forEach(seg => seg.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const name = seg.dataset.ctl, v = b.dataset.v;
+    if (name === "calcav") { calcAv = +v; setSeg("calcav", v); renderCalc(); return; }
+    cfg[name] = name === "mode" ? v : +v; setSeg(name, v);
+    if (name !== "speed") { markPreset(null); resetSim(); }
+  }));
+  setSeg("calcav", "0.7"); renderCalc();
+  $("#podstart").addEventListener("input", e => { cfg.podStart = +e.target.value; $("#podstart-o").textContent = cfg.podStart + "s"; resetSim(); });
+
+  const PRESETS = {
+    act1:  { mode: "churn", budget: 5,  hpa: 0, duration: 45 },
+    act1c: { mode: "churn", budget: 0,  hpa: 0, duration: 45 },
+    act2:  { mode: "hold",  budget: 5,  hpa: 0, duration: 60 },
+    act3:  { mode: "hold",  budget: 5,  hpa: 1, duration: 180 },
+    act4:  { mode: "hold",  budget: 90, hpa: 1, duration: 180 },
+  };
+  function markPreset(key) { $$(".preset").forEach(p => p.setAttribute("aria-pressed", String(p.dataset.preset === key))); }
+  function applyPreset(key, run) {
+    Object.assign(cfg, PRESETS[key]);
+    setSeg("mode", cfg.mode); setSeg("budget", cfg.budget); setSeg("hpa", cfg.hpa);
+    markPreset(key); resetSim(); if (run) start();
+  }
+  $$(".preset").forEach(p => p.addEventListener("click", () => applyPreset(p.dataset.preset, true)));
+  $$(".try").forEach(t => t.addEventListener("click", () => { $("#lot").scrollIntoView({ behavior: "smooth", block: "start" }); applyPreset(t.dataset.preset, true); }));
+
+  /* ---------------- simulation ---------------- */
+  const M = { restore: 0.4, suspend: 1.2, interval: 1, scrape: 15, sync: 15, syncPhase: 7.5, target: 0.7, min: 2, max: 10, downWindow: 60, downStep: 2, downPeriod: 30, churnGap: 0.3, dt: 0.1, bays: 10 };
+  let S, wid = 0;
+
+  function newWorker(ready) { return { id: ++wid, ready, readyAt: ready ? 0 : S.t + cfg.podStart, actor: null }; }
+  function resetSim() {
+    stop(); wid = 0;
+    S = { t: 0, spec: 2, workers: [], actors: [], log: [], rows: [], lastRow: 0, atcap: 0, nextScrape: 0, nextSync: M.syncPhase, recs: [], lastDown: -1e9, totals: { 200: 0, 429: 0, 503: 0, 504: 0 }, failFirst: null, failLast: null, slow: 0, lat: [], spark: [{ t: 0, spec: 2, ready: 2 }] };
+    S.workers.push(newWorker(true), newWorker(true));
+    for (let i = 1; i <= 6; i++) S.actors.push({ id: "a" + i, state: "suspended", worker: null, req: null, next: i * 0.15, doneAt: 0 });
+    $("#ticker").innerHTML = ""; $("#summary").textContent = "Ready. Run to start the loops.";
+    $("#hpastate").textContent = cfg.hpa ? "on" : "off";
+    paint(); drawChart();
+  }
+
+  function respond(a, code, lat) {
+    S.log.push({ t: S.t, code });
+    S.totals[code]++;
+    if (code === 200) { S.lat.push(lat); if (lat > 1) S.slow++; }
+    else { if (S.failFirst === null) S.failFirst = S.t; S.failLast = S.t; }
+    a.req = null;
+    if (code === 200 && cfg.mode === "churn") { a.state = "suspending"; a.doneAt = S.t + M.suspend; }
+    else a.next = S.t + (cfg.mode === "churn" ? M.churnGap : M.interval);
+  }
+
+  function setSpec(n) {
+    if (n > S.spec) for (let i = S.spec; i < n; i++) S.workers.push(newWorker(false));
+    S.spec = n;
+    trimWorkers();
+  }
+  // Remove surplus workers, never one hosting an actor (the lab always suspends before scaling down).
+  function trimWorkers() {
+    while (S.workers.length > S.spec) {
+      let idx = S.workers.findIndex(w => !w.ready);
+      if (idx < 0) idx = S.workers.findIndex(w => !w.actor);
+      if (idx < 0) break;
+      S.workers.splice(idx, 1);
+    }
+  }
+
+  function step() {
+    const t = (S.t = +(S.t + M.dt).toFixed(3));
+    S.workers.forEach(w => { if (!w.ready && t >= w.readyAt) w.ready = true; });
+
+    for (const a of S.actors) {
+      if (a.state === "suspending" && t >= a.doneAt) { a.state = "suspended"; if (a.worker) a.worker.actor = null; a.worker = null; a.next = t; }
+      if (a.state === "resuming" && t >= a.doneAt) { a.state = "running"; respond(a, 200, t - a.req.start); }
+    }
+    trimWorkers();
+
+    for (const a of S.actors) {
+      if (!a.req && t >= a.next && (a.state === "running" || a.state === "suspended")) {
+        a.req = { start: t };
+        if (a.state === "running") respond(a, 200, 0.02);
+      }
+    }
+    const waiting = S.actors.filter(a => a.req && a.state === "suspended").sort((x, y) => x.req.start - y.req.start);
+    for (const a of waiting) {
+      const w = S.workers.find(w => w.ready && !w.actor);
+      if (w) { a.state = "resuming"; a.worker = w; w.actor = a; a.doneAt = t + M.restore; continue; }
+      if (cfg.budget === 0) { respond(a, 429, 0.05); continue; }
+      if (t - a.req.start >= cfg.budget) respond(a, 504, cfg.budget);
+    }
+
+    if (t >= S.nextScrape) { S.atcap = S.workers.filter(w => w.ready && w.actor).length; S.nextScrape += M.scrape; }
+    if (cfg.hpa && t >= S.nextSync) {
+      S.nextSync += M.sync;
+      const cur = S.spec, ratio = S.atcap / (M.target * cur);
+      let desired = Math.abs(ratio - 1) <= 0.1 ? cur : Math.min(Math.max(Math.ceil(S.atcap / M.target - 1e-9), M.min), M.max);
+      S.recs.push({ t, desired }); S.recs = S.recs.filter(r => t - r.t <= M.downWindow);
+      if (desired > cur) setSpec(Math.min(desired, Math.max(cur * 2, cur + 10)));
+      else {
+        const eff = Math.max(...S.recs.map(r => r.desired));
+        if (eff < cur && t - S.lastDown >= M.downPeriod) { setSpec(Math.max(eff, cur - M.downStep)); S.lastDown = t; }
+      }
+    }
+
+    if (t - S.lastRow >= 5 - 1e-9) { addRow(S.lastRow, t); S.lastRow = t; }
+    const ready = S.workers.filter(w => w.ready).length;
+    const lastSp = S.spark[S.spark.length - 1];
+    if (lastSp.spec !== S.spec || lastSp.ready !== ready) S.spark.push({ t, spec: S.spec, ready });
+  }
+
+  function addRow(from, to) {
+    const c = { 200: 0, 429: 0, 503: 0, 504: 0 };
+    S.log.forEach(e => { if (e.t > from && e.t <= to) c[e.code]++; });
+    const ready = S.workers.filter(w => w.ready).length;
+    S.rows.push({ t: to, spec: S.spec, ready, ...c });
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${Math.round(to)}s</td><td>${S.spec}/${ready}</td><td>${c[200]}</td><td class="${c[429] ? "warn" : ""}">${c[429]}</td><td>${c[503]}</td><td class="${c[504] ? "bad" : ""}">${c[504]}</td>`;
+    const body = $("#ticker"); body.appendChild(tr);
+    const box = body.closest(".ticker-box"); box.scrollTop = box.scrollHeight;
+  }
+
+  function summary() {
+    const T = S.totals, n = T[200] + T[429] + T[503] + T[504];
+    const lat = S.lat.slice().sort((a, b) => a - b);
+    const q = p => lat.length ? lat[Math.floor((lat.length - 1) * p)].toFixed(3) + "s" : "n/a";
+    const fails = n - T[200];
+    const ready = S.workers.filter(w => w.ready).length;
+    let s = `==> results (${cfg.mode}, ${Math.round(S.t)}s, pool now ${S.spec}/${ready})   [model]\n`;
+    s += `    total requests : ${n}\n    200 OK         : ${T[200]}\n    504            : ${T[504]}   <- park budget ran out\n    429            : ${T[429]}   <- pool full, parking off\n    503            : ${T[503]}\n`;
+    if (lat.length) s += `    200 latency    : p50 ${q(0.5)}  p95 ${q(0.95)}  max ${lat[lat.length - 1].toFixed(3)}s\n    200s over 1s   : ${S.slow}   <- waited (parked) before being served\n`;
+    if (fails) s += `    failure window : first at t=${Math.round(S.failFirst)}s, last at t=${Math.round(S.failLast)}s\n`;
+    s += fails ? `\n    => ${fails} failed requests.` : `\n    => 0 failures: every request was served.`;
+    return s;
+  }
+
+  /* ---------------- painting ---------------- */
+  function paint() {
+    $("#clock").textContent = `t = ${S.t.toFixed(1)}s`;
+    const bays = $("#bays"); let html = "";
+    for (let i = 0; i < M.bays; i++) {
+      const w = S.workers[i];
+      // worker number on top, status on the bottom, actor in the middle; each line clips to its own box
+      const slot = (cls, inner, status) => `<div class="bay ${cls}"><span class="wid">worker ${i + 1}</span>${inner}<span class="wst">${status}</span></div>`;
+      if (!w) { html += slot("closed", "", "not in pool"); continue; }
+      if (!w.ready) { html += slot("starting", "", "starting"); continue; }
+      const a = w.actor;
+      html += slot("", a ? `<span class="car ${a.state}">${a.id}</span>` : "", a ? a.state : "free");
+    }
+    bays.innerHTML = html;
+    const ready = S.workers.filter(w => w.ready).length;
+    $("#poolsr").textContent = `${S.spec} / ${ready}`;
+    $("#atcap").textContent = S.atcap;
+    const parked = S.actors.filter(a => a.req && a.state === "suspended");
+    $("#parkedn").textContent = `${parked.length} parked`;
+    const q = $("#queue");
+    if (!parked.length) q.innerHTML = `<span class="empty">${cfg.budget === 0 ? "Parking is off: requests that find no free worker are rejected with 429." : "Nothing waiting."}</span>`;
+    else q.innerHTML = parked.map(a => {
+      const waited = S.t - a.req.start, left = Math.max(0, 1 - waited / cfg.budget);
+      return `<div class="ticket"><b>${a.id}</b><span>waited ${waited.toFixed(1)}s</span><i style="--left:${(left * 100).toFixed(1)}%"></i></div>`;
+    }).join("");
+    for (const k of [200, 429, 503, 504]) $("#n" + k).textContent = S.totals[k];
+  }
+
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function drawChart() {
+    const cv = $("#chart"), dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const pad = { l: 34, r: 40, t: 12, b: 26 }, iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    const dur = cfg.duration, X = t => pad.l + (t / dur) * iw, Y = v => pad.t + ih - (v / 10) * ih;
+    const ink2 = css("--ink-2"), rule = css("--rule");
+    g.font = `11px ${css("--f-data") || "monospace"}`; g.textBaseline = "middle";
+    // grid + left axis (workers 0..10)
+    g.strokeStyle = rule; g.lineWidth = 1; g.fillStyle = ink2; g.textAlign = "right";
+    for (let v = 0; v <= 10; v += 2) { g.beginPath(); g.moveTo(pad.l, Y(v) + .5); g.lineTo(pad.l + iw, Y(v) + .5); g.stroke(); g.fillText(String(v), pad.l - 6, Y(v)); }
+    g.textAlign = "center"; g.textBaseline = "top";
+    const stepX = dur <= 60 ? 10 : 30;
+    for (let t = 0; t <= dur; t += stepX) g.fillText(t + "s", X(t), pad.t + ih + 7);
+    // failure bars per 5s on right axis
+    const maxF = Math.max(4, ...S.rows.map(r => r[504] + r[429] + r[503]));
+    const bw = Math.max(2, (5 / dur) * iw - 2);
+    S.rows.forEach(r => {
+      const x0 = X(r.t - 5) + 1; let y = pad.t + ih;
+      [["504", "--stop"], ["429", "--caution"], ["503", "--grey"]].forEach(([k, c]) => {
+        const h = (r[k] / maxF) * ih; if (!h) return; g.fillStyle = css(c); g.fillRect(x0, y - h, bw, h); y -= h;
+      });
+    });
+    g.fillStyle = ink2; g.textAlign = "left"; g.textBaseline = "middle";
+    g.fillText(String(maxF), pad.l + iw + 6, pad.t + 1); g.fillText("0", pad.l + iw + 6, pad.t + ih);
+    g.save(); g.translate(W - 6, pad.t + ih / 2); g.rotate(-Math.PI / 2); g.textAlign = "center"; g.textBaseline = "bottom"; g.fillText("fails / 5s", 0, 0); g.restore();
+    // spec (dashed) + ready (solid) step lines
+    const line = (key, color, dash, width) => {
+      g.strokeStyle = color; g.lineWidth = width; g.setLineDash(dash); g.beginPath();
+      const pts = S.spark; g.moveTo(X(0), Y(pts[0][key]));
+      for (let i = 1; i < pts.length; i++) { g.lineTo(X(Math.min(pts[i].t, dur)), Y(pts[i - 1][key])); g.lineTo(X(Math.min(pts[i].t, dur)), Y(pts[i][key])); }
+      g.lineTo(X(Math.min(S.t, dur)), Y(pts[pts.length - 1][key])); g.stroke(); g.setLineDash([]);
+    };
+    line("spec", ink2, [5, 4], 1.5);
+    line("ready", css("--sign"), [], 2.5);
+    // now marker
+    if (S.t > 0) { g.strokeStyle = css("--amber"); g.lineWidth = 1; g.beginPath(); g.moveTo(X(Math.min(S.t, dur)) + .5, pad.t); g.lineTo(X(Math.min(S.t, dur)) + .5, pad.t + ih); g.stroke(); }
+  }
+
+  /* ---------------- loop ---------------- */
+  let raf = null, lastTs = 0, acc = 0;
+  function frame(ts) {
+    if (!lastTs) lastTs = ts;
+    acc += Math.min(0.25, (ts - lastTs) / 1000) * cfg.speed; lastTs = ts;
+    while (acc >= M.dt && S.t < cfg.duration - 1e-9) { step(); acc -= M.dt; }
+    paint(); drawChart();
+    if (S.t >= cfg.duration - 1e-9) { if (S.t - S.lastRow > 0.05) addRow(S.lastRow, S.t); $("#summary").textContent = summary(); stop(true); return; }
+    raf = requestAnimationFrame(frame);
+  }
+  function start() {
+    if (S.t >= cfg.duration - 1e-9) resetSim();
+    if (raf) return;
+    lastTs = 0; acc = 0; $("#runbtn").textContent = "Pause"; $("#summary").textContent = "Running…";
+    raf = requestAnimationFrame(frame);
+  }
+  function stop(finished) {
+    if (raf) cancelAnimationFrame(raf); raf = null;
+    const b = $("#runbtn"); if (b) b.textContent = finished ? "Run again" : (S && S.t > 0 ? "Resume" : "Run");
+  }
+  $("#runbtn").addEventListener("click", () => raf ? stop(false) : start());
+  $("#resetbtn").addEventListener("click", () => resetSim());
+
+  // redraw the chart on resize and theme change
+  window.addEventListener("resize", () => drawChart());
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => drawChart()); } catch { /* old browsers */ }
+  new MutationObserver(() => drawChart()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  // Open on Scenario 3, with a short run already done, so the first view shows the pool climbing.
+  setSeg("speed", cfg.speed);
+  applyPreset("act3", false);
+  while (S.t < 115) step();
+  paint(); drawChart();
+  $("#summary").textContent = "Paused at t=115s in Scenario 3. Press Resume, or pick another scenario.";
+  $("#runbtn").textContent = "Resume";
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => drawChart());
+})();
+</script>
+
+</html>

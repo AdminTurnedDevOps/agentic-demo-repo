@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burst Without 503s Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800;900&family=Overpass+Mono:wght@400;600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: a presenter's stage in car-park signage. Act rail across the top like level signs,
+   narration and controller events on the left, the lot (workers, parked tickets, ticker, chart) on the right. */
+:root {
+  --concrete: #e3e6ea; --slab: #f1f3f5; --ink: #161a21; --ink-2: #4b5462; --rule: #c3c9d1;
+  --sign: #1d4f9f; --sign-ink: #ffffff;
+  --amber: #c98a06; --amber-soft: #f3dfb0;
+  --stop: #c2352c; --go: #1d7a4b; --caution: #b45309; --grey: #6b7280;
+  --paint: #d8a600; --code-bg: #e9ecf0;
+  --f-display: "Overpass", "Highway Gothic", "Arial Narrow", sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-data: "Overpass Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --step--1: 0.84rem; --step-0: 1rem; --step-1: 1.2rem; --step-2: 1.6rem; --step-3: clamp(1.8rem, 3.4vw, 2.6rem);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --concrete: #12151a; --slab: #1a1f26; --ink: #e5e8ec; --ink-2: #9aa4b2; --rule: #2e3540;
+  --sign: #3f74cc; --sign-ink: #ffffff; --amber: #e9ad35; --amber-soft: #3d3016;
+  --stop: #e2584e; --go: #3aa86c; --caution: #e0883a; --grey: #8c95a3; --paint: #c99a12; --code-bg: #0e1115;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --concrete: #12151a; --slab: #1a1f26; --ink: #e5e8ec; --ink-2: #9aa4b2; --rule: #2e3540;
+  --sign: #3f74cc; --sign-ink: #ffffff; --amber: #e9ad35; --amber-soft: #3d3016;
+  --stop: #e2584e; --go: #3aa86c; --caution: #e0883a; --grey: #8c95a3; --paint: #c99a12; --code-bg: #0e1115;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--concrete); color: var(--ink); font-family: var(--f-body); font-size: var(--step-0); line-height: 1.5; }
+.stage { max-width: 1320px; margin: 0 auto; padding-inline: clamp(16px, 3vw, 32px); padding-block: 20px 40px; display: grid; gap: 16px; background: var(--concrete); }
+.stage:fullscreen { max-width: none; overflow: auto; padding-block: 24px; }
+h1, h2, h3 { font-family: var(--f-display); line-height: 1.05; text-wrap: balance; margin: 0; }
+p { margin: 0; }
+code { font-family: var(--f-data); font-size: .88em; }
+:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.label { font-family: var(--f-display); font-weight: 800; font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+
+/* top bar */
+.top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand .p { font-family: var(--f-display); font-weight: 900; font-size: 2rem; line-height: 1; width: 1.25em; height: 1.25em; display: grid; place-items: center; padding-top: .12em; background: var(--sign); color: var(--sign-ink); border-radius: 4px; box-shadow: inset 0 0 0 2px var(--sign), inset 0 0 0 4px rgba(255,255,255,.85); }
+.brand h1 { font-weight: 900; font-size: var(--step-2); }
+.brand small { display: block; font-family: var(--f-data); font-size: .74rem; color: var(--ink-2); margin-top: 3px; }
+.transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tbtn { font: 800 var(--step-0)/1 var(--f-display); letter-spacing: .02em; border: 2px solid var(--ink); background: transparent; color: var(--ink); padding: 9px 13px 7px; border-radius: 3px; cursor: pointer; }
+.tbtn:hover { background: var(--slab); }
+.tbtn.play { background: var(--sign); border-color: var(--sign); color: var(--sign-ink); min-width: 7.5em; }
+.seg { display: inline-flex; border: 2px solid var(--ink); border-radius: 3px; overflow: hidden; }
+.seg button { font: 600 var(--step--1)/1 var(--f-body); background: transparent; color: var(--ink); border: 0; padding: 10px 10px; cursor: pointer; }
+.seg button + button { border-left: 2px solid var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--concrete); }
+.auto { display: inline-flex; align-items: center; gap: 6px; font-size: var(--step--1); color: var(--ink-2); cursor: pointer; }
+.auto input { width: 17px; height: 17px; accent-color: var(--sign); }
+
+/* act rail: level signs */
+.rail { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 900px) { .rail { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .rail { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.chip { position: relative; display: grid; grid-template-columns: auto 1fr; gap: 2px 9px; align-items: center; text-align: left; border: 2px solid var(--rule); background: var(--slab); color: var(--ink); border-radius: 3px; padding: 7px 9px 9px; cursor: pointer; overflow: hidden; min-width: 0; }
+.chip .n { grid-row: span 2; font: 900 1.3rem/1 var(--f-display); background: var(--ink); color: var(--concrete); border-radius: 2px; min-width: 1.6em; text-align: center; padding: 4px 3px 1px; }
+.chip b { font: 800 .9rem/1.15 var(--f-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip span.r { font-family: var(--f-data); font-size: .7rem; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .bar { position: absolute; left: 0; bottom: 0; height: 4px; width: var(--p, 0%); background: var(--sign); transition: width .2s linear; }
+.chip[aria-current="step"] { border-color: var(--sign); }
+.chip[aria-current="step"] .n { background: var(--sign); color: var(--sign-ink); }
+.chip.done .n { background: var(--go); color: #fff; }
+
+/* body */
+.body { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 980px) { .body { grid-template-columns: 1fr; } }
+.side { display: grid; gap: 14px; min-width: 0; }
+.narr { background: var(--slab); border: 1px solid var(--rule); border-radius: 4px; padding: 16px 18px 18px; display: grid; gap: 10px; }
+.narr .act { font: 800 var(--step--1)/1 var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--sign); }
+.narr h2 { font-size: var(--step-3); font-weight: 900; }
+.narr p { font-size: 1.04rem; max-width: 60ch; }
+.watch { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; background: var(--amber-soft); border: 2px solid var(--amber); border-radius: 3px; padding: 9px 11px; font-size: .95rem; }
+.watch .eye { font: 900 .72rem/1 var(--f-display); letter-spacing: .08em; text-transform: uppercase; background: var(--amber); color: var(--ink); padding: 4px 6px 2px; border-radius: 2px; margin-top: 2px; }
+.ran { font-size: var(--step--1); color: var(--ink-2); }
+.ran code { display: block; margin-top: 4px; background: var(--code-bg); color: var(--ink); padding: 7px 9px; border-radius: 3px; overflow-x: auto; white-space: nowrap; }
+.events { display: grid; gap: 6px; }
+.feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 230px; overflow-y: auto; }
+.feed li { display: grid; grid-template-columns: 3.4em auto 1fr; gap: 8px; align-items: baseline; font-size: .86rem; padding: 4px 0; border-bottom: 1px solid var(--rule); animation: slide .3s ease-out; }
+.feed .ts { font-family: var(--f-data); font-size: .74rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.feed .kind { font: 900 .66rem/1 var(--f-display); letter-spacing: .06em; text-transform: uppercase; padding: 3px 5px 1px; border-radius: 2px; color: #fff; }
+.k-hpa { background: var(--sign); } .k-pod { background: var(--grey); } .k-fail { background: var(--stop); } .k-park { background: var(--amber); color: var(--ink) !important; } .k-ok { background: var(--go); } .k-rej { background: var(--caution); }
+.feed .empty { color: var(--ink-2); font-size: .86rem; border: 0; display: block; }
+/* key terms */
+.terms { display: grid; gap: 14px; border-top: 1px solid var(--rule); margin-top: 28px; padding-top: 22px; }
+.terms dl { margin: 0; display: grid; gap: 20px; }
+.terms dt { font: 800 .95rem/1.2 var(--f-display); }
+.terms dt small { font: 400 .82rem/1.2 var(--f-body); color: var(--ink-2); }
+.terms dd { margin: 6px 0 0; font-size: .9rem; line-height: 1.6; color: var(--ink-2); max-width: 60ch; }
+@keyframes slide { from { transform: translateY(-4px); opacity: .3; } to { transform: none; opacity: 1; } }
+
+/* lot */
+.lot { background: var(--slab); border: 1px solid var(--rule); border-radius: 4px; padding: clamp(12px, 2vw, 20px); display: grid; gap: 14px; min-width: 0; }
+.row2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .row2 { grid-template-columns: 1fr; } }
+.zone { display: grid; gap: 7px; min-width: 0; }
+.zone-title { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.clock { font-family: var(--f-data); font-size: var(--step-1); font-variant-numeric: tabular-nums; }
+.bays { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--concrete); border: 1px solid var(--rule); border-radius: 3px; padding: 10px 6px 6px; }
+.bay { position: relative; height: 84px; border-left: 3px solid var(--paint); display: grid; place-items: center; padding: 4px; }
+.bay:nth-child(5n) { border-right: 3px solid var(--paint); }
+.bay .wid, .bay .wst { position: absolute; left: 7px; right: 4px; font-family: var(--f-data); font-size: .66rem; line-height: 1.2; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bay .wid { top: 4px; color: var(--ink); font-weight: 600; }
+.bay .wst { bottom: 4px; }
+.bay.closed { background: repeating-linear-gradient(-45deg, transparent 0 7px, color-mix(in srgb, var(--ink-2) 16%, transparent) 7px 9px); }
+.bay.starting { background: repeating-linear-gradient(-45deg, transparent 0 7px, color-mix(in srgb, var(--amber) 38%, transparent) 7px 10px); }
+.car { max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 900 1.3rem/1 var(--f-display); padding: 7px 11px 4px; border-radius: 3px; background: var(--sign); color: var(--sign-ink); transition: opacity .25s, transform .25s; }
+.car.resuming { background: transparent; color: var(--amber); outline: 3px solid var(--amber); transform: scale(.92); }
+.car.suspending { opacity: .4; }
+.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--step--1); color: var(--ink-2); }
+.foot b { font-family: var(--f-data); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.agents { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 520px) { .agents { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.agent { display: grid; gap: 2px; background: var(--concrete); border-radius: 3px; padding: 6px 7px; border: 2px solid transparent; min-width: 0; }
+.agent b { font: 900 1rem/1 var(--f-display); }
+.agent span { font-family: var(--f-data); font-size: .68rem; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent.running { border-color: var(--sign); }
+.agent.parked { border-color: var(--amber); background: color-mix(in srgb, var(--amber-soft) 60%, var(--concrete)); }
+.agent.resuming { border-color: var(--amber); }
+.agent.flash-504 { border-color: var(--stop); }
+.agent.flash-429 { border-color: var(--caution); }
+
+.queue { min-height: 52px; border: 2px dashed var(--amber); border-radius: 3px; padding: 7px; display: flex; flex-wrap: wrap; gap: 7px; align-content: flex-start; background: color-mix(in srgb, var(--amber-soft) 45%, transparent); }
+.queue .empty { color: var(--ink-2); font-size: var(--step--1); align-self: center; }
+.ticket { display: grid; gap: 3px; min-width: 74px; background: var(--slab); border: 1px solid var(--amber); border-radius: 3px; padding: 5px 7px; }
+.ticket b { font: 900 .95rem/1 var(--f-display); }
+.ticket span { font-family: var(--f-data); font-size: .68rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ticket i { display: block; height: 4px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+.ticket i::after { content: ""; display: block; height: 100%; width: var(--left, 100%); background: var(--amber); }
+
+.tally { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tally div { display: flex; justify-content: space-between; align-items: center; gap: 6px; background: var(--concrete); border-radius: 3px; padding: 5px 8px 5px 5px; }
+.tally output { font-family: var(--f-data); font-weight: 600; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.code-tag { font: 900 1rem/1 var(--f-display); min-width: 3em; text-align: center; padding: 4px 6px 2px; border-radius: 3px; color: #fff; }
+.c200 { background: var(--go); } .c429 { background: var(--caution); } .c503 { background: var(--grey); } .c504 { background: var(--stop); }
+.bump { animation: bump .35s ease-out; }
+@keyframes bump { 0% { transform: scale(1.18); } 100% { transform: none; } }
+
+.ticker-box { overflow: auto; border: 1px solid var(--rule); border-radius: 3px; background: var(--code-bg); height: 214px; }
+table.ticker { border-collapse: collapse; width: 100%; font-family: var(--f-data); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.ticker th, .ticker td { padding: 4px 8px; text-align: right; white-space: nowrap; }
+.ticker th { position: sticky; top: 0; background: var(--code-bg); color: var(--ink-2); font-weight: 600; border-bottom: 1px solid var(--rule); }
+.ticker th:nth-child(-n+2), .ticker td:nth-child(-n+2) { text-align: left; }
+.ticker td.bad { color: var(--stop); font-weight: 600; } .ticker td.warn { color: var(--caution); font-weight: 600; }
+.chart-box { border: 1px solid var(--rule); border-radius: 3px; background: var(--concrete); }
+canvas#chart { display: block; width: 100%; height: 170px; }
+.chart-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .76rem; color: var(--ink-2); }
+.chart-key span::before { content: ""; display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; background: var(--k); }
+.chart-key span.dash::before { background: repeating-linear-gradient(90deg, var(--k) 0 4px, transparent 4px 7px); }
+.chart-key span.bar::before { height: 9px; width: 9px; }
+
+/* end-of-act banner + results */
+.banner { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; background: var(--ink); color: var(--concrete); border-radius: 3px; padding: 10px 14px; font-size: .95rem; }
+.banner b { font-family: var(--f-display); font-weight: 900; font-size: 1.1rem; }
+.banner .next { font-family: var(--f-data); font-size: .8rem; opacity: .85; }
+.results { display: grid; gap: 14px; }
+.results .tbl { overflow-x: auto; }
+.results table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: .95rem; }
+.results th, .results td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.results th { font: 800 var(--step--1)/1.2 var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.results td.num { font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+.results td.bad { color: var(--stop); font-weight: 700; }
+.results td.warn { color: var(--caution); font-weight: 700; }
+.takeaways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 3px solid var(--ink); }
+@media (max-width: 760px) { .takeaways { grid-template-columns: 1fr; } }
+.takeaways div { padding: 12px 16px 4px 0; display: grid; gap: 6px; align-content: start; }
+.takeaways div + div { padding-left: 16px; border-left: 1px solid var(--rule); }
+@media (max-width: 760px) { .takeaways div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); } }
+.takeaways h3 { font-size: var(--step-1); font-weight: 900; }
+.takeaways p { font-size: .95rem; color: var(--ink-2); }
+.disclaimer { font-size: .78rem; color: var(--ink-2); }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="stage" id="stage">
+  <div class="top">
+    <div class="brand">
+      <div class="p" aria-hidden="true">P</div>
+      <div><h1>Burst Without 503s</h1><small>Agent Substrate · request parking + autoscaled WorkerPool · simulated</small></div>
+    </div>
+    <div class="transport" role="group" aria-label="Playback">
+      <button class="tbtn" id="prev" title="Previous scenario (←)">Prev</button>
+      <button class="tbtn play" id="play" title="Play / pause (space)">Play</button>
+      <button class="tbtn" id="next" title="Next scenario (→)">Next</button>
+      <div class="seg" id="speed" aria-label="Speed"><button data-v="3">3×</button><button data-v="6">6×</button><button data-v="12">12×</button></div>
+      <label class="auto" for="autoadv"><input type="checkbox" id="autoadv" checked> Auto-advance</label>
+      <button class="tbtn" id="fs" title="Full screen">Full screen</button>
+    </div>
+  </div>
+
+  <nav class="rail" id="rail" aria-label="Scenarios"></nav>
+
+  <div class="body">
+    <aside class="side">
+      <section class="narr" aria-live="polite">
+        <span class="act" id="n-act"></span>
+        <h2 id="n-title"></h2>
+        <p id="n-text"></p>
+        <div class="watch" id="n-watchbox"><span class="eye">Watch</span><span id="n-watch"></span></div>
+        <div class="ran"><span class="label">What the operator ran</span><code id="n-cmd"></code></div>
+      </section>
+      <section class="events" aria-label="Controller events">
+        <span class="label">Controller events</span>
+        <ul class="feed" id="feed"></ul>
+      </section>
+      <section class="terms" aria-labelledby="terms-h">
+        <span class="label" id="terms-h">Key terms</span>
+        <dl>
+          <div><dt>Parked request</dt><dd>A request for an actor that has no worker yet.</dd></div>
+          <div><dt>Park budget <small>(just "budget" in this lab)</small></dt><dd>The longest the router keeps a parked request waiting. The clock starts when the router first tries to resume the actor.</dd></div>
+          <div><dt>Parking off</dt><dd>The sibling setting <code>requestParking.max</code> caps how many requests can be parked at once (default <code>1024</code>). <code>max: 0</code> turns parking off: a request that finds no free worker gets <code>429</code> right away, with no wait.</dd></div>
+        </dl>
+      </section>
+    </aside>
+
+    <main class="lot" id="lot">
+      <div id="sim-view">
+        <div class="row2">
+          <div class="zone">
+            <div class="zone-title"><span class="label">WorkerPool burst · workers</span><span class="clock" id="clock">t = 0.0s</span></div>
+            <div class="bays" id="bays"></div>
+            <div class="foot"><span>spec / ready <b id="poolsr">2 / 2</b></span><span>full workers (last scrape) <b id="atcap">0</b></span><span>HPA <b id="hpastate">off</b></span><span>park budget <b id="budgetv">5s</b></span></div>
+            <span class="label" style="margin-top:6px">Agents/Actors</span>
+            <div class="agents" id="agents"></div>
+            <div class="zone-title" style="margin-top:4px"><span class="label">Parked requests · bar = budget left</span><span class="label" id="parkedn">0 parked</span></div>
+            <div class="queue" id="queue"></div>
+            <div class="tally">
+              <div><span class="code-tag c200">200</span><output id="n200">0</output></div>
+              <div><span class="code-tag c504">504</span><output id="n504">0</output></div>
+              <div><span class="code-tag c429">429</span><output id="n429">0</output></div>
+              <div><span class="code-tag c503">503</span><output id="n503">0</output></div>
+            </div>
+          </div>
+          <div class="zone">
+            <span class="label">burst.sh ticker · per 5s window</span>
+            <div class="ticker-box" id="tickerbox"><table class="ticker"><thead><tr><th>t</th><th>pool s/r</th><th>200</th><th>429</th><th>503</th><th>504</th></tr></thead><tbody id="ticker"></tbody></table></div>
+            <div class="chart-box"><canvas id="chart" aria-label="Ready workers, HPA target and failures over time"></canvas></div>
+            <div class="chart-key">
+              <span style="--k: var(--sign)">ready workers</span>
+              <span class="dash" style="--k: var(--ink-2)">HPA target</span>
+              <span class="bar" style="--k: var(--stop)">504 / 5s</span>
+              <span class="bar" style="--k: var(--caution)">429 / 5s</span>
+            </div>
+          </div>
+        </div>
+        <div class="banner" id="banner" hidden><span id="banner-text"></span><span class="next" id="banner-next"></span></div>
+      </div>
+
+      <div class="results" id="results-view" hidden>
+        <div class="zone-title"><h2 style="font-size:var(--step-3);font-weight:900">Same six agents, five setups</h2></div>
+        <div class="tbl"><table>
+          <thead><tr><th>Scenario</th><th>Setup</th><th>Served</th><th>504</th><th>429</th><th>Peak pool</th><th>Longest wait, served</th><th>Failures stop at</th></tr></thead>
+          <tbody id="results-body"></tbody>
+        </table></div>
+        <div class="takeaways">
+          <div><h3>Parking handles seconds</h3><p>When workers free up within the budget, parked requests are served instead of rejected. Scenario 1 against "parking off" is the whole difference.</p></div>
+          <div><h3>The HPA handles minutes</h3><p>Parking cannot create a worker. Under sustained load only more workers help, and the HPA adds them from the full-worker count.</p></div>
+          <div><h3>Size one to the other</h3><p>Set the park budget to how long scale-up takes on your nodes. Then a burst that starts on two workers is served while the pool grows.</p></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = s => document.querySelector(s);
+
+  /* ---------------- acts ---------------- */
+  const ACTS = [
+    { key: "a1", n: "1", short: "Parking on", act: "Scenario 1", title: "Parking absorbs short contention",
+      cfg: { mode: "churn", budget: 5, hpa: 0, duration: 45 },
+      text: "Six agents share two warm workers. Each agent sends a request, then suspends and gives its worker back. When a request finds both workers busy, the router parks it and keeps retrying for up to 5 seconds instead of failing.",
+      watch: "Amber tickets appear and clear within a second or two. The 200 count climbs and failures stay at zero.",
+      cmd: "./scripts/burst.sh -m churn -d 45" },
+    { key: "a1c", n: "2", short: "Parking off", act: "Scenario 1c", title: "Same load with parking off",
+      cfg: { mode: "churn", budget: 0, hpa: 0, duration: 45 },
+      text: "Same agents, same pool, same load. With parking off, the router answers at once when no worker is free, and agentgateway reports that as 429.",
+      watch: "No tickets in the lot. Every window in the ticker shows 429s.",
+      cmd: "./scripts/router-parking.sh off" },
+    { key: "a2", n: "3", short: "Busy agents", act: "Scenario 2", title: "Parking is not capacity",
+      cfg: { mode: "hold", budget: 5, hpa: 0, duration: 60 },
+      text: "Now the agents stay busy and never give their worker back. Two agents hold both workers. The other four park, wait the full 5 seconds, get 504, and try again.",
+      watch: "The pool stays at 2/2. Tickets drain to empty and turn into 504s, window after window.",
+      cmd: "./scripts/burst.sh -m hold -d 60" },
+    { key: "a3", n: "4", short: "HPA on", act: "Scenario 3", title: "The HPA adds capacity",
+      cfg: { mode: "hold", budget: 5, hpa: 1, duration: 180 },
+      text: "An HPA reads how many workers are full and grows the WorkerPool. It can only see full workers, never the agents waiting, so it climbs in steps: 2, then 3, 5 and 8.",
+      watch: "Hatched workers are pods still starting. When they become Ready, parked agents move in, and 504s stop once every agent has a worker. The pool settles at 8 with 2 idle.",
+      cmd: "kubectl apply -f manifests/hpa.yaml" },
+    { key: "a4", n: "5", short: "90s budget", act: "Scenario 4", title: "The park budget covers scale-up",
+      cfg: { mode: "hold", budget: 90, hpa: 1, duration: 180 },
+      text: "Same burst from a cold two-worker pool, with a 90 second park budget. Requests that failed in Scenario 3 now wait in the lot until the HPA brings a worker online.",
+      watch: "Long-lived tickets while the pool grows. Any 504 left is a request whose worker took longer than 90 seconds to arrive.",
+      cmd: "./scripts/router-parking.sh budget 90" },
+    { key: "res", n: "6", short: "Results", act: "Wrap-up", title: "What changed between the scenarios",
+      text: "The same six agents and the same two starting workers, five ways. Parking turns short waits into served requests. The HPA turns lasting demand into workers. The budget connects the two.",
+      watch: "Compare the 504 and 429 columns, then the peak pool and the longest wait.",
+      cmd: "make clean" },
+  ];
+
+  /* ---------------- simulation engine ---------------- */
+  const M = { restore: 0.4, suspend: 1.2, interval: 1, scrape: 15, sync: 15, syncPhase: 7.5, target: 0.7, min: 2, max: 10, downWindow: 60, downStep: 2, downPeriod: 30, churnGap: 0.3, dt: 0.1, podStart: 20 };
+
+  function createSim(cfg, onEvent) {
+    let wid = 0;
+    const S = { cfg, t: 0, spec: 2, workers: [], actors: [], log: [], rows: [], lastRow: 0, atcap: 0, nextScrape: 0, nextSync: M.syncPhase, recs: [], lastDown: -1e9,
+      totals: { 200: 0, 429: 0, 503: 0, 504: 0 }, failFirst: null, failLast: null, lat: [], peak: 2, spark: [{ t: 0, spec: 2, ready: 2 }], flash: {} };
+    const emit = (kind, msg) => onEvent && onEvent(S.t, kind, msg);
+    const worker = ready => ({ id: ++wid, ready, readyAt: ready ? 0 : S.t + M.podStart, actor: null });
+    S.workers.push(worker(true), worker(true));
+    for (let i = 1; i <= 6; i++) S.actors.push({ id: "a" + i, state: "suspended", worker: null, req: null, next: i * 0.15, doneAt: 0, parkedNoted: false });
+
+    function respond(a, code, lat) {
+      S.log.push({ t: S.t, code }); S.totals[code]++;
+      if (code === 200) S.lat.push(lat); else { if (S.failFirst === null) S.failFirst = S.t; S.failLast = S.t; S.flash[a.id] = { code, until: S.t + 0.8 }; }
+      if (code === 504) emit("fail", `${a.id}: budget ran out after ${cfg.budget}s → 504`);
+      if (code === 200 && lat > 1) emit("ok", `${a.id}: served after ${lat.toFixed(1)}s parked`);
+      a.req = null; a.parkedNoted = false;
+      if (code === 200 && cfg.mode === "churn") { a.state = "suspending"; a.doneAt = S.t + M.suspend; }
+      else a.next = S.t + (cfg.mode === "churn" ? M.churnGap : M.interval);
+    }
+    function trim() {
+      while (S.workers.length > S.spec) {
+        let i = S.workers.findIndex(w => !w.ready); if (i < 0) i = S.workers.findIndex(w => !w.actor); if (i < 0) break;
+        S.workers.splice(i, 1);
+      }
+    }
+    function setSpec(n) { if (n > S.spec) for (let i = S.spec; i < n; i++) S.workers.push(worker(false)); S.spec = n; trim(); }
+
+    function step() {
+      const t = (S.t = +(S.t + M.dt).toFixed(3));
+      S.workers.forEach(w => { if (!w.ready && t >= w.readyAt) { w.ready = true; emit("pod", `worker pod ready (${S.workers.filter(x => x.ready).length} ready)`); } });
+      for (const a of S.actors) {
+        if (a.state === "suspending" && t >= a.doneAt) { a.state = "suspended"; if (a.worker) a.worker.actor = null; a.worker = null; a.next = t; }
+        if (a.state === "resuming" && t >= a.doneAt) { a.state = "running"; respond(a, 200, t - a.req.start); }
+      }
+      trim();
+      for (const a of S.actors) if (!a.req && t >= a.next && (a.state === "running" || a.state === "suspended")) { a.req = { start: t }; if (a.state === "running") respond(a, 200, 0.02); }
+      const waiting = S.actors.filter(a => a.req && a.state === "suspended").sort((x, y) => x.req.start - y.req.start);
+      for (const a of waiting) {
+        const w = S.workers.find(w => w.ready && !w.actor);
+        if (w) { a.state = "resuming"; a.worker = w; w.actor = a; a.doneAt = t + M.restore; continue; }
+        if (cfg.budget === 0) { respond(a, 429, 0.05); continue; }
+        if (!a.parkedNoted && cfg.mode === "hold") { a.parkedNoted = true; }
+        if (t - a.req.start >= cfg.budget) respond(a, 504, cfg.budget);
+      }
+      if (t >= S.nextScrape) { S.atcap = S.workers.filter(w => w.ready && w.actor).length; S.nextScrape += M.scrape; }
+      if (cfg.hpa && t >= S.nextSync) {
+        S.nextSync += M.sync;
+        const cur = S.spec, ratio = S.atcap / (M.target * cur);
+        const inTol = Math.abs(ratio - 1) <= 0.1;
+        const desired = inTol ? cur : Math.min(Math.max(Math.ceil(S.atcap / M.target - 1e-9), M.min), M.max);
+        S.recs.push({ t, desired }); S.recs = S.recs.filter(r => t - r.t <= M.downWindow);
+        if (desired > cur) { const n = Math.min(desired, Math.max(cur * 2, cur + 10)); emit("hpa", `${S.atcap} of ${cur} workers full (ratio ${ratio.toFixed(2)}) → scale to ${n}`); setSpec(n); }
+        else {
+          if (S.atcap > 0) emit("hpa", inTol ? `${S.atcap} of ${cur} full, ratio ${ratio.toFixed(2)} within 10% → hold` : `${S.atcap} of ${cur} full → no change`);
+          const eff = Math.max(...S.recs.map(r => r.desired));
+          if (eff < cur && t - S.lastDown >= M.downPeriod) { setSpec(Math.max(eff, cur - M.downStep)); S.lastDown = t; }
+        }
+        S.peak = Math.max(S.peak, S.spec);
+      }
+      if (t - S.lastRow >= 5 - 1e-9) { addRow(S.lastRow, t); S.lastRow = t; }
+      const ready = S.workers.filter(w => w.ready).length, last = S.spark[S.spark.length - 1];
+      if (last.spec !== S.spec || last.ready !== ready) S.spark.push({ t, spec: S.spec, ready });
+    }
+    function addRow(from, to) {
+      const c = { 200: 0, 429: 0, 503: 0, 504: 0 };
+      S.log.forEach(e => { if (e.t > from && e.t <= to) c[e.code]++; });
+      S.rows.push({ t: to, spec: S.spec, ready: S.workers.filter(w => w.ready).length, ...c });
+    }
+    function finish() { if (S.t - S.lastRow > 0.05) { addRow(S.lastRow, S.t); S.lastRow = S.t; } }
+    function result() {
+      const lat = S.lat.slice().sort((a, b) => a - b);
+      const p95 = lat.length ? lat[Math.floor((lat.length - 1) * 0.95)] : null;
+      return { served: S.totals[200], f504: S.totals[504], f429: S.totals[429], f503: S.totals[503], peak: S.peak, p95, maxLat: lat.length ? lat[lat.length - 1] : null, failLast: S.failLast };
+    }
+    return { S, step, finish, result, done: () => S.t >= cfg.duration - 1e-9 };
+  }
+
+  // Precompute every act's result once (the model is deterministic) for the results table.
+  const RESULTS = {};
+  ACTS.filter(a => a.cfg).forEach(a => { const sim = createSim(a.cfg); while (!sim.done()) sim.step(); sim.finish(); RESULTS[a.key] = sim.result(); });
+  window.__results = RESULTS;
+
+  /* ---------------- player state ---------------- */
+  let idx = 0, sim = null, playing = false, phase = "ready", holdLeft = 0, speed = 6, raf = null, lastTs = 0, acc = 0, shownRows = 0;
+  const HOLD = 6; // seconds the end-of-act banner stays up before auto-advance
+
+  /* rail */
+  const rail = $("#rail");
+  ACTS.forEach((a, i) => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.type = "button";
+    b.innerHTML = `<span class="n">${a.n}</span><b></b><span class="r"></span><span class="bar"></span>`;
+    b.querySelector("b").textContent = a.short;
+    b.querySelector(".r").textContent = a.cfg ? `${a.cfg.mode} · ${a.cfg.budget ? a.cfg.budget + "s park" : "no park"}${a.cfg.hpa ? " · HPA" : ""}` : "all scenarios";
+    b.addEventListener("click", () => load(i, playing));
+    rail.appendChild(b);
+  });
+  const doneActs = new Set();
+  function paintRail(progress) {
+    [...rail.children].forEach((c, i) => {
+      c.toggleAttribute("aria-current", i === idx); if (i === idx) c.setAttribute("aria-current", "step");
+      c.classList.toggle("done", doneActs.has(i) && i !== idx);
+      c.style.setProperty("--p", i === idx ? `${Math.round(progress * 100)}%` : doneActs.has(i) ? "100%" : "0%");
+    });
+  }
+
+  /* events feed */
+  const feed = $("#feed");
+  const KIND = { hpa: ["HPA", "k-hpa"], pod: ["Pod", "k-pod"], fail: ["504", "k-fail"], ok: ["Served", "k-ok"], rej: ["429", "k-rej"] };
+  let lastFailEvt = -10, lastOkEvt = -10;
+  function onEvent(t, kind, msg) {
+    if (kind === "fail") { if (t - lastFailEvt < 2.5) return; lastFailEvt = t; }
+    if (kind === "ok") { if (t - lastOkEvt < 4) return; lastOkEvt = t; }
+    const li = document.createElement("li");
+    const [label, cls] = KIND[kind];
+    li.innerHTML = `<span class="ts">${t.toFixed(0)}s</span><span class="kind ${cls}">${label}</span><span></span>`;
+    li.lastChild.textContent = msg;
+    const empty = feed.querySelector(".empty"); if (empty) empty.remove();
+    feed.prepend(li);
+    while (feed.children.length > 40) feed.lastChild.remove();
+  }
+  function clearFeed(msg) { feed.innerHTML = `<li class="empty">${msg}</li>`; }
+
+  /* ---------------- load an act ---------------- */
+  function load(i, autoplay) {
+    idx = Math.max(0, Math.min(ACTS.length - 1, i));
+    const a = ACTS[idx];
+    $("#n-act").textContent = a.act; $("#n-title").textContent = a.title; $("#n-text").textContent = a.text;
+    $("#n-watch").textContent = a.watch; $("#n-cmd").textContent = a.cmd;
+    $("#banner").hidden = true; phase = "ready"; holdLeft = 0;
+    if (!a.cfg) {
+      stop(); $("#sim-view").hidden = true; $("#results-view").hidden = false;
+      doneActs.add(idx); renderResults(); clearFeed("All scenarios complete.");
+      $("#play").textContent = "Replay"; paintRail(1); return;
+    }
+    $("#sim-view").hidden = false; $("#results-view").hidden = true;
+    lastFailEvt = -10; lastOkEvt = -10;
+    sim = createSim(a.cfg, onEvent); shownRows = 0;
+    $("#ticker").innerHTML = "";
+    clearFeed(a.cfg.hpa ? "HPA decisions, new worker pods and failures will appear here." : "Failures and slow-but-served requests will appear here.");
+    $("#hpastate").textContent = a.cfg.hpa ? "on" : "off";
+    $("#budgetv").textContent = a.cfg.budget ? a.cfg.budget + "s" : "off";
+    paint(); drawChart(); paintRail(0);
+    if (autoplay) play(); else { stop(); $("#play").textContent = "Play"; }
+  }
+
+  /* ---------------- painting ---------------- */
+  const prevTotals = { 200: 0, 429: 0, 503: 0, 504: 0 };
+  function paint() {
+    const S = sim.S, cfg = S.cfg;
+    $("#clock").textContent = `t = ${S.t.toFixed(1)}s / ${cfg.duration}s`;
+    let html = "";
+    for (let i = 0; i < 10; i++) {
+      const w = S.workers[i];
+      // worker number on top, status on the bottom, actor in the middle; each line clips to its own box
+      const slot = (cls, inner, status) => `<div class="bay ${cls}"><span class="wid">worker ${i + 1}</span>${inner}<span class="wst">${status}</span></div>`;
+      if (!w) { html += slot("closed", "", "not in pool"); continue; }
+      if (!w.ready) { html += slot("starting", "", "starting"); continue; }
+      const a = w.actor;
+      html += slot("", a ? `<span class="car ${a.state}">${a.id}</span>` : "", a ? a.state : "free");
+    }
+    $("#bays").innerHTML = html;
+    const ready = S.workers.filter(w => w.ready).length;
+    $("#poolsr").textContent = `${S.spec} / ${ready}`; $("#atcap").textContent = S.atcap;
+    $("#agents").innerHTML = S.actors.map(a => {
+      const parked = a.req && a.state === "suspended" && cfg.budget > 0;
+      const fl = S.flash[a.id] && S.flash[a.id].until > S.t ? `flash-${S.flash[a.id].code}` : "";
+      const label = parked ? `parked ${(S.t - a.req.start).toFixed(1)}s` : a.state === "running" ? "running" : a.state === "resuming" ? "resuming" : a.state === "suspending" ? "suspending" : fl === "flash-429" ? "rejected 429" : fl === "flash-504" ? "504, retrying" : "suspended";
+      return `<div class="agent ${parked ? "parked" : a.state} ${fl}"><b>${a.id}</b><span>${label}</span></div>`;
+    }).join("");
+    const parked = S.actors.filter(a => a.req && a.state === "suspended" && cfg.budget > 0);
+    $("#parkedn").textContent = `${parked.length} parked`;
+    $("#queue").innerHTML = parked.length ? parked.map(a => {
+      const waited = S.t - a.req.start, left = Math.max(0, 1 - waited / cfg.budget);
+      return `<div class="ticket"><b>${a.id}</b><span>${waited.toFixed(1)}s of ${cfg.budget}s</span><i style="--left:${(left * 100).toFixed(1)}%"></i></div>`;
+    }).join("") : `<span class="empty">${cfg.budget === 0 ? "Parking is off. A request that finds no free worker is rejected with 429." : "Nothing waiting."}</span>`;
+    for (const k of [200, 429, 503, 504]) {
+      const el = $("#n" + k); el.textContent = S.totals[k];
+      if (S.totals[k] !== prevTotals[k] && k !== 200) { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
+      prevTotals[k] = S.totals[k];
+    }
+    // ticker rows not yet shown
+    const body = $("#ticker");
+    while (shownRows < S.rows.length) {
+      const r = S.rows[shownRows++], tr = document.createElement("tr");
+      tr.innerHTML = `<td>${Math.round(r.t)}s</td><td>${r.spec}/${r.ready}</td><td>${r[200]}</td><td class="${r[429] ? "warn" : ""}">${r[429]}</td><td>${r[503]}</td><td class="${r[504] ? "bad" : ""}">${r[504]}</td>`;
+      body.appendChild(tr);
+      const box = $("#tickerbox"); box.scrollTop = box.scrollHeight;
+    }
+  }
+
+  function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function drawChart() {
+    if (!sim) return;
+    const S = sim.S, dur = S.cfg.duration;
+    const cv = $("#chart"), dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const pad = { l: 30, r: 40, t: 10, b: 24 }, iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    const X = t => pad.l + (t / dur) * iw, Y = v => pad.t + ih - (v / 10) * ih;
+    const ink2 = css("--ink-2");
+    g.font = `11px ${css("--f-data") || "monospace"}`;
+    g.strokeStyle = css("--rule"); g.lineWidth = 1; g.fillStyle = ink2; g.textAlign = "right"; g.textBaseline = "middle";
+    for (let v = 0; v <= 10; v += 2) { g.beginPath(); g.moveTo(pad.l, Y(v) + .5); g.lineTo(pad.l + iw, Y(v) + .5); g.stroke(); g.fillText(String(v), pad.l - 6, Y(v)); }
+    g.textAlign = "center"; g.textBaseline = "top";
+    const st = dur <= 60 ? 10 : 30; for (let t = 0; t <= dur; t += st) g.fillText(t + "s", X(t), pad.t + ih + 6);
+    const rows = S.rows.slice(0, shownRows);
+    const maxF = Math.max(4, ...rows.map(r => r[504] + r[429] + r[503]));
+    const bw = Math.max(2, (5 / dur) * iw - 2);
+    rows.forEach(r => {
+      let y = pad.t + ih; const x0 = X(r.t - 5) + 1;
+      [["504", "--stop"], ["429", "--caution"], ["503", "--grey"]].forEach(([k, c]) => { const h = (r[k] / maxF) * ih; if (!h) return; g.fillStyle = css(c); g.fillRect(x0, y - h, bw, h); y -= h; });
+    });
+    g.fillStyle = ink2; g.textAlign = "left"; g.textBaseline = "middle";
+    g.fillText(String(maxF), pad.l + iw + 6, pad.t + 2); g.fillText("0", pad.l + iw + 6, pad.t + ih);
+    const line = (k, color, dash, w) => {
+      const p = S.spark; g.strokeStyle = color; g.lineWidth = w; g.setLineDash(dash); g.beginPath(); g.moveTo(X(0), Y(p[0][k]));
+      for (let i = 1; i < p.length; i++) { const x = X(Math.min(p[i].t, dur)); g.lineTo(x, Y(p[i - 1][k])); g.lineTo(x, Y(p[i][k])); }
+      g.lineTo(X(Math.min(S.t, dur)), Y(p[p.length - 1][k])); g.stroke(); g.setLineDash([]);
+    };
+    line("spec", ink2, [5, 4], 1.5); line("ready", css("--sign"), [], 2.5);
+    if (S.t > 0) { g.strokeStyle = css("--amber"); g.beginPath(); g.moveTo(X(Math.min(S.t, dur)) + .5, pad.t); g.lineTo(X(Math.min(S.t, dur)) + .5, pad.t + ih); g.stroke(); }
+  }
+
+  function bannerText() {
+    const r = sim.result(), fails = r.f504 + r.f429 + r.f503;
+    return `<b>${ACTS[idx].act} done.</b> ${r.served} served · ${r.f504} × 504 · ${r.f429} × 429 · pool peaked at ${r.peak}` + (fails ? ` · last failure at ${Math.round(r.failLast)}s` : " · zero failures");
+  }
+
+  function renderResults() {
+    $("#results-body").innerHTML = ACTS.filter(a => a.cfg).map(a => {
+      const r = RESULTS[a.key];
+      const setup = `${a.cfg.mode} · ${a.cfg.budget ? a.cfg.budget + "s park" : "parking off"}${a.cfg.hpa ? " · HPA" : ""}`;
+      const stopAt = (r.f504 + r.f429 + r.f503) === 0 ? "none" : (r.failLast >= a.cfg.duration - 6 ? "never" : `${Math.round(r.failLast)}s`);
+      return `<tr><td><b>${a.act}</b></td><td>${setup}</td><td class="num">${r.served}</td><td class="num ${r.f504 ? "bad" : ""}">${r.f504}</td><td class="num ${r.f429 ? "warn" : ""}">${r.f429}</td><td class="num">${r.peak}</td><td class="num">${r.maxLat == null ? "n/a" : r.maxLat.toFixed(1) + "s"}</td><td class="num">${stopAt}</td></tr>`;
+    }).join("");
+  }
+
+  /* ---------------- playback loop ---------------- */
+  function frame(ts) {
+    raf = null;
+    if (!lastTs) lastTs = ts;
+    const realDt = Math.min(0.25, (ts - lastTs) / 1000); lastTs = ts;
+    if (phase === "running") {
+      acc += realDt * speed;
+      while (acc >= M.dt && !sim.done()) { sim.step(); acc -= M.dt; }
+      if (sim.done()) {
+        sim.finish(); phase = "hold"; holdLeft = HOLD; doneActs.add(idx);
+        $("#banner-text").innerHTML = bannerText(); $("#banner").hidden = false;
+      }
+      paint(); drawChart(); paintRail(sim.S.t / sim.S.cfg.duration);
+    } else if (phase === "hold") {
+      if ($("#autoadv").checked) {
+        holdLeft -= realDt;
+        $("#banner-next").textContent = idx < ACTS.length - 1 ? `next: ${ACTS[idx + 1].short} in ${Math.max(0, Math.ceil(holdLeft))}s` : "";
+        if (holdLeft <= 0) { load(idx + 1, true); return; }
+      } else $("#banner-next").textContent = "press Next to continue";
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  function play() {
+    if (!ACTS[idx].cfg) { doneActs.clear(); load(0, true); return; }
+    if (sim.done() && phase !== "hold") load(idx, false);
+    if (phase === "ready") phase = "running";
+    playing = true; $("#play").textContent = "Pause"; lastTs = 0; acc = 0;
+    if (!raf) raf = requestAnimationFrame(frame);
+  }
+  function stop() { playing = false; if (raf) cancelAnimationFrame(raf); raf = null; $("#play").textContent = sim && sim.S.t > 0 && !sim.done() ? "Resume" : "Play"; }
+  $("#play").addEventListener("click", () => playing ? stop() : play());
+  $("#next").addEventListener("click", () => load(idx + 1, playing));
+  $("#prev").addEventListener("click", () => load(idx - 1, playing));
+  document.addEventListener("keydown", e => {
+    if (e.target.closest("input, button") && e.key === " ") return;
+    if (e.key === " ") { e.preventDefault(); playing ? stop() : play(); }
+    else if (e.key === "ArrowRight") load(idx + 1, playing);
+    else if (e.key === "ArrowLeft") load(idx - 1, playing);
+  });
+  const speedSeg = $("#speed");
+  function setSpeed(v) { speed = v; [...speedSeg.children].forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.v === v))); }
+  speedSeg.addEventListener("click", e => { const b = e.target.closest("button"); if (b) setSpeed(+b.dataset.v); });
+  $("#fs").addEventListener("click", () => {
+    const st = $("#stage");
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (st.requestFullscreen) st.requestFullscreen().catch(() => { $("#fs").textContent = "Full screen unavailable"; });
+    } catch { $("#fs").textContent = "Full screen unavailable"; }
+  });
+  document.addEventListener("fullscreenchange", () => { $("#fs").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; setTimeout(drawChart, 50); });
+  window.addEventListener("resize", drawChart);
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawChart); } catch { /* old browsers */ }
+  new MutationObserver(drawChart).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  setSpeed(6);
+  load(0, false);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawChart);
+})();
+</script>
+
+</html>

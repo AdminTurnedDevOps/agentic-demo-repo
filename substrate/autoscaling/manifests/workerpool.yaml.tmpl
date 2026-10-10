@@ -1,0 +1,27 @@
+# Namespace + WorkerPool for the burst lab.
+#
+# Rendered with envsubst (only ${ATEOM_IMAGE} is substituted):
+#   envsubst '${ATEOM_IMAGE}' < manifests/workerpool.yaml.tmpl | kubectl apply -f -
+#
+# replicas: 2 is the starting size. Once the HPA in hpa.yaml is applied it owns
+# spec.replicas through the WorkerPool /scale subresource. Re-applying this file
+# after that resets the pool to 2 until the next HPA sync.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ate-lab-burst
+---
+apiVersion: ate.dev/v1alpha1
+kind: WorkerPool
+metadata:
+  name: burst
+  namespace: ate-lab-burst
+  labels:
+    # The ActorTemplate's workerSelector matches this label.
+    workload: burst
+spec:
+  replicas: 2
+  workerImage: ${ATEOM_IMAGE}
+  sandboxClasses:
+  - name: gvisor

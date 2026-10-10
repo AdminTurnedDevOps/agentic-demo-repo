@@ -1,0 +1,223 @@
+# prometheus-adapter serves ate_workerpool_workers on the Kubernetes External
+# Metrics API (external.metrics.k8s.io) so an HPA can scale a WorkerPool.
+#
+# Adapted from the upstream demo (demos/autoscaled-workerpool/prometheus-adapter.yaml):
+#   - runs in ate-lab-burst-monitoring
+#   - points at the lab's Prometheus (prometheus.yaml)
+#   - cluster-scoped RBAC names are prefixed ate-lab-burst- so they don't
+#     collide with the upstream demo
+#
+# Flow: ate-api-server:9090/metrics --scrape--> Prometheus --PromQL--> adapter
+#       --external.metrics.k8s.io--> HPA --/scale--> WorkerPool --> Deployment
+#
+# The APIService v1beta1.external.metrics.k8s.io is a cluster singleton. If the
+# cluster already has an external-metrics adapter (for example GMP's
+# custom-metrics-stackdriver-adapter), applying this file takes the APIService
+# over. The README preflight checks for that first.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-adapter
+  namespace: ate-lab-burst-monitoring
+---
+# An HPA's metric.selector.matchLabels are substituted into <<.LabelMatchers>>.
+# max(), not sum(): ate-api-server runs 2 replicas and each one reports the
+# global worker tally.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-adapter-config
+  namespace: ate-lab-burst-monitoring
+data:
+  config.yaml: |
+    externalRules:
+    - seriesQuery: '{__name__="ate_workerpool_workers"}'
+      resources:
+        namespaced: false
+      name:
+        matches: "^(.*)$"
+        as: "$1"
+      metricsQuery: 'max(<<.Series>>{<<.LabelMatchers>>}) by (ate_workerpool_namespace, ate_workerpool_name, ate_worker_state)'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-adapter
+  namespace: ate-lab-burst-monitoring
+  labels:
+    app: prometheus-adapter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-adapter
+  template:
+    metadata:
+      labels:
+        app: prometheus-adapter
+    spec:
+      serviceAccountName: prometheus-adapter
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: prometheus-adapter
+        image: registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.12.0
+        args:
+        - --secure-port=6443
+        - --cert-dir=/tmp/cert
+        - --prometheus-url=http://prometheus.ate-lab-burst-monitoring.svc:9090/
+        - --metrics-relist-interval=30s
+        - --config=/etc/adapter/config.yaml
+        - --v=4
+        ports:
+        - name: https
+          containerPort: 6443
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 5
+        livenessProbe:
+          httpGet:
+            path: /livez
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: config
+          mountPath: /etc/adapter/
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-adapter-config
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-adapter
+  namespace: ate-lab-burst-monitoring
+  labels:
+    app: prometheus-adapter
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus-adapter
+  ports:
+  - name: https
+    port: 443
+    targetPort: https
+---
+# insecureSkipTLSVerify is a lab shortcut: the adapter self-signs its serving
+# cert via --cert-dir. In production, supply a caBundle instead.
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.external.metrics.k8s.io
+spec:
+  service:
+    name: prometheus-adapter
+    namespace: ate-lab-burst-monitoring
+    port: 443
+  group: external.metrics.k8s.io
+  version: v1beta1
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100
+---
+# Lets the adapter authenticate/authorize aggregated-API requests.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ate-lab-burst-prometheus-adapter-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: prometheus-adapter
+  namespace: ate-lab-burst-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ate-lab-burst-prometheus-adapter-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: prometheus-adapter
+  namespace: ate-lab-burst-monitoring
+---
+# The adapter discovers namespaces/pods/services to resolve metric associations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ate-lab-burst-prometheus-adapter-resource-reader
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "pods", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ate-lab-burst-prometheus-adapter-resource-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ate-lab-burst-prometheus-adapter-resource-reader
+subjects:
+- kind: ServiceAccount
+  name: prometheus-adapter
+  namespace: ate-lab-burst-monitoring
+---
+# Lets the HPA controller read external metrics from the aggregated API.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ate-lab-burst-external-metrics-reader
+rules:
+- apiGroups: ["external.metrics.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ate-lab-burst-hpa-external-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ate-lab-burst-external-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: horizontal-pod-autoscaler
+  namespace: kube-system
