@@ -280,19 +280,6 @@ curl -s localhost:9091/api/v1/query \
 Both ate-api-server replicas report the same count, so `max` removes the
 duplicate; `sum` then adds up the sandbox classes.
 
-A worker running its one actor shows as `partial`, not `at_capacity`: the
-state compares the actors on a worker with its 1000 slots. So the HPA counts
-busy workers, `partial` plus `at_capacity`.
-
-Check that the metric resolves through the External Metrics API, exactly as
-the HPA will request it:
-
-```bash
-kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/ate-lab-burst/ate_workerpool_workers?labelSelector=ate_worker_state%20in%20(partial%2Cat_capacity),ate_workerpool_namespace%3Date-lab-burst,ate_workerpool_name%3Dburst" \
-  | jq '.items[] | {metricLabels, value}'
-# one item, value "0" while everything is suspended
-```
-
 Also confirm the router's agentgateway metrics are there (Prometheus scrapes
 the router pod on `:15020`):
 
@@ -306,20 +293,6 @@ curl -s localhost:9091/api/v1/label/__name__/values \
 ---
 
 ## Scenario 1: Parking absorbs short contention
-
-Check that parking is on with the upstream defaults:
-
-```bash
-./scripts/router-parking.sh status
-```
-
-```text
-==> requestParking in ate-system/atenet-router-agentgateway-config ({} = agentgateway defaults)
-    set:       {}
-    effective: budget=5s max=1024 retryInterval=100ms retryFactor=1.1
-==> live gauge from the router's stats port (:15020/metrics)
-    agentgateway_substrate_request_parking_active 0
-```
 
 ### a. Watch one request park
 
@@ -351,9 +324,12 @@ Within 5 seconds, free a worker from **terminal 3**:
 kubectl ate suspend actor a1 -a ate-lab-burst
 ```
 
-Terminal 2 finishes with `HTTP 200` and a `time_total` of a few seconds: the
-time it spent parked. Wait longer than 5s instead and you get `504` once the
-budget runs out.
+Run the `curl` again to see the `200` consider the Worker is now free.
+
+```bash
+curl -s -w '-> HTTP %{http_code} in %{time_total}s\n' \
+  -H "ate-target-actor: ate-lab-burst/a3" http://localhost:8000
+```
 
 ```bash
 suspend_all
@@ -399,23 +375,6 @@ parking.
 ./scripts/router-parking.sh off      # sets requestParking.max: 0, restarts the router
 ./scripts/burst.sh -m churn -d 45
 ```
-
-Now short saturation shows up right away, mostly as `429`s: with parking off,
-agentgateway turns the control plane's `ResourceExhausted` (no free worker)
-into `429 rate limited` instead of waiting. Expect some `503`s too, from
-actors caught mid-suspend (`FailedPrecondition`). Restore the default:
-
-```bash
-./scripts/router-parking.sh default
-suspend_all
-```
-
-> The router restarts on every `router-parking.sh` change, which kills any
-> manual port-forward from terminal 1 and drops requests parked at that moment
-> (agentgateway drains for about 5s in this install). Change settings between
-> runs, and restart your port-forward if you use it again.
-> `burst.sh` opens its own forward on each run.
-
 ---
 
 ## Scenario 2: Parking is not capacity
@@ -434,19 +393,6 @@ The live ticker shows the pool stuck at `2/2` while `504`s keep coming:
     5s     2/2          <n>     0       0       <n>     0
     10s    2/2          <n>     0       0       <n>     0
     ...
-```
-
-Four actors park, wait the full 5s budget, get `504`, and try again. No worker
-ever frees up. Parking delays the failure; it does not prevent it. Check the
-parked-requests gauge while it runs (in another terminal); it stays above
-zero:
-
-```bash
-./scripts/router-parking.sh status
-```
-
-```bash
-suspend_all
 ```
 
 ---
@@ -470,7 +416,7 @@ kubectl -n ate-lab-burst get hpa burst -w
 Run the same sustained burst that failed in Scenario 2:
 
 ```bash
-./scripts/burst.sh -m hold -d 180
+./scripts/burst.sh -m hold -d 60
 ```
 
 What to look for in the ticker:
@@ -490,62 +436,6 @@ expected, not a stuck HPA.
 ```bash
 kubectl ate get workers -n ate-lab-burst
 kubectl -n ate-lab-burst get hpa burst
-```
-
-### Scale back down
-
-Suspend everything. The busy-worker count drops to 0, and after the 60s scale-down
-window the HPA removes 2 workers every 30s until it reaches the floor of 2:
-
-```bash
-suspend_all
-kubectl -n ate-lab-burst get workerpool burst -w
-```
-
-Wait for `2` before Scenario 4. Scenario 4 has to start from a cold pool to mean
-anything.
-
----
-
-## Scenario 4: Size the park budget to cover scale-up
-
-Scenario 3's `504`s came from the pool's climb: a parked request gives up after 5s,
-but each HPA step takes longer than that. Give parked requests enough budget
-to cover the climb:
-
-```bash
-./scripts/router-parking.sh budget 90
-```
-
-This sets `requestParking.budget: 90s` on the shared `substrateIngress` block
-in `atenet-router-agentgateway-config` and restarts the router. agentgateway
-uses the budget as the whole deadline for its `ResumeActor` retry loop, so
-nothing else needs to change. Nothing else cuts a 90s wait short either:
-agentgateway has no default request timeout (it only applies one when a route
-sets a `timeout` policy, and this install's routes don't).
-
-Run the burst from the cold 2-worker pool:
-
-```bash
-./scripts/burst.sh -m hold -d 180
-```
-
-Compare with Scenario 3:
-
-- **504s:** expect far fewer. Requests that would have failed now wait in the
-  parking lot until the HPA adds a worker.
-- **Latency:** `p95` and `max` for `200`s are much higher. That is the cost:
-  the client waits instead of failing. Your callers need client timeouts that
-  are longer than the budget.
-- If `504`s remain, the climb to the last worker took longer than 90s. The
-  `failure window` in the summary tells you by how much. Raise the budget, lower
-  `averageValue` in `hpa.yaml` for bigger HPA steps, or raise `minReplicas`.
-
-Put the router back when you are done:
-
-```bash
-./scripts/router-parking.sh default
-suspend_all
 ```
 
 ---
@@ -574,64 +464,6 @@ lot and reports its own gauge, so `sum` gives the total across router pods
 sum(agentgateway_substrate_request_parking_active)
 ```
 
-This counts every request agentgateway is resolving through ate-api, including
-ones about to succeed on the first try, so short spikes are normal. A gauge
-that stays up for the whole run means requests keep waiting for workers that
-never free up (Scenario 2).
-
-How resolutions ended:
-
-```promql
-sum by (ate_router_outcome) (
-  increase(agentgateway_atenet_router_route_duration_seconds_count[2m]))
-```
-
-- `ok`: agentgateway got a worker for the actor, from its cache or from ate-api.
-- `resume_error`: it gave up. In this lab that is almost always the park
-  budget running out (`504`), or `429` with parking off. agentgateway doesn't
-  label the reason, so match it against `burst.sh`'s code counts or the router
-  log, where budget exhaustion shows `grpc.code=DeadlineExceeded`:
-  `kubectl -n ate-system logs deploy/atenet-router | grep "substrate ResumeActor failed"`
-
-Whether a successful request triggered a resume, joined one already running,
-or needed none:
-
-```promql
-sum by (ate_router_resume) (
-  increase(agentgateway_atenet_router_route_duration_seconds_count{ate_router_outcome="ok"}[2m]))
-```
-
-`triggered` is a resume of a suspended actor. `joined` is a request that waited
-on another request's resume of the same actor. `none` means the actor was
-already running.
-
-p95 time to get a worker for successful requests, which includes time spent
-parked:
-
-```promql
-histogram_quantile(0.95, sum by (le) (
-  rate(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok"}[1m])))
-```
-
-p95 tops out at 80s. The highest finite bucket is 80s, and when the quantile
-lands in the `+Inf` bucket, `histogram_quantile` returns that bucket's lower
-edge (80) rather than `+Inf`. So in Scenario 4, with a 90s budget, a p95 of 80
-means "80s or more". Count the served requests that waited longer than 80s
-directly:
-
-```promql
-sum(increase(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok", le="+Inf"}[2m]))
-- sum(increase(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok", le="80.0"}[2m]))
-```
-
-Prometheus 3 stores `le` values in float form, so the 80s bucket is `le="80.0"`;
-`le="80"` matches nothing and the query returns no data.
-
-How to read them together: a pool stuck with every worker busy, a parked
-gauge that stays up, and rising `resume_error` is a capacity problem (Scenario 2).
-Mostly `ok`, with p95 time to a worker rising, is parking covering for
-scale-up (Scenario 4).
-
 ---
 
 ## Cleanup
@@ -639,7 +471,6 @@ scale-up (Scenario 4).
 ```bash
 make clean
 ```
-
 
 Check for leftover snapshot objects under the lab's prefix, and delete them
 only if you are sure nothing else uses that prefix:
