@@ -1,10 +1,14 @@
 # Burst Without 503s: Request Parking + an Autoscaled WorkerPool
 
+This lab essentially answers three questions:
+  1. What happens when a new request for an Actor comes in, but there aren't any free Wortkers for the Actor to run on
+  2. How HPA comes into play to scale up Workers/Worker Pools so when new requests for an Actor come in, they aren't sitting and waiting
+
 Tldr; when more agents want to run than you have warm workers, Substrate has
 two answers on two time scales:
 
-1. The **router parks** a request for a few seconds while a worker frees up.
-2. An **HPA grows the WorkerPool** when the pool stays full.
+- The **router parks** a request for a few seconds while a worker frees up.
+- An **HPA grows the WorkerPool** when the pool stays full.
 
 This lab shows each one alone, where each one fails, and then both together.
 
