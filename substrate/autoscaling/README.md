@@ -115,16 +115,6 @@ They work on different time scales:
   egress credential injection must be off. The `atenet-router` Deployment then
   runs a single `agentgateway` container.
 - The snapshot **GCS bucket** from setup, with atelet's IAM already granted.
-- Room for **10 extra worker pods** (the HPA's `maxReplicas`). Worker pods run
-  privileged gVisor sandboxes. If your node pool is small, enable the cluster
-  autoscaler or lower `maxReplicas` in `manifests/hpa.yaml`.
-- **No other external-metrics adapter.** `v1beta1.external.metrics.k8s.io` is
-  a cluster singleton. Step 4 checks for this.
-
-2. Tools
-
-- `jq` and `yq` v4 ([mikefarah](https://github.com/mikefarah/yq)):
-  `scripts/router-parking.sh` edits the router's YAML config with them.
 
 Health check before you start:
 
