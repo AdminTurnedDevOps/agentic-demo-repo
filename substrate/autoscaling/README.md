@@ -1,6 +1,6 @@
 # Burst Without 503s: Request Parking + an Autoscaled WorkerPool
 
-This lab essentially answers three questions:
+This lab essentially answers two questions:
   1. What happens when a new request for an Actor comes in, but there aren't any free Wortkers for the Actor to run on
   2. How HPA comes into play to scale up Workers/Worker Pools so when new requests for an Actor come in, they aren't sitting and waiting
 
