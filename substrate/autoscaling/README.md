@@ -331,10 +331,6 @@ curl -s -w '-> HTTP %{http_code} in %{time_total}s\n' \
   -H "ate-target-actor: ate-lab-burst/a3" http://localhost:8000
 ```
 
-```bash
-suspend_all
-```
-
 ### b. Churn load: zero failures
 
 `churn` mode runs one request → suspend loop per actor. Six actors fight over
