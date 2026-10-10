@@ -25,3 +25,15 @@ spec:
   workerImage: ${ATEOM_IMAGE}
   sandboxClasses:
   - name: gvisor
+  # One actor per worker. A gVisor worker offers 1000 actor slots
+  # (ateom --max-actors), so slots alone would let all six actors share two
+  # workers and nothing would ever park. The worker also reports its ateom
+  # container limits as capacity, and the scheduler only places an actor where
+  # the template's resources.limits still fit. The template asks for 768Mi of
+  # this 1Gi, so a second actor never fits. With limits only, requests default
+  # to the same values: 10 workers request 5 vCPU and 10Gi.
+  template:
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi

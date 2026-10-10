@@ -1,9 +1,15 @@
-# HPA that scales the burst WorkerPool on how many of its workers are full.
+# HPA that scales the burst WorkerPool on how many of its workers are busy.
 #
 # External + AverageValue:
-#   desiredReplicas = ceil( at_capacity / averageValue )
-# at_capacity = max(ate_workerpool_workers{namespace, name, state="at_capacity"}),
-# served by prometheus-adapter.yaml.
+#   desiredReplicas = ceil( busy / averageValue )
+# busy = workers in state partial or at_capacity, served by
+# prometheus-adapter.yaml.
+#
+# Why partial counts: a worker's state compares allocated actor slots with its
+# slot count, and a gVisor worker has 1000 slots. A worker running this lab's
+# single actor (one per worker, see workerpool.yaml.tmpl) is "partial"; it only
+# reports "at_capacity" at 1000 actors. Selecting at_capacity alone would read
+# 0 forever and the HPA would never scale.
 #
 # averageValue 0.7 keeps ~30% of the pool idle. With 6 hot actors the climb is
 # 2 -> 3 -> 5 -> 8 and stops at 8 (not ceil(6/0.7) = 9): at 8 replicas the
@@ -11,8 +17,9 @@
 # That idle headroom is what lets the next resume land without parking.
 #
 # Adapted from the upstream demo (demos/autoscaled-workerpool/hpa-kind.yaml).
-# Differences: lab namespace/pool names, maxReplicas 10, and a 60s scale-down
-# window (upstream: 300s) so the lab doesn't make you wait 5 minutes.
+# Differences: lab namespace/pool names, maxReplicas 10, a 60s scale-down
+# window (upstream: 300s) so the lab doesn't make you wait 5 minutes, and the
+# busy-worker selector (upstream still selects at_capacity alone).
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -35,7 +42,10 @@ spec:
             # Pool names are only unique per namespace: pin both.
             ate_workerpool_namespace: ate-lab-burst
             ate_workerpool_name: burst
-            ate_worker_state: at_capacity
+          matchExpressions:
+          - key: ate_worker_state
+            operator: In
+            values: [partial, at_capacity]
       target:
         type: AverageValue
         averageValue: "0.7"

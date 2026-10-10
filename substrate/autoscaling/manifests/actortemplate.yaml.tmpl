@@ -36,3 +36,10 @@ snapshotConfig:
 sandboxConfig:
   sandboxClass: SANDBOX_CLASS_GVISOR
   configName: gvisor-default
+# Sizes the sandbox and is what the scheduler fits against a worker's capacity.
+# More than half of the worker's 1Gi limit (workerpool.yaml.tmpl), so each
+# worker holds exactly one actor.
+resources:
+  limits:
+  - name: memory
+    quantity: 768Mi

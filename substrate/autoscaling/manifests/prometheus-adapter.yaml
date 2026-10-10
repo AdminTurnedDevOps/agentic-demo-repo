@@ -6,6 +6,7 @@
 #   - points at the lab's Prometheus (prometheus.yaml)
 #   - cluster-scoped RBAC names are prefixed ate-lab-burst- so they don't
 #     collide with the upstream demo
+#   - metricsQuery dedupes replicas per sandbox class, then sums (see below)
 #
 # Flow: ate-api-server:9090/metrics --scrape--> Prometheus --PromQL--> adapter
 #       --external.metrics.k8s.io--> HPA --/scale--> WorkerPool --> Deployment
@@ -21,9 +22,17 @@ metadata:
   name: prometheus-adapter
   namespace: ate-lab-burst-monitoring
 ---
-# An HPA's metric.selector.matchLabels are substituted into <<.LabelMatchers>>.
-# max(), not sum(): ate-api-server runs 2 replicas and each one reports the
-# global worker tally.
+# An HPA's metric.selector is substituted into <<.LabelMatchers>>; a
+# matchExpressions "In" with several values becomes a =~"a|b" matcher.
+#
+# The query runs in two steps:
+#   1. max by (..., ate_worker_state, ate_sandbox_class): ate-api-server runs 2
+#      replicas and each one reports the same global worker tally, so max
+#      drops the duplicate. The sandbox class stays in the grouping because one
+#      pool can report more than one class (a worker with no class is counted
+#      as "unknown", not as the pool's class).
+#   2. sum by (pool): adds the classes, and the states the HPA selected
+#      (partial + at_capacity), into one busy-worker count per pool.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -38,7 +47,7 @@ data:
       name:
         matches: "^(.*)$"
         as: "$1"
-      metricsQuery: 'max(<<.Series>>{<<.LabelMatchers>>}) by (ate_workerpool_namespace, ate_workerpool_name, ate_worker_state)'
+      metricsQuery: 'sum by (ate_workerpool_namespace, ate_workerpool_name) (max by (ate_workerpool_namespace, ate_workerpool_name, ate_worker_state, ate_sandbox_class) (<<.Series>>{<<.LabelMatchers>>}))'
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -230,7 +230,7 @@ canvas#chart { display: block; width: 100%; height: 170px; }
           <div class="zone">
             <div class="zone-title"><span class="label">WorkerPool burst · workers</span><span class="clock" id="clock">t = 0.0s</span></div>
             <div class="bays" id="bays"></div>
-            <div class="foot"><span>spec / ready <b id="poolsr">2 / 2</b></span><span>full workers (last scrape) <b id="atcap">0</b></span><span>HPA <b id="hpastate">off</b></span><span>park budget <b id="budgetv">5s</b></span></div>
+            <div class="foot"><span>spec / ready <b id="poolsr">2 / 2</b></span><span>busy workers (last scrape) <b id="atcap">0</b></span><span>HPA <b id="hpastate">off</b></span><span>park budget <b id="budgetv">5s</b></span></div>
             <span class="label" style="margin-top:6px">Agents/Actors</span>
             <div class="agents" id="agents"></div>
             <div class="zone-title" style="margin-top:4px"><span class="label">Parked requests · bar = budget left</span><span class="label" id="parkedn">0 parked</span></div>
@@ -265,7 +265,7 @@ canvas#chart { display: block; width: 100%; height: 170px; }
         </table></div>
         <div class="takeaways">
           <div><h3>Parking handles seconds</h3><p>When workers free up within the budget, parked requests are served instead of rejected. Scenario 1 against "parking off" is the whole difference.</p></div>
-          <div><h3>The HPA handles minutes</h3><p>Parking cannot create a worker. Under sustained load only more workers help, and the HPA adds them from the full-worker count.</p></div>
+          <div><h3>The HPA handles minutes</h3><p>Parking cannot create a worker. Under sustained load only more workers help, and the HPA adds them from the busy-worker count.</p></div>
           <div><h3>Size one to the other</h3><p>Set the park budget to how long scale-up takes on your nodes. Then a burst that starts on two workers is served while the pool grows.</p></div>
         </div>
       </div>
@@ -297,7 +297,7 @@ canvas#chart { display: block; width: 100%; height: 170px; }
       cmd: "./scripts/burst.sh -m hold -d 60" },
     { key: "a3", n: "4", short: "HPA on", act: "Scenario 3", title: "The HPA adds capacity",
       cfg: { mode: "hold", budget: 5, hpa: 1, duration: 180 },
-      text: "An HPA reads how many workers are full and grows the WorkerPool. It can only see full workers, never the agents waiting, so it climbs in steps: 2, then 3, 5 and 8.",
+      text: "An HPA reads how many workers are busy and grows the WorkerPool. It can only see busy workers, never the agents waiting, so it climbs in steps: 2, then 3, 5 and 8.",
       watch: "Hatched workers are pods still starting. When they become Ready, parked agents move in, and 504s stop once every agent has a worker. The pool settles at 8 with 2 idle.",
       cmd: "kubectl apply -f manifests/hpa.yaml" },
     { key: "a4", n: "5", short: "90s budget", act: "Scenario 4", title: "The park budget covers scale-up",
@@ -364,9 +364,9 @@ canvas#chart { display: block; width: 100%; height: 170px; }
         const inTol = Math.abs(ratio - 1) <= 0.1;
         const desired = inTol ? cur : Math.min(Math.max(Math.ceil(S.atcap / M.target - 1e-9), M.min), M.max);
         S.recs.push({ t, desired }); S.recs = S.recs.filter(r => t - r.t <= M.downWindow);
-        if (desired > cur) { const n = Math.min(desired, Math.max(cur * 2, cur + 10)); emit("hpa", `${S.atcap} of ${cur} workers full (ratio ${ratio.toFixed(2)}) → scale to ${n}`); setSpec(n); }
+        if (desired > cur) { const n = Math.min(desired, Math.max(cur * 2, cur + 10)); emit("hpa", `${S.atcap} of ${cur} workers busy (ratio ${ratio.toFixed(2)}) → scale to ${n}`); setSpec(n); }
         else {
-          if (S.atcap > 0) emit("hpa", inTol ? `${S.atcap} of ${cur} full, ratio ${ratio.toFixed(2)} within 10% → hold` : `${S.atcap} of ${cur} full → no change`);
+          if (S.atcap > 0) emit("hpa", inTol ? `${S.atcap} of ${cur} busy, ratio ${ratio.toFixed(2)} within 10% → hold` : `${S.atcap} of ${cur} busy → no change`);
           const eff = Math.max(...S.recs.map(r => r.desired));
           if (eff < cur && t - S.lastDown >= M.downPeriod) { setSpec(Math.max(eff, cur - M.downStep)); S.lastDown = t; }
         }

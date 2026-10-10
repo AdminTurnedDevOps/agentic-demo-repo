@@ -278,7 +278,7 @@ footer { margin-top: 50px; padding-top: 16px; border-top: 3px solid var(--ink); 
         <div class="bays" id="bays" aria-live="off"></div>
         <div class="bays-foot">
           <span>spec / ready <b id="poolsr">2 / 2</b></span>
-          <span>at_capacity (last scrape) <b id="atcap">0</b></span>
+          <span>busy workers (last scrape) <b id="atcap">0</b></span>
           <span>HPA <b id="hpastate">off</b></span>
         </div>
         <div class="zone-title" style="margin-top:6px"><span class="label">Parked requests · bar = budget left</span><span class="clock" id="parkedn" style="font-size:.9rem">0 parked</span></div>
@@ -343,6 +343,7 @@ footer { margin-top: 50px; padding-top: 16px; border-top: 3px solid var(--ink); 
       <section class="stage" id="s-actors" data-title="Six actors">
         <div class="stage-head"><span class="lvl">3</span><h3>Six actors, two workers</h3></div>
         <p>Oversubscribed 3:1. All six start <code>ACTOR_STATE_SUSPENDED</code>. Keep the helper; you reset to "everything suspended" between scenarios.</p>
+        <p class="note">This only works because each worker fits one actor. A gVisor worker offers 1000 actor slots, so on slots alone all six would share the two workers and nothing would wait. The pool caps each worker at 1Gi of memory and the template asks for 768Mi per actor, so the scheduler never fits a second one.</p>
         <div class="cmd"><span class="lang">bash</span><pre data-cmd="actors"></pre></div>
       </section>
 
@@ -367,7 +368,7 @@ footer { margin-top: 50px; padding-top: 16px; border-top: 3px solid var(--ink); 
             <rect class="box" x="426" y="170" width="190" height="56" rx="3"/><text x="521" y="194" text-anchor="middle">prometheus-adapter</text><text x="521" y="212" text-anchor="middle" class="small">external.metrics.k8s.io</text>
             <rect class="box" x="666" y="170" width="120" height="56" rx="3"/><text x="726" y="194" text-anchor="middle">HPA</text><text x="726" y="212" text-anchor="middle" class="small">sync ~15s</text>
             <path class="edge cap" d="M581 94 V130 H301 V166" marker-end="url(#ahc)"/>
-            <text x="440" y="124" class="small">ate_workerpool_workers{at_capacity}</text>
+            <text x="440" y="124" class="small">ate_workerpool_workers (busy)</text>
             <path class="edge cap" d="M376 198 H422" marker-end="url(#ahc)"/>
             <path class="edge cap" d="M616 198 H662" marker-end="url(#ahc)"/>
             <path class="edge cap" d="M786 198 H830 V98" marker-end="url(#ahc)"/>
@@ -406,13 +407,13 @@ footer { margin-top: 50px; padding-top: 16px; border-top: 3px solid var(--ink); 
       <section class="stage" id="s-act3" data-title="The HPA adds capacity">
         <div class="stage-head"><span class="lvl">7</span><h3><span class="act">Scenario 3</span>The HPA adds capacity</h3></div>
         <div class="cmd"><span class="lang">bash</span><pre data-cmd="hpa"></pre></div>
-        <p><code>at_capacity</code> counts full workers, so it can never exceed the replica count. The HPA can't see actors still waiting for a worker; each step grows the pool by at most <code>1 / averageValue</code>. It also ignores a ratio within 10% of target. Try the numbers:</p>
+        <p>The HPA reads busy workers: <code>partial</code> plus <code>at_capacity</code>. A worker running its one actor reports <code>partial</code>, because its state compares actors with its 1000 slots. Busy workers can never exceed the replica count, and the HPA can't see actors still waiting for a worker, so each step grows the pool by at most <code>1 / averageValue</code>. It also ignores a ratio within 10% of target. Try the numbers:</p>
         <div class="calc">
           <div class="calc-in">
             <div class="ctl"><label class="label" for="calc-n">Hot actors</label><span><input type="range" id="calc-n" min="1" max="10" value="6"> <output id="calc-n-o">6</output></span></div>
             <div class="ctl"><span class="label">averageValue</span><div class="seg" data-ctl="calcav"><button data-v="0.5">0.5</button><button data-v="0.7">0.7</button><button data-v="1">1.0</button></div></div>
           </div>
-          <div class="tbl"><table><thead><tr><th>HPA step</th><th>replicas</th><th>at_capacity</th><th>ratio</th><th>decision</th></tr></thead><tbody id="calc-body"></tbody></table></div>
+          <div class="tbl"><table><thead><tr><th>HPA step</th><th>replicas</th><th>busy</th><th>ratio</th><th>decision</th></tr></thead><tbody id="calc-body"></tbody></table></div>
           <p class="verdict" id="calc-verdict"></p>
         </div>
         <p>Re-run the burst that failed in Scenario 2 and watch <code>pool s/r</code> climb while <code>504</code>s fall to zero. The summary's <code>failure window</code> is your time to absorb the burst.</p>
@@ -439,18 +440,19 @@ footer { margin-top: 50px; padding-top: 16px; border-top: 3px solid var(--ink); 
         <div class="stage-head"><span class="lvl">9</span><h3>Read it in Prometheus</h3></div>
         <p>Run these at <code>localhost:9091/graph</code> across the time of Scenarios 1 to 4.</p>
         <div class="cmd"><span class="lang">promql</span><pre data-cmd="q1"></pre></div>
-        <p>Pool occupancy by worker state: the HPA's input.</p>
+        <p>Pool occupancy by worker state. The HPA's input is <code>partial</code> plus <code>at_capacity</code>. <code>max</code> drops the duplicate from the second ate-api-server replica; <code>sum</code> adds up sandbox classes.</p>
         <div class="cmd"><span class="lang">promql</span><pre data-cmd="q2"></pre></div>
-        <p>Requests resolving through ate-api right now. Short spikes are normal; a gauge that stays up all run means requests are waiting for workers that never free up.</p>
+        <p>Requests resolving through ate-api right now. Each router pod has its own lot, so <code>sum</code> totals them. Short spikes are normal; a gauge that stays up all run means requests are waiting for workers that never free up.</p>
         <div class="cmd"><span class="lang">promql</span><pre data-cmd="q3"></pre></div>
         <p><code>ok</code> means a worker was found. <code>resume_error</code> means agentgateway gave up: here almost always a <code>504</code>, or <code>429</code> with parking off. The reason isn't labelled, so match it against <code>burst.sh</code>'s counts or the router log.</p>
         <div class="cmd"><span class="lang">promql</span><pre data-cmd="q4"></pre></div>
-        <p>p95 time to a worker for served requests, including time parked. The top bucket is 80s, so a 90s budget's slowest waits show as <code>+Inf</code>.</p>
+        <p>p95 time to a worker for served requests, including time parked. It tops out at 80s: when the quantile lands in the <code>+Inf</code> bucket, <code>histogram_quantile</code> returns the highest finite bound, 80. With a 90s budget, read 80 as "80s or more" and count the longer waits directly:</p>
+        <div class="cmd"><span class="lang">promql</span><pre data-cmd="q5"></pre></div>
         <div class="compare">
           <table>
             <thead><tr><th>You see</th><th>It means</th></tr></thead>
             <tbody>
-              <tr><td><code>at_capacity == replicas</code>, parked gauge stays up, <code>resume_error</code> rising</td><td>Short on capacity (Scenario 2)</td></tr>
+              <tr><td>Every worker busy, parked gauge stays up, <code>resume_error</code> rising</td><td>Short on capacity (Scenario 2)</td></tr>
               <tr><td>Mostly <code>ok</code>, p95 time to a worker rising</td><td>Parking covering for scale-up (Scenario 4)</td></tr>
               <tr><td>Router log shows <code>grpc.code=DeadlineExceeded</code></td><td>Park budget ran out</td></tr>
             </tbody>
@@ -573,8 +575,9 @@ curl -s localhost:9091/api/v1/targets \
   | jq -r '.data.activeTargets[] | "\(.labels.app)\t\(.labels.pod)\t\(.health)"'
 # expect ate-api-server (x2) and atenet-router, all "up"
 
-kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/ate-lab-burst/ate_workerpool_workers?labelSelector=ate_worker_state%3Dat_capacity,ate_workerpool_namespace%3Date-lab-burst,ate_workerpool_name%3Dburst" \
+kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/ate-lab-burst/ate_workerpool_workers?labelSelector=ate_worker_state%20in%20(partial%2Cat_capacity),ate_workerpool_namespace%3Date-lab-burst,ate_workerpool_name%3Dburst" \
   | jq '.items[] | {metricLabels, value}'
+# one item, value "0" while everything is suspended
 
 curl -s localhost:9091/api/v1/label/__name__/values \
   | jq -r '.data[] | select(startswith("agentgateway_substrate") or startswith("agentgateway_atenet_router"))'
@@ -599,12 +602,12 @@ kubectl -n ate-lab-burst get workerpool burst -w   # wait for 2
 suspend_all
 </script>
 <script type="text/plain" id="cmd-q1">
-max by (ate_worker_state) (
-  ate_workerpool_workers{ate_workerpool_namespace="ate-lab-burst", ate_workerpool_name="burst"}
-)
+sum by (ate_worker_state) (
+  max by (ate_worker_state, ate_sandbox_class) (
+    ate_workerpool_workers{ate_workerpool_namespace="ate-lab-burst", ate_workerpool_name="burst"}))
 </script>
 <script type="text/plain" id="cmd-q2">
-max(agentgateway_substrate_request_parking_active)
+sum(agentgateway_substrate_request_parking_active)
 </script>
 <script type="text/plain" id="cmd-q3">
 sum by (ate_router_outcome) (
@@ -613,6 +616,10 @@ sum by (ate_router_outcome) (
 <script type="text/plain" id="cmd-q4">
 histogram_quantile(0.95, sum by (le) (
   rate(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok"}[1m])))
+</script>
+<script type="text/plain" id="cmd-q5">
+sum(increase(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok", le="+Inf"}[2m]))
+- sum(increase(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok", le="80.0"}[2m]))
 </script>
 <script type="text/plain" id="cmd-logs">
 kubectl -n ate-system logs deploy/atenet-router | grep "substrate ResumeActor failed"

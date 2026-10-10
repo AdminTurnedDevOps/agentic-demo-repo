@@ -48,9 +48,9 @@ request that finds no free worker gets `429` right away, with no wait.
 2. **Parking does not add capacity.** When actors stay hot, a 5s park budget
    runs out and requests fail with `504`. The pool is simply too small.
 3. **The HPA adds capacity.** `ate-api-server` exports
-   `ate_workerpool_workers{ate_worker_state="at_capacity"}`. prometheus-adapter
-   serves it to an HPA that writes `WorkerPool.spec.replicas`. The pool grows
-   from 2 to 8 and the `504`s stop.
+   `ate_workerpool_workers`, a worker count per pool and state. prometheus-adapter
+   serves the busy ones (`partial` + `at_capacity`) to an HPA that writes
+   `WorkerPool.spec.replicas`. The pool grows from 2 to 8 and the `504`s stop.
 4. **Together they cover the gap.** Raise the park budget to cover the HPA's
    scale-up time, and a burst that starts on 2 workers is served while the
    pool grows, with far fewer `504`s.
@@ -67,7 +67,8 @@ request that finds no free worker gets `429` right away, with no wait.
 | ActorTemplate (ate API, not a CRD) | The counter workload, created with `kubectl ate create actor-template`. | `manifests/actortemplate.yaml.tmpl` |
 | agentgateway dataplane for atenet | `--atenet-dataplane=agentgateway` swaps the `atenet-router` Deployment's containers for a single `agentgateway` container. Its config is the ConfigMap `ate-system/atenet-router-agentgateway-config`. | `manifests/ate-install/components/agentgateway/` |
 | `substrateIngress.requestParking` | On a retryable resume failure (`ResourceExhausted`, `FailedPrecondition`, `Unavailable`) agentgateway holds the request and retries `ResumeActor` until `budget` (default `5s`) runs out, then returns `504`. `max` (default `1024`) caps waiting requests; `max: 0` turns parking off. On by default. | agentgateway `crates/agentgateway/src/http/substrate/ingress.rs` |
-| `ate.workerpool.workers` metric | Worker count per pool and state (`idle`, `partial`, `at_capacity`, `unschedulable`). Exported as `ate_workerpool_workers` on `ate-api-server:9090/metrics`. | `cmd/ateapi/internal/controlapi/metrics.go` |
+| `ate.workerpool.workers` metric | Worker count per pool, state (`idle`, `partial`, `at_capacity`, `unschedulable`) and sandbox class. Exported as `ate_workerpool_workers` on `ate-api-server:9090/metrics`. | `cmd/ateapi/internal/controlapi/metrics.go` |
+| Worker capacity | A gVisor worker offers 1000 actor slots (`ateom --max-actors`) and reports its `ateom` container's CPU and memory limits. The scheduler places an actor only where its template's `resources.limits` still fit. This lab sizes both so each worker holds one actor. | `cmd/ateapi/internal/scheduling/scheduling.go` |
 | Router metrics | `agentgateway_substrate_request_parking_active` (gauge) and `agentgateway_atenet_router_route_duration_seconds` (labels `ate_router_outcome`, `ate_router_resume`), on the router pod's `:15020/metrics`. | agentgateway `crates/agentgateway/src/telemetry/metrics.rs` |
 | HPA + prometheus-adapter | External metric, `AverageValue` target, adapted from upstream. | `demos/autoscaled-workerpool/` |
 
@@ -91,7 +92,7 @@ seconds.*
 
 They work on different time scales:
 
-| | Request parking | HPA on `at_capacity` |
+| | Request parking | HPA on busy workers |
 |---|---|---|
 | Reacts in | ~100ms retries | scrape (15s) + HPA sync (~15s) + worker pod start |
 | Fixes | moments of contention: a worker frees up soon | lasting demand: you need more workers |
@@ -146,6 +147,12 @@ The pool needs the `ateom-gvisor` worker image, and the template needs the
 upstream counter workload. Build both from the checkout you installed from, so
 the worker matches the control plane version. `ko build` prints the pushed
 image reference (with digest) on stdout.
+
+```bash
+git clone https://github.com/agent-substrate/substrate
+
+cd substrate
+```
 
 ```bash
 export ATEOM_IMAGE=$(cd "$SUBSTRATE_DIR" && \
@@ -203,6 +210,13 @@ kubectl ate get workers -n ate-lab-burst
 
 Six actors, two workers: oversubscribed 3:1.
 
+That only holds because each worker fits one actor. A gVisor worker offers
+1000 actor slots, so on slots alone all six actors would share the two workers
+and nothing would ever wait. The pool caps each worker at 1Gi of memory
+(`manifests/workerpool.yaml.tmpl`), and the template asks for 768Mi per actor
+(`manifests/actortemplate.yaml.tmpl`). The scheduler only places an actor where
+its memory still fits, so a second actor never does.
+
 ```bash
 for i in 1 2 3 4 5 6; do
   kubectl ate create actor "a$i" -a ate-lab-burst --template burst
@@ -258,17 +272,25 @@ curl -s localhost:9091/api/v1/targets \
 # expect ate-api-server (x2) and atenet-router, all "up"
 
 curl -s localhost:9091/api/v1/query \
-  --data-urlencode 'query=max by (ate_worker_state) (ate_workerpool_workers{ate_workerpool_namespace="ate-lab-burst",ate_workerpool_name="burst"})' \
+  --data-urlencode 'query=sum by (ate_worker_state) (max by (ate_worker_state, ate_sandbox_class) (ate_workerpool_workers{ate_workerpool_namespace="ate-lab-burst",ate_workerpool_name="burst"}))' \
   | jq -r '.data.result[] | "\(.metric.ate_worker_state)\t\(.value[1])"'
 # with everything suspended: idle 2, partial 0, at_capacity 0, unschedulable 0
 ```
+
+Both ate-api-server replicas report the same count, so `max` removes the
+duplicate; `sum` then adds up the sandbox classes.
+
+A worker running its one actor shows as `partial`, not `at_capacity`: the
+state compares the actors on a worker with its 1000 slots. So the HPA counts
+busy workers, `partial` plus `at_capacity`.
 
 Check that the metric resolves through the External Metrics API, exactly as
 the HPA will request it:
 
 ```bash
-kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/ate-lab-burst/ate_workerpool_workers?labelSelector=ate_worker_state%3Dat_capacity,ate_workerpool_namespace%3Date-lab-burst,ate_workerpool_name%3Dburst" \
+kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/ate-lab-burst/ate_workerpool_workers?labelSelector=ate_worker_state%20in%20(partial%2Cat_capacity),ate_workerpool_namespace%3Date-lab-burst,ate_workerpool_name%3Dburst" \
   | jq '.items[] | {metricLabels, value}'
+# one item, value "0" while everything is suspended
 ```
 
 Also confirm the router's agentgateway metrics are there (Prometheus scrapes
@@ -472,7 +494,7 @@ kubectl -n ate-lab-burst get hpa burst
 
 ### Scale back down
 
-Suspend everything. `at_capacity` drops to 0, and after the 60s scale-down
+Suspend everything. The busy-worker count drops to 0, and after the 60s scale-down
 window the HPA removes 2 workers every 30s until it reaches the floor of 2:
 
 ```bash
@@ -535,18 +557,21 @@ Using the `localhost:9091` forward from Step 4, run these in the Prometheus UI
 `curl -s localhost:9091/api/v1/query --data-urlencode 'query=...' | jq`.
 Use the graph view across the time of Scenarios 1-4.
 
-Pool occupancy by worker state, the HPA's input:
+Pool occupancy by worker state. The HPA's input is `partial` plus
+`at_capacity`:
 
 ```promql
-max by (ate_worker_state) (
-  ate_workerpool_workers{ate_workerpool_namespace="ate-lab-burst", ate_workerpool_name="burst"}
-)
+sum by (ate_worker_state) (
+  max by (ate_worker_state, ate_sandbox_class) (
+    ate_workerpool_workers{ate_workerpool_namespace="ate-lab-burst", ate_workerpool_name="burst"}))
 ```
 
-Requests waiting on a resume right now (one router pod, so `max` is the value):
+Requests waiting on a resume right now. Each router pod has its own parking
+lot and reports its own gauge, so `sum` gives the total across router pods
+(this install runs one):
 
 ```promql
-max(agentgateway_substrate_request_parking_active)
+sum(agentgateway_substrate_request_parking_active)
 ```
 
 This counts every request agentgateway is resolving through ate-api, including
@@ -588,10 +613,21 @@ histogram_quantile(0.95, sum by (le) (
   rate(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok"}[1m])))
 ```
 
-The top bucket is 80s, so in Scenario 4 with a 90s budget the slowest waits show as
-`+Inf`.
+p95 tops out at 80s. The highest finite bucket is 80s, and when the quantile
+lands in the `+Inf` bucket, `histogram_quantile` returns that bucket's lower
+edge (80) rather than `+Inf`. So in Scenario 4, with a 90s budget, a p95 of 80
+means "80s or more". Count the served requests that waited longer than 80s
+directly:
 
-How to read them together: a pool stuck at `at_capacity == replicas`, a parked
+```promql
+sum(increase(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok", le="+Inf"}[2m]))
+- sum(increase(agentgateway_atenet_router_route_duration_seconds_bucket{ate_router_outcome="ok", le="80.0"}[2m]))
+```
+
+Prometheus 3 stores `le` values in float form, so the 80s bucket is `le="80.0"`;
+`le="80"` matches nothing and the query returns no data.
+
+How to read them together: a pool stuck with every worker busy, a parked
 gauge that stays up, and rising `resume_error` is a capacity problem (Scenario 2).
 Mostly `ok`, with p95 time to a worker rising, is parking covering for
 scale-up (Scenario 4).
