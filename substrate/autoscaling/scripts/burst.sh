@@ -97,7 +97,7 @@ trap 'exit 130' INT TERM
 if [[ -z "${ROUTER}" ]]; then
   ROUTER="http://localhost:${LOCAL_PORT}"
   kubectl -n ate-system port-forward svc/atenet-router "${LOCAL_PORT}:80" \
-    >"${TMP}/port-forward.log" 2>&1 &
+    >"${TMP}/port-forward.out" 2>&1 &
   PF_PID=$!
   # Poll until the forward accepts connections (any HTTP status counts).
   ready=0
@@ -114,7 +114,7 @@ if [[ -z "${ROUTER}" ]]; then
   done
   if [[ "${ready}" -ne 1 ]]; then
     echo "port-forward to svc/atenet-router did not come up:" >&2
-    cat "${TMP}/port-forward.log" >&2
+    cat "${TMP}/port-forward.out" >&2
     exit 1
   fi
 fi
@@ -177,7 +177,7 @@ while :; do
   [[ ${alive} -eq 0 ]] && break
   sleep 1
 done
-wait 2>/dev/null
+wait "${pids[@]}" 2>/dev/null
 pids=()
 
 # ---- summary ---------------------------------------------------------------
@@ -193,7 +193,7 @@ echo "==> results (${MODE}, ${DURATION}s, pool now $(pool_size))"
 awk -v start="${START}" '
   { n++; c[$2]++ }
   $2 == 200 { ok++; lat[ok] = $3; sum += $3; if ($3 > 1) slow++ }
-  $2 != 200 { fail++; t = $1 - start; if (first == "") first = t; last = t }
+  $2 != 200 { fail++; t = $1 - start; if (first == "" || t < first) first = t; if (last == "" || t > last) last = t }
   $2 != 200 && $2 != 429 && $2 != 503 && $2 != 504 { other++; codes[$2]++ }
   END {
     printf "    total requests : %d\n", n

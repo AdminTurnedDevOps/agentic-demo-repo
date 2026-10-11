@@ -54,10 +54,6 @@ request that finds no free worker gets `429` right away, with no wait.
 4. **Together they cover the gap.** Raise the park budget to cover the HPA's
    scale-up time, and a burst that starts on 2 workers is served while the
    pool grows, with far fewer `504`s.
-5. **The metrics tell you which problem you have.**
-   `agentgateway_substrate_request_parking_active` staying high while
-   `agentgateway_atenet_router_route_duration_seconds{ate_router_outcome="resume_error"}`
-   climbs means you are short on capacity, not hitting a fault.
 
 ## What Substrate pieces this uses
 
@@ -324,7 +320,11 @@ Within 5 seconds, free a worker from **terminal 3**:
 kubectl ate suspend actor a1 -a ate-lab-burst
 ```
 
-Run the `curl` again to see the `200` consider the Worker is now free.
+Back in terminal 2, the parked `curl` finishes with `HTTP 200`. Its
+`time_total` is how long the request sat parked.
+
+Missed the 5s window? The first `curl` returns `504` instead. Run it again to
+see the `200` now that the Worker is free:
 
 ```bash
 curl -s -w '-> HTTP %{http_code} in %{time_total}s\n' \
@@ -371,6 +371,14 @@ parking.
 ./scripts/router-parking.sh off      # sets requestParking.max: 0, restarts the router
 ./scripts/burst.sh -m churn -d 45
 ```
+
+Put parking back on before Scenario 2. This restarts the router, so restart
+your terminal 1 port-forward if you use it again:
+
+```bash
+./scripts/router-parking.sh default
+```
+
 ---
 
 ## Scenario 2: Parking is not capacity
