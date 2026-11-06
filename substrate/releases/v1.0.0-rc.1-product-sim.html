@@ -1,0 +1,1525 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Substrate v1.0.0-rc.1 · Product bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: a two-channel test bench. Every change runs the same input through
+   channel A (the old behavior) and channel B (rc.1), with a product lens underneath. */
+:root {
+  --bg: #f3f1ea; --panel: #fdfcf8; --well: #ebe8df; --ink: #17191d; --ink-2: #565b64; --rule: #d6d2c6;
+  --a: #6b7280; --a-soft: #e6e6e3; --b: #0a6f6a; --b-soft: #d5ebe7; --b-ink: #ffffff;
+  --ok: #1b7a4b; --warn: #a96a0b; --bad: #bf3426; --idle: #8a8f98; --warn-soft: #f6e6c6; --bad-soft: #f6d9d3; --ok-soft: #d5ecdd;
+  --t1: #2f5fb3; --t2: #a3489c; --t3: #b46a12; --t4: #0a7f78;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111317; --panel: #191c21; --well: #22262c; --ink: #e8e6df; --ink-2: #a0a5ae; --rule: #30353c;
+  --a: #9097a3; --a-soft: #2a2e34; --b: #38c4b4; --b-soft: #12332f; --b-ink: #06211e;
+  --ok: #45b97d; --warn: #e0a23c; --bad: #ec6a5b; --idle: #7d838d; --warn-soft: #3b2e14; --bad-soft: #3e1f1b; --ok-soft: #15331f;
+  --t1: #6f9ae6; --t2: #d27fca; --t3: #e0a050; --t4: #38c4b4; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111317; --panel: #191c21; --well: #22262c; --ink: #e8e6df; --ink-2: #a0a5ae; --rule: #30353c;
+  --a: #9097a3; --a-soft: #2a2e34; --b: #38c4b4; --b-soft: #12332f; --b-ink: #06211e;
+  --ok: #45b97d; --warn: #e0a23c; --bad: #ec6a5b; --idle: #7d838d; --warn-soft: #3b2e14; --bad-soft: #3e1f1b; --ok-soft: #15331f;
+  --t1: #6f9ae6; --t2: #d27fca; --t3: #e0a050; --t4: #38c4b4; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 400 15.5px/1.5 var(--f-body); }
+h1, h2, h3, h4 { font-family: var(--f-display); line-height: 1.08; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+code, .mono { font-family: var(--f-data); font-size: .87em; }
+p code, li code, td code, .rich code { background: var(--well); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+a { color: inherit; }
+:focus-visible { outline: 3px solid var(--b); outline-offset: 2px; }
+.lab { font: 700 .71rem/1.2 var(--f-display); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); }
+
+/* chrome */
+.top { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; justify-content: space-between; padding: 10px clamp(14px, 2.4vw, 26px); background: var(--bg); border-bottom: 2px solid var(--ink); }
+.brand { display: flex; gap: 11px; align-items: center; background: none; border: 0; color: inherit; cursor: pointer; padding: 0; text-align: left; }
+.brand .mark { display: grid; grid-template-columns: 1fr 1fr; width: 34px; height: 34px; border: 2px solid var(--ink); border-radius: 3px; overflow: hidden; font: 800 .86rem/30px var(--f-display); text-align: center; flex: none; }
+.brand .mark i { font-style: normal; background: var(--a); color: #fff; } .brand .mark i + i { background: var(--b); color: var(--b-ink); }
+.brand b { display: block; font: 800 1.08rem/1.1 var(--f-display); }
+.brand small { display: block; font: 400 .72rem/1.3 var(--f-data); color: var(--ink-2); }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 700 .86rem/1 var(--f-display); border: 2px solid var(--ink); background: transparent; color: var(--ink); padding: 8px 12px; border-radius: 3px; cursor: pointer; }
+.btn:hover { background: var(--well); }
+.btn.go { background: var(--ink); color: var(--bg); }
+.btn.go:hover { opacity: .86; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.seg { display: inline-flex; border: 2px solid var(--ink); border-radius: 3px; overflow: hidden; max-width: 100%; flex-wrap: wrap; }
+.seg button { font: 600 .82rem/1.1 var(--f-body); background: transparent; color: var(--ink); border: 0; padding: 7px 10px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.shell { display: grid; grid-template-columns: 252px minmax(0, 1fr); align-items: start; }
+.rail { position: sticky; top: 60px; max-height: calc(100vh - 60px); overflow-y: auto; padding: 16px 12px 24px clamp(14px, 2.4vw, 26px); display: grid; gap: 15px; }
+.rail .home { text-align: left; }
+.rail section { display: grid; gap: 2px; }
+.rail .lab { padding: 0 8px 3px; }
+.rail button.item { display: grid; grid-template-columns: 1.7em 1fr auto; gap: 3px; align-items: baseline; width: 100%; text-align: left; padding: 5px 8px; background: none; color: var(--ink); border: 0; border-left: 3px solid transparent; border-radius: 0 3px 3px 0; font: 400 .86rem/1.25 var(--f-body); cursor: pointer; }
+.rail button.item .n { font: 600 .72rem/1 var(--f-data); color: var(--ink-2); }
+.rail button.item:hover { background: var(--well); }
+.rail button.item[aria-current="page"] { border-left-color: var(--b); background: var(--panel); font-weight: 600; }
+.rail button.item .seen { width: 7px; height: 7px; border-radius: 50%; background: transparent; align-self: center; }
+.rail button.item.done .seen { background: var(--b); }
+.progress { font: 400 .74rem/1.3 var(--f-data); color: var(--ink-2); padding: 0 8px; }
+main { padding: 20px clamp(14px, 2.6vw, 34px) 60px; min-width: 0; display: grid; gap: 18px; max-width: 1180px; }
+@media (max-width: 960px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail { position: static; max-height: none; display: flex; gap: 6px; overflow-x: auto; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+  .rail section { display: contents; } .rail .lab, .rail .progress { display: none; }
+  .rail button.item { width: auto; white-space: nowrap; grid-template-columns: auto auto auto; gap: 6px; border: 1px solid var(--rule); border-radius: 3px; }
+  .rail button.item[aria-current="page"] { border-color: var(--b); }
+}
+
+/* feature head */
+.head { display: grid; gap: 7px; }
+.head .kick { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.head h2 { font-size: clamp(1.7rem, 3.2vw, 2.45rem); font-weight: 800; letter-spacing: -.01em; max-width: 26ch; }
+.head .q { font-size: 1.1rem; max-width: 66ch; }
+.head .q b { font-weight: 600; }
+.pager { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tag { display: inline-block; font: 700 .68rem/1 var(--f-display); letter-spacing: .05em; text-transform: uppercase; padding: 3px 6px; border-radius: 2px; border: 1px solid var(--rule); color: var(--ink-2); }
+.tag.break { color: var(--bad); border-color: var(--bad); }
+.tag.opt { color: var(--warn); border-color: var(--warn); }
+
+/* bench */
+.bench { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: clamp(12px, 1.8vw, 18px); display: grid; gap: 13px; min-width: 0; }
+.ctl { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: flex-end; padding-bottom: 13px; border-bottom: 1px dashed var(--rule); }
+.fld { display: grid; gap: 4px; min-width: 0; }
+.chk { display: inline-flex; gap: 7px; align-items: flex-start; font-size: .88rem; line-height: 1.25; cursor: pointer; max-width: 28ch; }
+.chk input { width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--b); flex: none; }
+input[type="range"] { accent-color: var(--b); width: 170px; }
+input[type="text"], select { font: 400 .9rem/1.2 var(--f-data); background: var(--bg); color: var(--ink); border: 2px solid var(--ink); border-radius: 3px; padding: 6px 8px; min-width: 0; }
+.fld .val { font: 600 .82rem/1 var(--f-data); color: var(--ink); text-transform: none; letter-spacing: 0; }
+.panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 780px) { .panes { grid-template-columns: 1fr; } }
+.pane { border: 2px solid var(--a); border-radius: 4px; display: grid; align-content: start; min-width: 0; background: var(--panel); }
+.pane.b { border-color: var(--b); }
+.pane > header { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: var(--a-soft); font: 700 .84rem/1.2 var(--f-display); }
+.pane.b > header { background: var(--b-soft); }
+.pane > header .ch { font: 800 .72rem/1 var(--f-display); padding: 3px 6px; border-radius: 2px; background: var(--a); color: #fff; flex: none; }
+.pane.b > header .ch { background: var(--b); color: var(--b-ink); }
+.pane > header .sub { margin-left: auto; font: 400 .72rem/1.15 var(--f-data); color: var(--ink-2); text-align: right; }
+.pane .inner { padding: 10px; display: grid; gap: 9px; min-width: 0; }
+.outcome { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px; min-height: 30px; font-size: .9rem; }
+.badge { display: inline-block; font: 700 .76rem/1 var(--f-display); letter-spacing: .02em; padding: 5px 7px 4px; border-radius: 3px; background: var(--well); color: var(--ink-2); white-space: nowrap; }
+.badge.ok { background: var(--ok); color: #fff; } .badge.bad { background: var(--bad); color: #fff; } .badge.warn { background: var(--warn); color: #fff; }
+:root[data-theme="dark"] .badge.ok, :root[data-theme="dark"] .badge.bad, :root[data-theme="dark"] .badge.warn { color: #101215; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .badge.ok, :root:not([data-theme="light"]) .badge.bad, :root:not([data-theme="light"]) .badge.warn { color: #101215; } }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; }
+.stat { background: var(--well); border-radius: 3px; padding: 6px 8px; display: grid; gap: 1px; min-width: 0; }
+.stat b { font: 600 1.14rem/1.15 var(--f-data); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat span { font-size: .71rem; line-height: 1.2; color: var(--ink-2); }
+.term { background: #15171b; color: #d9dbd6; font: 400 .74rem/1.45 var(--f-data); padding: 9px 10px; border-radius: 3px; overflow-x: auto; white-space: pre; min-height: 54px; }
+.term .p { color: #6fd6c8; } .term .e { color: #f58a7a; } .term .d { color: #8d939c; } .term .g { color: #8fd7a4; }
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: .78rem; line-height: 1.3; max-height: 158px; overflow-y: auto; min-height: 38px; }
+.log li { display: grid; grid-template-columns: 3.2em 1fr; gap: 6px; }
+.log li i { font: 400 .72rem/1.35 var(--f-data); font-style: normal; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.log li.bad span { color: var(--bad); font-weight: 600; } .log li.ok span { color: var(--ok); font-weight: 600; } .log li.warn span { color: var(--warn); font-weight: 600; }
+.note { font-size: .85rem; color: var(--ink-2); }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .8rem; }
+th { text-align: left; font: 700 .68rem/1.15 var(--f-display); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); padding: 4px 8px 4px 0; border-bottom: 1px solid var(--ink); }
+td { padding: 4px 8px 4px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+td.m { font-family: var(--f-data); font-size: .75rem; }
+tr.scan { background: var(--well); }
+.y { color: var(--ok); font-weight: 600; } .n { color: var(--bad); font-weight: 600; } .w { color: var(--warn); font-weight: 600; } .dim { color: var(--ink-2); }
+
+/* flow */
+.flow { position: relative; display: flex; justify-content: space-between; align-items: stretch; gap: 14px; padding: 4px 0; }
+.flow::before { content: ""; position: absolute; left: 6%; right: 6%; top: 50%; height: 2px; background: var(--rule); }
+.fnode { position: relative; flex: 1 1 0; min-width: 0; background: var(--well); border: 2px solid var(--rule); border-radius: 3px; padding: 5px 5px; text-align: center; font: 600 .72rem/1.15 var(--f-body); display: grid; align-content: center; gap: 2px; transition: border-color .15s, background .15s; overflow-wrap: anywhere; }
+.fnode small { font: 400 .63rem/1.15 var(--f-data); color: var(--ink-2); }
+.fnode.ok { border-color: var(--ok); background: var(--ok-soft); } .fnode.bad { border-color: var(--bad); background: var(--bad-soft); } .fnode.wait { border-color: var(--warn); background: var(--warn-soft); }
+.pkt { position: absolute; top: 50%; width: 13px; height: 13px; margin-top: -6.5px; margin-left: -6.5px; border-radius: 50%; background: var(--b); box-shadow: 0 0 0 3px var(--panel); z-index: 2; left: 0; transition-property: left; transition-timing-function: linear; }
+.pkt.badp { background: var(--bad); }
+
+/* bars */
+.bar { position: relative; height: 15px; background: var(--well); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--b); }
+.bar.thick { height: 24px; }
+.bar .mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); z-index: 1; }
+.stack { display: flex; height: 26px; border-radius: 2px; overflow: hidden; background: var(--well); }
+.stack > i { display: block; height: 100%; min-width: 0; border-right: 1px solid var(--panel); }
+.actor { display: grid; grid-template-columns: 3.2em 1fr 7.5em; gap: 7px; align-items: center; font-size: .76rem; }
+.actor .nm { font: 600 .74rem/1 var(--f-data); }
+.actor .st { font: 600 .68rem/1.1 var(--f-data); text-align: right; }
+.st.RUNNING { color: var(--ok); } .st.CRASHED { color: var(--bad); } .st.THROTTLED { color: var(--warn); } .st.DONE, .st.SUSPENDED { color: var(--ink-2); } .st.WRITING { color: var(--b); }
+.key { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: .72rem; color: var(--ink-2); }
+.key span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 5px; background: var(--k); }
+
+/* gantt */
+.lane { display: grid; grid-template-columns: 7.6em 1fr; gap: 7px; align-items: center; font-size: .74rem; }
+.lane .bar > i { transition: none; }
+.lane .bar > i.bad { background: var(--bad); } .lane .bar > i.dimf { background: var(--idle); } .lane .bar > i.ok { background: var(--ok); }
+
+/* cpu */
+.cores { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.core { display: grid; gap: 3px; border: 2px solid var(--rule); border-radius: 3px; padding: 4px; }
+.core.x { border-color: var(--bad); background: var(--bad-soft); }
+.thread { height: 27px; border-radius: 2px; background: var(--well); display: grid; place-items: center; font: 600 .68rem/1 var(--f-data); color: #fff; }
+.thread.idle { color: var(--ink-2); }
+.thread.forced { background: repeating-linear-gradient(-45deg, transparent 0 4px, var(--rule) 4px 6px); color: var(--ink-2); }
+
+/* cache */
+.cache { display: grid; gap: 6px; }
+.cache-row { display: grid; grid-template-columns: 6.6em 1fr; gap: 6px; align-items: center; font-size: .72rem; }
+.cells { display: flex; flex-wrap: wrap; gap: 2px; }
+.cells i { width: 11px; height: 11px; border-radius: 1px; background: var(--b); transition: background .18s; }
+.cells i.torn { background: var(--bad); } .cells i.empty { background: var(--well); outline: 1px solid var(--rule); outline-offset: -1px; }
+
+/* timeline */
+.tl { position: relative; height: 62px; margin: 3px 3px 0; }
+.tl .band { position: absolute; top: 18px; height: 16px; font: 600 .63rem/16px var(--f-data); padding-left: 4px; overflow: hidden; white-space: nowrap; color: #fff; }
+.tl .cursor { position: absolute; top: 0; bottom: 8px; width: 2px; background: var(--bad); z-index: 2; }
+.tl .cursor::after { content: "node deleted"; position: absolute; top: -2px; left: 4px; white-space: nowrap; font: 700 .64rem/1.2 var(--f-display); color: var(--bad); }
+.tl .cursor.flip::after { left: auto; right: 4px; }
+.tl .tick { position: absolute; top: 38px; font: 400 .62rem/1 var(--f-data); color: var(--ink-2); transform: translateX(-50%); }
+.steps { display: grid; gap: 4px; font-size: .82rem; list-style: none; margin: 0; padding: 0; min-height: 30px; }
+.steps li { display: grid; grid-template-columns: 1.1em 1fr; gap: 5px; animation: rise .22s ease-out; line-height: 1.3; }
+.steps li::before { content: "›"; font-weight: 700; color: var(--ink-2); }
+.steps li.bad { color: var(--bad); font-weight: 600; } .steps li.ok { color: var(--ok); font-weight: 600; } .steps li.warn { color: var(--warn); font-weight: 600; }
+@keyframes rise { from { opacity: .2; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+/* matrix */
+.matrix { display: grid; grid-template-columns: 8.5em repeat(3, minmax(0, 1fr)); gap: 3px; font-size: .72rem; }
+.matrix .hd { font: 700 .66rem/1.15 var(--f-display); color: var(--ink-2); padding: 3px; align-self: end; }
+.matrix button { font: 600 .68rem/1.15 var(--f-data); padding: 6px 3px; border: 2px solid transparent; border-radius: 3px; cursor: pointer; color: #fff; overflow-wrap: anywhere; min-width: 0; }
+.matrix button.ok { background: var(--ok); } .matrix button.bad { background: var(--bad); } .matrix button.warn { background: var(--warn); }
+.matrix button.sel { border-color: var(--ink); box-shadow: 0 0 0 1px var(--panel) inset; }
+:root[data-theme="dark"] .matrix button { color: #101215; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .matrix button { color: #101215; } }
+
+/* lens */
+.lens { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 3px solid var(--ink); }
+@media (max-width: 860px) { .lens { grid-template-columns: 1fr; } }
+.lens > div { padding: 11px 16px 4px 0; display: grid; gap: 5px; align-content: start; }
+.lens > div + div { padding-left: 16px; border-left: 1px solid var(--rule); }
+@media (max-width: 860px) { .lens > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); } }
+.lens p { font-size: .93rem; }
+.fine { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px 26px; }
+@media (max-width: 860px) { .fine { grid-template-columns: 1fr; } }
+.fine ul { margin: 5px 0 0; padding-left: 18px; display: grid; gap: 5px; font-size: .88rem; }
+.src { font-size: .82rem; color: var(--ink-2); display: grid; gap: 5px; align-content: start; }
+.src .prs { display: flex; flex-wrap: wrap; gap: 6px; }
+.src a { font-family: var(--f-data); font-size: .78rem; }
+.say { font-size: 1.02rem; font-style: italic; }
+
+/* home + brief */
+.home-hero { display: grid; gap: 10px; max-width: 74ch; }
+.home-hero h2 { font-size: clamp(1.9rem, 4vw, 3rem); font-weight: 800; letter-spacing: -.015em; }
+.home-track { display: grid; gap: 7px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 8px; }
+.card { display: grid; gap: 5px; text-align: left; align-content: start; background: var(--panel); border: 1px solid var(--rule); border-left: 4px solid var(--b); border-radius: 3px; padding: 10px 12px; color: inherit; cursor: pointer; font: inherit; }
+.card:hover { background: var(--well); }
+.card b { font: 700 .98rem/1.15 var(--f-display); }
+.card span { font-size: .84rem; color: var(--ink-2); line-height: 1.32; }
+.how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 3px solid var(--ink); }
+.how > div { padding: 10px 16px 4px 0; font-size: .91rem; } .how > div + div { padding-left: 16px; border-left: 1px solid var(--rule); }
+.how h3 { font-size: 1rem; margin-bottom: 4px; }
+@media (max-width: 760px) { .how { grid-template-columns: 1fr; } .how > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); } }
+.brief td { font-size: .85rem; line-height: 1.32; padding: 8px 12px 8px 0; }
+.brief td:first-child { font-weight: 600; min-width: 12em; }
+.brief td button { all: unset; cursor: pointer; text-decoration: underline; }
+.brief table { min-width: 760px; }
+.foot { font-size: .78rem; color: var(--ink-2); border-top: 1px solid var(--rule); padding-top: 11px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<header class="top">
+  <button class="brand" id="brand" title="Back to start">
+    <span class="mark" aria-hidden="true"><i>A</i><i>B</i></span>
+    <span><b>Substrate rc.1 product bench</b><small>v1.0.0-rc.1 · f86fde9d · simulated, no cluster</small></span>
+  </button>
+  <div class="tools">
+    <span class="lab">Speed</span><div class="seg" id="speed" role="group" aria-label="Simulation speed"></div>
+    <button class="btn" id="theme">Theme</button>
+    <button class="btn" id="brief-btn">Launch brief</button>
+  </div>
+</header>
+<div class="shell">
+  <nav class="rail" id="rail" aria-label="Features"></nav>
+  <main id="main"></main>
+</div>
+
+<script>
+(() => {
+"use strict";
+const REPO = "https://github.com/agent-substrate/substrate/pull/";
+let SPEED = 1;
+
+/* ---------- small DOM kit ---------- */
+function h(sel, props, ...kids) {
+  const [tag, ...cls] = sel.split(".");
+  const e = document.createElement(tag || "div");
+  if (cls.length) e.className = cls.join(" ");
+  if (props == null || typeof props !== "object" || props instanceof Node || Array.isArray(props)) { kids.unshift(props); props = {}; }
+  for (const k in props) {
+    const v = props[k];
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "style") e.style.cssText = v;
+    else if (k === "value") e.value = v;
+    else if (k === "checked" || k === "disabled") e[k] = !!v;
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  kids.flat(9).forEach(c => { if (c != null && c !== false) e.append(c instanceof Node ? c : String(c)); });
+  return e;
+}
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const richHTML = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+function rich(sel, s) { const e = h(sel); e.innerHTML = richHTML(s); return e; }
+
+function makeCtx() {
+  let alive = true; const timers = new Set();
+  const ctx = {
+    sleep(ms) { return new Promise(res => { const id = setTimeout(() => { timers.delete(id); if (alive) res(); }, ms / SPEED); timers.add(id); }); },
+    loop(fn) {
+      let last = performance.now(), stopped = false;
+      const f = n => { if (!alive || stopped) return; const dt = Math.min(0.1, (n - last) / 1000) * SPEED; last = n; if (fn(dt) === false) { stopped = true; return; } requestAnimationFrame(f); };
+      requestAnimationFrame(f);
+      return () => { stopped = true; };
+    },
+    runner() { let cur = 0; return { start() { const id = ++cur; return { sleep: ms => ctx.sleep(ms).then(() => id === cur), live: () => id === cur }; }, cancel() { cur++; } }; },
+    dispose() { alive = false; timers.forEach(clearTimeout); timers.clear(); },
+  };
+  return ctx;
+}
+
+/* ---------- controls ---------- */
+function seg(label, options, value, onChange) {
+  const box = h("div.seg", { role: "group", "aria-label": label });
+  const paint = () => [...box.children].forEach(b => b.setAttribute("aria-pressed", b.dataset.v === String(value)));
+  options.forEach(([v, text]) => box.append(h("button", { "data-v": v, type: "button", onclick() { value = v; paint(); onChange(v); } }, text)));
+  paint();
+  return h("div.fld", h("span.lab", label), box);
+}
+function check(label, checked, onChange) {
+  return h("label.chk", h("input", { type: "checkbox", checked, onchange(e) { onChange(e.target.checked); } }), h("span", label));
+}
+function slider(label, min, max, step, value, fmt, onInput) {
+  const val = h("span.val", fmt(value));
+  return h("div.fld", h("span.lab", label + " ", val), h("input", { type: "range", min, max, step, value, "aria-label": label, oninput(e) { const v = +e.target.value; val.textContent = fmt(v); onInput(v); } }));
+}
+function pane(kind, title, sub) {
+  const inner = h("div.inner");
+  const el = h("section.pane" + (kind === "b" ? ".b" : ""), h("header", h("span.ch", kind.toUpperCase()), title, sub ? h("span.sub", sub) : null), inner);
+  return { el, inner };
+}
+const A_TITLE = "v0.6.0", B_TITLE = "v1.0.0-rc.1";
+const badge = (t, k) => h("span.badge" + (k ? "." + k : ""), t);
+function statBox(label, v = "–") { const b = h("b", v); const e = h("div.stat", b, h("span", label)); e.set = x => { b.textContent = x; }; return e; }
+function logBox() {
+  const ul = h("ul.log", { "aria-live": "polite" });
+  ul.add = (t, msg, kind) => { const li = h("li" + (kind ? "." + kind : ""), h("i", typeof t === "number" ? t.toFixed(1) + "s" : t), h("span", msg)); ul.append(li); ul.scrollTop = ul.scrollHeight; };
+  ul.clear = () => { ul.textContent = ""; };
+  return ul;
+}
+function term(lines) { const t = h("div.term", { tabindex: "0" }); t.show = ls => { t.innerHTML = ls.map(l => l).join("\n"); }; if (lines) t.show(lines); return t; }
+function setOut(el, ...kids) { el.textContent = ""; kids.flat().forEach(k => k != null && el.append(k)); }
+
+function Flow(nodes) {
+  const els = nodes.map(n => h("div.fnode", n[0], h("small", n[1] || "")));
+  const wrap = h("div.flow", els);
+  return {
+    el: wrap,
+    label(i, a, b) { els[i].firstChild.textContent = a; els[i].lastChild.textContent = b || ""; },
+    reset() { els.forEach(e => { e.className = "fnode"; }); wrap.querySelectorAll(".pkt").forEach(p => p.remove()); },
+    mark(i, cls) { els[i].className = "fnode" + (cls ? " " + cls : ""); },
+    async go(run, from, to, bad) {
+      const x = e => e.offsetLeft + e.offsetWidth / 2;
+      const p = h("i.pkt" + (bad ? ".badp" : ""));
+      p.style.left = x(els[from]) + "px";
+      wrap.append(p);
+      const ms = 260 * Math.abs(to - from);
+      p.style.transitionDuration = ms / SPEED + "ms";
+      requestAnimationFrame(() => requestAnimationFrame(() => { p.style.left = x(els[to]) + "px"; }));
+      const live = await run.sleep(ms + 40);
+      p.remove();
+      return live;
+    },
+  };
+}
+
+/* ---------- scene: kubectl ate proxy actor ---------- */
+function parsePorts(text) {
+  // Same rules as parsePortMappings in cmd/kubectl-ate/internal/cmd/proxy.go.
+  const specs = text.trim().split(/\s+/).filter(Boolean);
+  if (!specs.length) return { maps: [{ l: 8000, r: 80 }] };
+  const num = (s, min) => (/^\d+$/.test(s) && +s >= min && +s <= 65535) ? +s : null;
+  const seen = new Set(), maps = [];
+  for (const spec of specs) {
+    const i = spec.indexOf(":");
+    if (i < 0) {
+      const p = num(spec, 1);
+      if (p == null) return { err: `invalid port "${spec}": must be 1-65535 or [local-port:]remote-port` };
+      if (seen.has(p)) return { err: `duplicate local port ${p}` };
+      seen.add(p); maps.push({ l: p, r: p }); continue;
+    }
+    const ls = spec.slice(0, i), rs = spec.slice(i + 1), r = num(rs, 1);
+    if (r == null) return { err: `invalid remote port in "${spec}": must be 1-65535` };
+    let l = 0;
+    if (ls !== "") { l = num(ls, 0); if (l == null) return { err: `invalid local port in "${spec}": must be 0-65535` }; }
+    if (l) { if (seen.has(l)) return { err: `duplicate local port ${l}` }; seen.add(l); }
+    maps.push({ l, r });
+  }
+  return { maps };
+}
+function sceneProxy(root, ctx) {
+  const st = { ports: "8000:80 9090:9090", suspended: true, spiffe: true, pcr: true, client: "browser" };
+  const run = ctx.runner();
+  const A = pane("a", "Port-forward the router, set a header", A_TITLE), B = pane("b", "One command, any client", B_TITLE);
+  const fa = Flow([["Client", "localhost:8000"], ["port-forward", "kubectl"], ["atenet-router", ":80"], ["Actor", ":80"]]);
+  const fb = Flow([["Client", "localhost"], ["kubectl ate proxy", "127.0.0.1"], ["atenet-router", "mTLS :8444"], ["Actor", "port"]]);
+  const ta = term(), tb = term(), oa = h("div.outcome"), ob = h("div.outcome");
+  const err = h("span.note");
+  A.inner.append(ta, fa.el, oa); B.inner.append(tb, fb.el, ob);
+  const input = h("input", { type: "text", value: st.ports, size: 22, "aria-label": "Port mappings", oninput(e) { st.ports = e.target.value; paint(); } });
+  const sendBtn = h("button.btn.go", { onclick: send }, "Send request");
+  const reqSeg = seg("Client", [["browser", "Browser"], ["ws", "WebSocket"], ["curl", "curl with header"]], st.client, v => { st.client = v; paint(); });
+  const portSel = h("select", { "aria-label": "Local port", onchange: paint });
+  root.append(h("div.ctl", reqSeg,
+    h("div.fld", h("span.lab", "Port mappings"), input),
+    h("div.fld", h("span.lab", "Target"), portSel),
+    h("div", { style: "display:grid;gap:5px" }, check("Actor is suspended", st.suspended, v => { st.suspended = v; }), check("atenet-client is in ingress-allowed-spiffe-ids", st.spiffe, v => { st.spiffe = v; paint(); })),
+    check("Dev can create podcertificaterequests in ate-system", st.pcr, v => { st.pcr = v; paint(); }),
+    sendBtn, err), h("div.panes", A.el, B.el));
+
+  function paint() {
+    run.cancel(); fa.reset(); fb.reset(); setOut(oa); setOut(ob);
+    const parsed = parsePorts(st.ports);
+    ta.show([
+      `<span class="p">$</span> kubectl port-forward -n ate-system svc/atenet-router 8000:80`,
+      `<span class="d"># a non-default port needs a second forward and a CONNECT client</span>`,
+      `<span class="p">$</span> kubectl port-forward -n ate-system svc/atenet-router 8001:8081`,
+      `<span class="p">$</span> curl -H "ate-target-actor: ate-demo-counter/my-counter-1" localhost:8000/`,
+    ]);
+    if (parsed.err) { tb.show([`<span class="p">$</span> kubectl ate proxy actor my-counter-1 ${esc(st.ports)} -a ate-demo-counter`, `<span class="e">Error: ${esc(parsed.err)}</span>`]); err.textContent = ""; portSel.textContent = ""; sendBtn.disabled = true; return; }
+    sendBtn.disabled = false;
+    const cur = portSel.value;
+    portSel.textContent = "";
+    parsed.maps.forEach(m => portSel.append(h("option", { value: m.l + ":" + m.r }, `${m.l || "random"} → actor :${m.r}`)));
+    if ([...portSel.options].some(o => o.value === cur)) portSel.value = cur;
+    const lines = [`<span class="p">$</span> kubectl ate proxy actor my-counter-1 ${esc(st.ports.trim())} -a ate-demo-counter`.replace(/\s+-a/, " -a")];
+    if (!st.pcr) lines.push(`<span class="e">failed to connect to atenet-router: can't mint a client certificate</span>`);
+    else parsed.maps.forEach(m => lines.push(`<span class="d">Proxying 127.0.0.1:${m.l || "&lt;random&gt;"} -&gt; ate-demo-counter/my-counter-1:${m.r}</span>`));
+    tb.show(lines);
+    const [l, r] = (portSel.value || "8000:80").split(":");
+    fb.label(0, st.client === "ws" ? "WebSocket" : st.client === "curl" ? "curl" : "Browser", "localhost:" + l);
+    fb.label(3, "Actor", ":" + r);
+    fa.label(0, st.client === "ws" ? "WebSocket" : st.client === "curl" ? "curl" : "Browser", "localhost:8000");
+  }
+  async function send() {
+    paint();
+    const r = run.start();
+    const flowA = async () => {
+      if (st.client !== "curl") {
+        if (!await fa.go(r, 0, 1)) return; fa.mark(1, "ok");
+        if (!await fa.go(r, 1, 2, true)) return; fa.mark(2, "bad");
+        setOut(oa, badge("Can't route", "bad"), rich("span", "The router needs `ate-target-actor`. " + (st.client === "ws" ? "The browser WebSocket API can't set custom headers." : "A browser address bar can't set that header.")));
+        return;
+      }
+      if (!await fa.go(r, 0, 2)) return; fa.mark(1, "ok"); fa.mark(2, "ok");
+      if (st.suspended) { fa.mark(3, "wait"); setOut(oa, badge("Resuming", "warn")); if (!await r.sleep(600)) return; }
+      if (!await fa.go(r, 2, 3)) return; fa.mark(3, "ok");
+      setOut(oa, badge("200", "ok"), rich("span", "Works, because this client knows the header."));
+    };
+    const flowB = async () => {
+      if (!st.pcr) { fb.mark(1, "bad"); setOut(ob, badge("No tunnel", "bad"), rich("span", "The CLI mints its client certificate with a `PodCertificateRequest`, so it needs that RBAC.")); return; }
+      if (!await fb.go(r, 0, 1)) return; fb.mark(0, "ok"); fb.mark(1, "ok");
+      if (!await fb.go(r, 1, 2, !st.spiffe)) return;
+      if (!st.spiffe) { fb.mark(2, "bad"); setOut(ob, badge("Rejected", "bad"), rich("span", "The router only admits listed SPIFFE IDs. Add `atenet-client` at install.")); return; }
+      fb.mark(2, "ok");
+      if (st.suspended) { fb.mark(3, "wait"); setOut(ob, badge("Resuming", "warn"), "The router wakes the actor on first contact."); if (!await r.sleep(600)) return; }
+      if (!await fb.go(r, 2, 3)) return; fb.mark(3, "ok");
+      setOut(ob, badge(st.client === "ws" ? "101 upgraded" : "200", "ok"), rich("span", "No Substrate awareness needed. The CLI added the actor target for you."));
+    };
+    await Promise.all([flowA(), flowB()]);
+  }
+  paint();
+}
+
+/* ---------- scene: credential providers ---------- */
+function sceneCreds(root, ctx) {
+  const st = { k8s: true, vault: true, sts: false, dp: "envoy", down: false };
+  const REQS = [
+    ["api.github.example", "ate-secret://k8s.io/default/ns1/gh/token", "k8s.io"],
+    ["llm.example", "ate-secret://vault.example.com/team-a/llm-key", "vault.example.com"],
+    ["cloud.example", "ate-secret://sts.example.com/exchange", "sts.example.com"],
+    ["old.example", "ate-secret://retired.example/x", "retired.example"],
+  ];
+  const run = ctx.runner();
+  const A = pane("a", "One provider per install", A_TITLE), B = pane("b", "Route by URI host", B_TITLE);
+  const mk = () => { const tb = h("tbody"); return { tb, el: h("div.tbl", h("table", h("thead", h("tr", h("th", "Outbound request"), h("th", "Credential URI host"), h("th", "Gateway"))), tb)) }; };
+  const ta = mk(), tb = mk(), fa = term(), fb = term(), oa = h("div.outcome"), ob = h("div.outcome");
+  A.inner.append(fa, ta.el, oa); B.inner.append(fb, tb.el, ob);
+  root.append(h("div.ctl",
+    h("div.fld", h("span.lab", "Providers you run"), h("div", { style: "display:flex;gap:12px;flex-wrap:wrap" },
+      check("k8s.io", st.k8s, v => { st.k8s = v; paint(); }), check("vault.example.com", st.vault, v => { st.vault = v; paint(); }), check("sts.example.com", st.sts, v => { st.sts = v; paint(); }))),
+    seg("Dataplane", [["envoy", "Envoy"], ["agw", "agentgateway"]], st.dp, v => { st.dp = v; paint(); }),
+    check("vault provider is unreachable", st.down, v => { st.down = v; paint(); }),
+    h("button.btn.go", { onclick: send }, "Send requests")), h("div.panes", A.el, B.el));
+  const served = () => [["k8s", "k8s.io"], ["vault", "vault.example.com"], ["sts", "sts.example.com"]].filter(([k]) => st[k]).map(x => x[1]);
+  const flag = list => {
+    const obj = n => n === "k8s.io" ? `{"name":"k8s.io"}` : `{"name":"${n}","address":"${n.split(".")[0]}-provider.ate-system.svc:50051"}`;
+    if (!list.length) return `--credential-provider='{"enabled":false}'`;
+    return list.length === 1 ? `--credential-provider='${obj(list[0])}'` : `--credential-provider='[\n    ${list.map(obj).join(",\n    ")}\n  ]'`;
+  };
+  function result(host, list) {
+    const closed = st.dp === "envoy" ? "500" : "403";
+    if (!list.includes(host)) return [closed + " fail closed", "bad", "not served"];
+    if (host === "vault.example.com" && st.down) return ["503 retryable", "warn", "unreachable"];
+    return ["injected, 200", "ok", "credential replaced"];
+  }
+  function row(tbody, list, i, show) {
+    const [dest, uri, host] = REQS[i];
+    const r = show ? result(host, list) : null;
+    tbody.append(h("tr", h("td.m", dest), h("td.m", host), h("td", r ? badge(r[0], r[1]) : h("span.dim", "–"))));
+  }
+  function paint() {
+    run.cancel();
+    const list = served(), one = list.slice(0, 1);
+    fa.show([`<span class="d"># only one provider can be named</span>`, esc(flag(one))]);
+    fb.show([esc(flag(list))]);
+    [ta, tb].forEach(t => { t.tb.textContent = ""; }); REQS.forEach((_, i) => { row(ta.tb, one, i, false); row(tb.tb, list, i, false); });
+    setOut(oa); setOut(ob);
+  }
+  async function send() {
+    paint();
+    const r = run.start(), list = served(), one = list.slice(0, 1);
+    [ta, tb].forEach(t => { t.tb.textContent = ""; });
+    let okA = 0, okB = 0;
+    for (let i = 0; i < REQS.length; i++) {
+      row(ta.tb, one, i, true); row(tb.tb, list, i, true);
+      if (result(REQS[i][2], one)[1] === "ok") okA++;
+      if (result(REQS[i][2], list)[1] === "ok") okB++;
+      if (!await r.sleep(330)) return;
+    }
+    setOut(oa, badge(`${okA}/4 reach upstream`, okA > 1 ? "ok" : "warn"), "Any URI naming another provider is refused.");
+    setOut(ob, badge(`${okB}/4 reach upstream`, okB > 1 ? "ok" : "warn"), "Unknown hosts still fail closed. Credentials never leak on a miss.");
+  }
+  paint();
+}
+
+/* ---------- scene: egress during boot ---------- */
+function sceneBoot(root, ctx) {
+  const st = { path: "actor", host: "allowed" };
+  const run = ctx.runner();
+  const LANES = [["egress", "Egress"], ["fetch", "Startup fetch"], ["probe", "Wakeup probe"], ["ingress", "Ingress"]];
+  const mk = (kind, title) => {
+    const p = pane(kind, title, kind === "a" ? A_TITLE : B_TITLE), bars = {};
+    LANES.forEach(([k, l]) => { const i = h("i"); bars[k] = i; p.inner.append(h("div.lane", h("span", l), h("div.bar", i))); });
+    const clock = h("span.mono.dim"), out = h("div.outcome"), log = logBox();
+    p.inner.append(log, out);
+    return { ...p, bars, clock, out, log };
+  };
+  const A = mk("a", "Egress waits for the probe"), B = mk("b", "Egress starts before the container");
+  root.append(h("div.ctl",
+    seg("Boot path", [["actor", "Actor with its EgressPolicy"], ["golden", "Golden actor, no policy"], ["gep", "Golden with goldenEgressPolicy (preview)"]], st.path, v => { st.path = v; reset(); }),
+    seg("Startup code fetches from", [["allowed", "Host in policy"], ["blocked", "Host not in policy"]], st.host, v => { st.host = v; reset(); }),
+    h("button.btn.go", { onclick: go }, "Boot it")), h("div.panes", A.el, B.el));
+  const TIMEOUT = 30;
+  function plan(isB) {
+    const hasPolicy = st.path !== "golden";
+    if (!isB) return { egressAt: null, fetchEnd: null, why: "`atunnel` closes the connection inside the sandbox", ok: false };
+    if (!hasPolicy) return { egressAt: 0, why: "No policy: no tunnel, and DNS returns NXDOMAIN", ok: false };
+    if (st.host === "blocked") return { egressAt: 0, why: "Host isn't allowed: DNS returns NXDOMAIN", ok: false };
+    return { egressAt: 0, fetchEnd: 12, ok: true };
+  }
+  function reset() { run.cancel(); [A, B].forEach(p => { Object.values(p.bars).forEach(b => { b.style.width = "0"; b.className = ""; }); p.log.clear(); setOut(p.out); }); }
+  async function go() {
+    reset();
+    const r = run.start(), goldenPath = st.path !== "actor";
+    const pa = plan(false), pb = plan(true);
+    const scale = TIMEOUT + 2;
+    const pct = t => Math.min(100, t / scale * 100) + "%";
+    let t = 0;
+    const flags = new Map();
+    const once = (p, k, fn) => { const key = p.title + k; if (!flags.has(p) ) flags.set(p, new Set()); const s = flags.get(p); if (!s.has(k)) { s.add(k); fn(); } };
+    const setup = (P, pl) => {
+      if (pl.egressAt === 0) { P.bars.egress.className = "ok"; } else { P.bars.egress.className = "dimf"; }
+      P.log.add(0, pl.egressAt === 0 ? "Egress on, then the first container starts" : "Container starts with egress off", pl.egressAt === 0 ? "ok" : "");
+    };
+    setup(A, pa); setup(B, pb);
+    while (true) {
+      if (!await r.sleep(60)) return;
+      t += 0.5;
+      for (const [P, pl] of [[A, pa], [B, pb]]) {
+        if (P.done === r) continue;
+        P.bars.egress.style.width = pct(pl.ok ? t : t);
+        if (pl.ok) {
+          P.bars.fetch.className = "ok"; P.bars.fetch.style.width = pct(Math.min(t, pl.fetchEnd));
+          P.bars.probe.className = t >= pl.fetchEnd ? "ok" : "dimf"; P.bars.probe.style.width = pct(t);
+          if (t >= pl.fetchEnd) once(P, "f", () => P.log.add(pl.fetchEnd, "Model download finished; `/readyz` starts passing".replace(/`/g, ""), "ok"));
+          if (t >= pl.fetchEnd + 1) {
+            once(P, "r", () => {
+              P.log.add(pl.fetchEnd + 1, goldenPath ? "Probe passed; golden snapshot taken" : "Probe passed; ingress opens", "ok");
+              P.bars.ingress.className = "ok"; P.bars.ingress.style.marginLeft = pct(pl.fetchEnd + 1); P.bars.ingress.style.width = "40%";
+              setOut(P.out, badge(goldenPath ? "Golden built" : "RUNNING", "ok"), `Ready at ${pl.fetchEnd + 1}s, in a modeled 12s download.`);
+            });
+            P.done = r;
+          }
+        } else {
+          P.bars.fetch.className = "bad"; P.bars.fetch.style.width = pct(Math.min(t, 2));
+          once(P, "x", () => P.log.add(0.5, pl.why.replace(/`/g, ""), "bad"));
+          P.bars.probe.className = "dimf"; P.bars.probe.style.width = pct(t);
+          if (t >= TIMEOUT) {
+            P.log.add(TIMEOUT, "Wakeup probe timed out after the default 30s", "bad");
+            setOut(P.out, badge("CRASHED", "bad"), goldenPath ? "The template reports a golden build error. New actors cold-boot." : "Needs a revert before it can resume.");
+            P.done = r;
+          }
+        }
+      }
+      if (A.done === r && B.done === r) return;
+    }
+  }
+  reset();
+}
+
+/* ---------- scene: non-root ---------- */
+function sceneNonroot(root, ctx) {
+  // From manifests/ate-install at v0.6.0 and v1.0.0-rc.1.
+  const ROWS = [
+    ["ate-api-server", "ate-api-server", 0, 1, "NET_BIND_SERVICE", 0],
+    ["ate-api-server", "objectstore-plugin", 0, 1, "", 0],
+    ["ate-controller", "ate-controller", 0, 1, "", 1],
+    ["ate-idp-server", "ate-idp-server", 0, 1, "", 0],
+    ["atenet-router", "atenet-router", 0, 1, "", 0],
+    ["atenet-router", "envoy", 0, 1, "", 0],
+    ["atenet-egress", "envoy", 1, 1, "", 0],
+    ["atenet-egress", "sdsmint", 1, 1, "", 1],
+    ["atenet-egress", "ext-proc", 1, 1, "", 0],
+    ["pod-certificate-controller", "controller", 0, 1, "NET_BIND_SERVICE", 1],
+    ["atelet (node agent)", "atelet", 0, 0, "DAC_OVERRIDE", 0],
+    ["atelet (node agent)", "objectstore-plugin", 0, 0, "", 0],
+  ];
+  const st = { rofs: false };
+  const run = ctx.runner();
+  const body = h("tbody");
+  const A = pane("a", "Admission check: runAsNonRoot", A_TITLE), B = pane("b", "Same check, same components", B_TITLE);
+  const sa = statBox("containers pass"), sb = statBox("containers pass"), oa = h("div.outcome"), ob = h("div.outcome");
+  A.inner.append(h("div.stats", sa), oa); B.inner.append(h("div.stats", sb, statBox("exceptions, both atelet", "2")), ob);
+  const tableEl = h("div.tbl", h("table", h("thead", h("tr", h("th", "Workload"), h("th", "Container"), h("th", A_TITLE), h("th", B_TITLE), h("th", "Added capability"), h("th", "Read-only root"))), body));
+  root.append(h("div.ctl", check("Also require a read-only root filesystem (rc.1 only)", st.rofs, v => { st.rofs = v; paint(); }), h("button.btn.go", { onclick: go }, "Run the check")), h("div.panes", A.el, B.el), tableEl);
+  function paint(upto = -1, active = -1) {
+    body.textContent = "";
+    ROWS.forEach((r, i) => {
+      const shown = upto < 0 ? false : i <= upto;
+      const passB = r[3] && (!st.rofs || r[5]);
+      body.append(h("tr" + (i === active ? ".scan" : ""), h("td", r[0]), h("td.m", r[1]),
+        h("td", shown ? h("span." + (r[2] ? "y" : "n"), r[2] ? "non-root" : "root") : h("span.dim", "·")),
+        h("td", shown ? h("span." + (passB ? "y" : r[3] ? "w" : "n"), r[3] ? (passB ? "non-root" : "writable root") : "root, uid 0") : h("span.dim", "·")),
+        h("td.m", r[4] ? "+" + r[4] : "drop ALL"), h("td", r[5] ? "yes" : "no")));
+    });
+  }
+  async function go() {
+    const r = run.start(); let na = 0, nb = 0;
+    setOut(oa); setOut(ob);
+    for (let i = 0; i < ROWS.length; i++) {
+      paint(i, i);
+      if (ROWS[i][2]) na++;
+      if (ROWS[i][3] && (!st.rofs || ROWS[i][5])) nb++;
+      sa.set(`${na}/${i + 1}`); sb.set(`${nb}/${i + 1}`);
+      if (!await r.sleep(170)) return;
+    }
+    paint(ROWS.length, -1);
+    setOut(oa, badge(`${na} of 12 pass`, "warn"), "Only the egress gateway ran non-root.");
+    setOut(ob, badge(`${nb} of 12 pass`, st.rofs ? "warn" : "ok"), st.rofs ? "Non-root is further along than read-only." : "atelet and its sidecar stay root on purpose.");
+  }
+  paint();
+}
+
+/* ---------- scene: ECDSA ---------- */
+function sceneEcdsa(root, ctx) {
+  const st = { path: "new", rp: "ecdsa" };
+  const run = ctx.runner();
+  const mk = (kind, title) => {
+    const p = pane(kind, title, kind === "a" ? A_TITLE : B_TITLE);
+    const f = Flow([["actor-id CA", ""], ["Actor cert", "short-lived"], ["External party", "verifies chain"]]);
+    const out = h("div.outcome");
+    p.inner.append(f.el, out);
+    return { ...p, f, out };
+  };
+  const A = mk("a", "Ed25519 root"), B = mk("b", "Depends how you got here");
+  root.append(h("div.ctl",
+    seg("How you got to rc.1", [["new", "New install"], ["up", "Existing pool kept"], ["rot", "Existing pool, rotated"]], st.path, v => { st.path = v; paint(); }),
+    seg("External party accepts", [["ecdsa", "ECDSA, not Ed25519"], ["both", "Both"]], st.rp, v => { st.rp = v; paint(); }),
+    h("button.btn.go", { onclick: go }, "Verify")), h("div.panes", A.el, B.el),
+    h("div.tbl", h("table", h("thead", h("tr", h("th", "CA pool at rc.1"), h("th", "Key type"), h("th", "Validated by"))), h("tbody",
+      [["actor-id-ca-pool", "ECDSA P-256 (new)", "External relying parties"], ["egress-mitm-ca-pool", "ECDSA P-256", "Actor workloads"], ["pod identity, service DNS, postgres", "Ed25519", "Only inside the cluster"]].map(r => h("tr", h("td.m", r[0]), h("td", r[1]), h("td", r[2])))))));
+  const keyB = () => st.path === "up" ? "Ed25519" : "ECDSA P-256";
+  function paint() {
+    run.cancel();
+    [A, B].forEach(p => { p.f.reset(); setOut(p.out); });
+    A.f.label(0, "actor-id CA", "Ed25519"); B.f.label(0, "actor-id CA", keyB());
+  }
+  async function verify(P, key, r) {
+    if (!await P.f.go(r, 0, 1)) return; P.f.mark(0, "ok"); P.f.mark(1, "ok");
+    const accepted = key !== "Ed25519" || st.rp === "both";
+    if (!await P.f.go(r, 1, 2, !accepted)) return;
+    P.f.mark(2, accepted ? "ok" : "bad");
+    setOut(P.out, badge(accepted ? "Trust anchor accepted" : "Trust anchor rejected", accepted ? "ok" : "bad"), key === "Ed25519" && st.rp !== "both" ? "The identity is fine inside the cluster and useless outside it." : "");
+  }
+  async function go() { paint(); const r = run.start(); await Promise.all([verify(A, "Ed25519", r), verify(B, keyB(), r)]); }
+  paint();
+}
+
+/* ---------- scene: core tagging ---------- */
+function sceneCore(root, ctx) {
+  const st = { kernel: true, load: 3 };
+  const TEN = [["A", "--t1"], ["B", "--t2"], ["C", "--t3"], ["D", "--t4"]];
+  const mk = (kind, title) => {
+    const p = pane(kind, title, kind === "a" ? A_TITLE : B_TITLE), cores = [];
+    const grid = h("div.cores");
+    for (let i = 0; i < 4; i++) { const t1 = h("div.thread.idle"), t2 = h("div.thread.idle"), c = h("div.core", t1, t2); cores.push({ c, t: [t1, t2] }); grid.append(c); }
+    const sx = statBox("cores shared across sandboxes"), si = statBox("sibling threads forced idle"), sr = statBox("threads run, of those ready");
+    p.inner.append(grid, h("div.stats", sx, si, sr));
+    return { ...p, cores, sx, si, sr, tot: { x: 0, i: 0, ran: 0, ready: 0, ticks: 0 } };
+  };
+  const A = mk("a", "No core tags"), B = mk("b", "runsc --enable-core-tags");
+  const hint = h("span.note");
+  root.append(h("div.ctl", slider("Ready threads per sandbox", 1, 4, 1, st.load, v => String(v), v => { st.load = v; zero(); }),
+    check("Kernel supports core scheduling (prctl PR_SCHED_CORE)", st.kernel, v => { st.kernel = v; zero(); }), hint),
+    h("div.panes", A.el, B.el), h("div.key", TEN.map(t => h("span", { style: `--k:var(${t[1]})` }, `sandbox ${t[0]}`))));
+  function zero() { [A, B].forEach(p => { p.tot = { x: 0, i: 0, ran: 0, ready: 0, ticks: 0 }; }); hint.textContent = st.kernel ? "" : "The probe fails, so channel B runs without the flag. Same result as A."; }
+  function paintCore(cell, tenant, forced) {
+    cell.className = "thread" + (tenant == null ? (forced ? " forced" : " idle") : "");
+    cell.style.background = tenant == null ? "" : `var(${TEN[tenant][1]})`;
+    cell.textContent = tenant == null ? "" : TEN[tenant][0];
+  }
+  function stepUntagged(P, ready) {
+    const q = ready.slice().sort(() => Math.random() - .5); let ran = 0;
+    P.cores.forEach(core => {
+      const a = q.pop(), b = q.pop();
+      paintCore(core.t[0], a); paintCore(core.t[1], b);
+      ran += (a != null) + (b != null);
+      const cross = a != null && b != null && a !== b;
+      core.c.className = "core" + (cross ? " x" : "");
+      if (cross) P.tot.x++;
+    });
+    P.tot.ran += ran; P.tot.ready += ready.length; P.tot.ticks += 4;
+  }
+  function stepTagged(P, ready) {
+    const q = ready.slice(); const counts = [0, 0, 0, 0]; q.forEach(t => counts[t]++);
+    let ran = 0;
+    const order = [0, 1, 2, 3].sort(() => Math.random() - .5);
+    P.cores.forEach(core => {
+      const pick = order.filter(t => counts[t] > 0).sort((x, y) => counts[y] - counts[x])[0];
+      core.c.className = "core";
+      if (pick == null) { paintCore(core.t[0], null); paintCore(core.t[1], null); return; }
+      const n = Math.min(2, counts[pick]); counts[pick] -= n; ran += n;
+      paintCore(core.t[0], pick);
+      if (n === 2) paintCore(core.t[1], pick);
+      else { const waiting = counts.some(c => c > 0); paintCore(core.t[1], null, waiting); if (waiting) P.tot.i++; }
+    });
+    P.tot.ran += ran; P.tot.ready += ready.length; P.tot.ticks += 4;
+  }
+  function show(P) {
+    const t = P.tot, sibs = Math.max(1, t.ticks);
+    P.sx.set(Math.round(t.x / sibs * 100) + "%"); P.si.set(Math.round(t.i / sibs * 100) + "%");
+    P.sr.set(Math.round(t.ran / Math.max(1, t.ready) * 100) + "%");
+  }
+  let acc = 0;
+  zero();
+  ctx.loop(dt => {
+    acc += dt; if (acc < .42) return; acc = 0;
+    const ready = [];
+    for (let t = 0; t < 4; t++) for (let i = 0; i < st.load; i++) if (Math.random() < .8) ready.push(t);
+    stepUntagged(A, ready);
+    if (st.kernel) stepTagged(B, ready); else stepUntagged(B, ready);
+    show(A); show(B);
+  });
+}
+
+/* ---------- scene: streaming authz ---------- */
+function sceneStream(root, ctx) {
+  const CALLERS = [["none", "No credentials"], ["nogrant", "ServiceAccount, no grants"], ["viewer", "Viewer on the atespace"]];
+  const RPCS = [["unary", "Unary RPC (get actors)"], ["reflect", "ServerReflectionInfo"], ["other", "Any other stream"]];
+  const res = (ver, caller, rpc) => {
+    if (caller === "none") return { code: "Unauthenticated", k: "bad", at: 0 };
+    if (rpc === "unary") return caller === "viewer" ? { code: "OK", k: "ok", at: 2 } : { code: "PermissionDenied", k: "bad", at: 1 };
+    if (rpc === "reflect") return { code: "OK", k: "warn", at: 2, note: "Open to any authenticated caller, like Kubernetes discovery. It returns only the public schema." };
+    return ver === "a" ? { code: "Handler runs", k: "bad", at: 2, note: "Streams passed after authentication alone. No authz interceptor ran." }
+      : { code: "PermissionDenied", k: "ok", at: 1, note: "permission denied: no authorization rule for <method>" };
+  };
+  let sel = ["nogrant", "other"];
+  const run = ctx.runner();
+  const mk = (kind, title) => {
+    const p = pane(kind, title, kind === "a" ? A_TITLE : B_TITLE);
+    const f = Flow([["Caller", ""], ["apiauthn", "who are you"], ["authz", kind === "a" ? "unary only" : "unary + stream"], ["Handler", ""]]);
+    const m = h("div.matrix"), out = h("div.outcome");
+    p.inner.append(m, f.el, out);
+    return { ...p, kind, f, m, out };
+  };
+  const A = mk("a", "Authz covered unary RPCs"), B = mk("b", "Authz covers streams too");
+  root.append(h("div.panes", A.el, B.el));
+  function paintM(P) {
+    P.m.textContent = "";
+    P.m.append(h("span.hd"), ...RPCS.map(r => h("span.hd", r[1])));
+    CALLERS.forEach(c => {
+      P.m.append(h("span.hd", { style: "align-self:center" }, c[1]));
+      RPCS.forEach(r => { const x = res(P.kind, c[0], r[0]); const isSel = sel[0] === c[0] && sel[1] === r[0];
+        P.m.append(h("button." + x.k + (isSel ? ".sel" : ""), { type: "button", "aria-pressed": isSel, onclick() { sel = [c[0], r[0]]; fire(); } }, x.code)); });
+    });
+  }
+  async function trace(P, r) {
+    P.f.reset(); setOut(P.out);
+    const x = res(P.kind, sel[0], sel[1]);
+    // Node 1 authn, node 2 authz, node 3 handler. A stream on the old server skips the authz node.
+    const skipAuthz = P.kind === "a" && sel[1] !== "unary" && sel[0] !== "none";
+    P.f.mark(0, "ok");
+    if (sel[0] === "none") { if (!await P.f.go(r, 0, 1, true)) return; P.f.mark(1, "bad"); }
+    else {
+      if (!await P.f.go(r, 0, 1)) return; P.f.mark(1, "ok");
+      if (skipAuthz) { if (!await P.f.go(r, 1, 3, sel[1] === "other")) return; P.f.mark(3, sel[1] === "other" ? "bad" : "wait"); }
+      else {
+        if (!await P.f.go(r, 1, 2, x.at === 1)) return;
+        if (x.at === 1) P.f.mark(2, "bad");
+        else { P.f.mark(2, "ok"); if (!await P.f.go(r, 2, 3)) return; P.f.mark(3, x.k === "warn" ? "wait" : "ok"); }
+      }
+    }
+    setOut(P.out, badge(x.code, x.k), x.note || "");
+  }
+  function fire() { const r = run.start(); [A, B].forEach(P => { paintM(P); trace(P, r); }); }
+  fire();
+}
+
+/* ---------- scene: gVisor bump ---------- */
+function sceneGvisor(root, ctx) {
+  const run = ctx.runner();
+  const FLEET = Array.from({ length: 12 }, (_, i) => ({ n: "a" + (i + 1), fid: i < 8 ? "MEMORY" : i < 10 ? "ROOTFS" : "VOLUMES" }));
+  const mk = (kind, title, sub, yaml) => {
+    const p = { el: null, inner: null, ...pane(kind, title, sub) };
+    const grid = h("div", { style: "display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px" });
+    const out = h("div.outcome");
+    const s1 = statBox("restored with process memory"), s2 = statBox("fresh boot, disk data kept");
+    p.inner.append(term(yaml), grid, h("div.stats", s1, s2), out);
+    return { ...p, grid, out, s1, s2 };
+  };
+  const A = mk("a", "Keep the previous runtime Enabled", "policy", [
+    `<span class="d"># SandboxConfig</span>`, `defaultVersion: v6        <span class="d"># 20261026.0, used for cold boots</span>`,
+    `versions:`, `- {name: v6, state: Enabled}`, `- {name: v5, state: Enabled} <span class="g"># stays in restorableRuntimes</span>`]);
+  const B = mk("b", "Ship only the new runtime", "as the install manifest does", [
+    `<span class="d"># manifests/ate-install/sandboxconfig-gvisor.yaml</span>`, `defaultVersion: v6        <span class="d"># 20261026.0, used for cold boots</span>`,
+    `versions:`, `- {name: v6, state: Enabled}`, `<span class="d"># nothing can restore a v5 memory snapshot</span>`]);
+  root.append(h("div.ctl", h("span.note", { style: "max-width:60ch" }, "This bench compares a runtime policy, not two releases. Twelve suspended actors hold durable snapshots taken on the previous runtime. All twelve resume."), h("button.btn.go", { onclick: go }, "Resume the fleet")), h("div.panes", A.el, B.el));
+  const cell = (a, state, cls) => h("div", { style: `border:1px solid var(--rule);border-radius:3px;padding:3px 5px;font:400 .66rem/1.25 var(--f-data);background:var(${cls || "--well"})` }, h("b", a.n), " ", state);
+  function paint() { [A, B].forEach(P => { P.grid.textContent = ""; FLEET.forEach(a => P.grid.append(cell(a, a.fid))); P.s1.set("–"); P.s2.set("–"); setOut(P.out); }); }
+  async function go() {
+    paint();
+    const r = run.start(); let mA = 0, mB = 0, fA = 0, fB = 0;
+    for (let i = 0; i < FLEET.length; i++) {
+      const a = FLEET[i];
+      if (a.fid === "MEMORY") mA++; else fA++;
+      fB++;
+      A.grid.children[i].replaceWith(cell(a, a.fid === "MEMORY" ? "MEMORY" : "fresh", a.fid === "MEMORY" ? "--ok-soft" : "--well"));
+      B.grid.children[i].replaceWith(cell(a, a.fid === "MEMORY" ? "ROOTFS↓" : "fresh", a.fid === "MEMORY" ? "--warn-soft" : "--well"));
+      A.s1.set(mA); A.s2.set(fA); B.s1.set(mB); B.s2.set(fB);
+      if (!await r.sleep(110)) return;
+    }
+    setOut(A.out, badge("8 of 8 keep memory", "ok"), "In-flight agent state survives the bump.");
+    setOut(B.out, badge("8 downgraded", "warn"), "Disk and volumes survive. Running processes restart.");
+  }
+  paint();
+}
+
+/* ---------- scene: over-limit isolation ---------- */
+function sceneOver(root, ctx) {
+  const st = { cls: "gvisor", psi: true, affected: true, rate: 120 };
+  const POD = 1088, LIMIT = 256, WORKER = 32;
+  const booked = () => st.cls === "gvisor" ? LIMIT : LIMIT + 4 + 2; // microVM: 4MiB + 8MiB/GiB
+  const NAMES = ["a1", "a2", "a3", "a4"], BASE = [180, 150, 120, 160];
+  let stops = [];
+  const mk = (kind, title) => {
+    const p = pane(kind, title, kind === "a" ? A_TITLE : B_TITLE);
+    const rows = NAMES.map(n => { const fill = h("i"), mark = h("span.mark"), s = h("span.st"), bar = h("div.bar", fill, mark); p.inner.append(h("div.actor", h("span.nm", n), bar, s)); return { fill, mark, s }; });
+    const pod = h("i"), stall = h("i", { style: "background:var(--warn)" }), stallMark = h("span.mark", { style: "left:25%" });
+    p.inner.append(h("div.lane", h("span", "Worker pod"), h("div.bar", pod)), h("div.lane", h("span", "a1 stall, 2s"), h("div.bar", stall, stallMark)));
+    const log = logBox(), out = h("div.outcome"), s1 = statBox("actors down", "0/4"), s2 = statBox("worker restarts", "0"), s3 = statBox("requests served by neighbors", "0");
+    p.inner.append(h("div.stats", s1, s2, s3), log, out);
+    return { ...p, kind, rows, pod, stall, log, out, s1, s2, s3 };
+  };
+  const A = mk("a", "memory.max on the actor"), B = mk("b", "memory.high and a watcher");
+  root.append(h("div.ctl",
+    seg("Sandbox class", [["gvisor", "gVisor"], ["microvm", "Micro-VM"]], st.cls, v => { st.cls = v; reset(); }),
+    slider("a1 leak rate", 40, 400, 20, st.rate, v => v + " MiB/s", v => { st.rate = v; }),
+    h("div", { style: "display:grid;gap:5px" },
+      check("Node kernel has PSI (memory.pressure)", st.psi, v => { st.psi = v; reset(); }),
+      check("Node has runc ≥ 1.5.2 with systemd 253-258", st.affected, v => { st.affected = v; reset(); })),
+    h("button.btn.go", { onclick: start }, "Start the leak"), h("button.btn", { onclick: reset }, "Reset")),
+    h("div.panes", A.el, B.el),
+    h("div.key", h("span", { style: "--k:var(--b)" }, "memory in use"), h("span", { style: "--k:var(--ink)" }, "the actor's booked limit"), h("span", { style: "--k:var(--warn)" }, "stall share; the mark is the 25% kill line")));
+  function makeState() { return { t: 0, mem: BASE.slice(), status: NAMES.map(() => "RUNNING"), served: 0, samples: [], acc: 0, over: false, phase: "", throttle: false }; }
+  let S = { A: makeState(), B: makeState() };
+  function paintPane(P, s) {
+    const max = st.cls === "microvm" ? 720 : 320;
+    s.mem.forEach((m, i) => {
+      const down = s.status[i] === "CRASHED";
+      P.rows[i].fill.style.width = (down ? 0 : Math.min(100, m / max * 100)) + "%";
+      P.rows[i].fill.style.background = s.status[i] === "THROTTLED" ? "var(--warn)" : "";
+      P.rows[i].mark.style.left = booked() / max * 100 + "%";
+      P.rows[i].s.className = "st " + s.status[i];
+      P.rows[i].s.textContent = s.status[i];
+    });
+    const used = WORKER + s.mem.reduce((a, m, i) => a + (s.status[i] === "CRASHED" ? 0 : m), 0);
+    P.pod.style.width = Math.min(100, used / POD * 100) + "%";
+    P.pod.style.background = used > POD * .9 ? "var(--bad)" : "";
+    P.stall.style.width = Math.min(100, (s.share || 0) * 100) + "%";
+    P.s1.set(s.status.filter(x => x === "CRASHED").length + "/4");
+    P.s2.set(s.workerDown ? "1" : "0");
+    P.s3.set(Math.round(s.served));
+  }
+  function killAll(P, s, why) {
+    s.status = s.status.map(() => "CRASHED"); s.workerDown = true; s.over = true;
+    P.log.add(s.t, why, "bad");
+    P.log.add(s.t, "Worker restarted. All 4 actors CRASHED, losing everything since their last snapshot.", "bad");
+    setOut(P.out, badge("4 of 4 down", "bad"), "One leak took out every neighbor.");
+  }
+  function killOne(P, s, why) {
+    s.status[0] = "CRASHED"; s.over = true;
+    P.log.add(s.t, why, "ok");
+    P.log.add(s.t, 'a1 CRASHED: "killed for exceeding its memory limit". Others keep running.', "ok");
+    setOut(P.out, badge("1 of 4 down", "ok"), rich("span", `Contained in ${(s.t - s.hit).toFixed(1)}s from reaching the limit. Run \`kubectl ate revert actor a1\` to recover it.`));
+  }
+  function step(P, s, dt) {
+    if (s.over) { s.served += s.status.filter((x, i) => i && x === "RUNNING").length * 12 * dt * (s.workerDown ? 0 : 1); return; }
+    s.t += dt;
+    s.served += 3 * 12 * dt;
+    const th = booked();
+    const used = WORKER + s.mem.reduce((a, b) => a + b, 0);
+    const guarded = P.kind === "b" && st.psi;
+    if (guarded) {
+      let stalled = 0;
+      if (s.mem[0] < th) s.mem[0] += st.rate * dt;
+      else { if (s.hit == null) { s.hit = s.t; s.status[0] = "THROTTLED"; P.log.add(s.t, `a1 reached memory.high (${th} MiB). The kernel throttles it instead of killing.`, "warn"); } s.mem[0] += 6 * dt; stalled = .6; }
+      s.samples.push({ t: s.t, d: stalled * dt });
+      s.samples = s.samples.filter(x => x.t > s.t - 2);
+      s.share = s.samples.reduce((a, x) => a + x.d, 0) / 2;
+      if (s.share >= .25) killOne(P, s, `Stalled ${Math.round(s.share * 100)}% of the last 2s at its own limit. Worker runs cgroup.kill.`);
+      else if (s.mem[0] > th + Math.min(16, th / 16)) killOne(P, s, "Past the overshoot cap. Worker runs cgroup.kill.");
+    } else {
+      s.mem[0] += st.rate * dt;
+      if (st.cls === "gvisor") {
+        if (s.mem[0] >= th) {
+          s.hit = s.t;
+          if (st.affected) killAll(P, s, "Kernel OOM kill in a1's cgroup. The worker scope has OOMPolicy=kill, so systemd stops the whole worker.");
+          else { s.status[0] = "CRASHED"; s.over = true; P.log.add(s.t, "Kernel OOM kill stays inside a1's cgroup on this node.", "warn"); setOut(P.out, badge("1 of 4 down", "warn"), "This runc and systemd combination doesn't escalate the kill."); }
+        }
+      } else if (used >= POD) killAll(P, s, "a1's VMM and virtiofsd have no limit of their own. They push the pod to its limit and the OOM kill hits the worker.");
+    }
+  }
+  function reset() {
+    stops.forEach(f => f()); stops = [];
+    S = { A: makeState(), B: makeState() };
+    [A, B].forEach(P => { P.log.clear(); setOut(P.out); });
+    if (!st.psi) B.log.add("boot", "Kernel has no cgroup memory pressure (PSI), so the worker sets no memory guard and warns at startup.", "warn");
+    paintPane(A, S.A); paintPane(B, S.B);
+  }
+  function start() {
+    reset();
+    stops.push(ctx.loop(dt => {
+      const d = dt * .55;
+      step(A, S.A, d); step(B, S.B, d);
+      S.A.mem.forEach((_, i) => { if (i) { S.A.mem[i] = BASE[i] + Math.sin(S.A.t * 3 + i) * 5; S.B.mem[i] = BASE[i] + Math.sin(S.B.t * 3 + i) * 5; } });
+      paintPane(A, S.A); paintPane(B, S.B);
+      if (S.A.over && S.B.over) { S.tail = (S.tail || 0) + d; if (S.tail > 3) return false; }
+    }));
+  }
+  reset();
+}
+
+/* ---------- scene: micro-VM memory planner ---------- */
+function sceneMicro(root, ctx) {
+  const st = { pod: 1088, act: 1024, cls: "microvm", n: 1 };
+  const A = pane("a", "Guest loses 128 MiB, nothing booked", A_TITLE), B = pane("b", "Guest gets its limit, overhead booked", B_TITLE);
+  const mk = P => { const stack = h("div.stack"), g = statBox("memory the actor sees"), fit = statBox("actors that fit"), cap = statBox("worker capacity"), per = statBox("booked per actor"), out = h("div.outcome"); P.inner.append(stack, h("div.stats", g, per, cap, fit), out); return { stack, g, fit, cap, per, out }; };
+  const a = mk(A), b = mk(B);
+  const need = h("div.note");
+  const sPod = slider("Pool limits.memory", 256, 8192, 4, st.pod, v => v + " MiB", v => { st.pod = v; paint(); });
+  const sAct = slider("Actor limit", 128, 4096, 4, st.act, v => v + " MiB", v => { st.act = v; paint(); });
+  const sN = slider("Actors you want per worker", 1, 16, 1, st.n, v => String(v), v => { st.n = v; paint(); });
+  const setSlider = (w, v) => { const i = w.querySelector("input"); i.value = v; i.dispatchEvent(new Event("input")); };
+  root.append(h("div.ctl",
+    seg("Sandbox class", [["microvm", "Micro-VM"], ["gvisor", "gVisor"]], st.cls, v => { st.cls = v; paint(); }),
+    sPod, sAct, sN,
+    h("div.fld", h("span.lab", "Presets"), h("div", { style: "display:flex;gap:6px;flex-wrap:wrap" },
+      h("button.btn", { onclick() { setSlider(sPod, 1024); setSlider(sAct, 1024); setSlider(sN, 1); } }, "Exact fit: 1Gi pool"),
+      h("button.btn", { onclick() { setSlider(sPod, 1132); setSlider(sAct, 1024); setSlider(sN, 1); } }, "Tested: 1132Mi"),
+      h("button.btn", { onclick() { setSlider(sPod, 2048); setSlider(sAct, 256); setSlider(sN, 8); } }, "Dense: 8 × 256Mi")))),
+    h("div.panes", A.el, B.el), need);
+  const seg2 = (w, c, t) => h("i", { style: `width:${w}%;background:var(${c})`, title: t });
+  function paint() {
+    const { pod, act, cls, n } = st, micro = cls === "microvm";
+    const over = micro ? 4 + 8 * act / 1024 : 0;
+    const bookedB = act + over, capB = Math.max(0, pod - 64), fitB = Math.floor(capB / bookedB + 1e-9);
+    const fitA = Math.floor(pod / act + 1e-9), guestA = micro ? act - 128 : act;
+    const r = v => Number.isInteger(v) ? v : v.toFixed(1);
+    a.g.set(micro ? (guestA > 0 ? guestA + " MiB" : "too small") : act + " MiB"); a.per.set(act + " MiB"); a.cap.set(pod + " MiB"); a.fit.set(fitA);
+    b.g.set(act + " MiB"); b.per.set(r(bookedB) + " MiB"); b.cap.set(capB + " MiB"); b.fit.set(fitB);
+    a.stack.textContent = ""; b.stack.textContent = "";
+    for (let i = 0; i < Math.min(fitA, 40); i++) { if (micro) { a.stack.append(seg2(guestA / pod * 100, "--t1", "guest"), seg2(128 / pod * 100, "--a", "taken from the guest for the VMM")); } else a.stack.append(seg2(act / pod * 100, "--t1", "sandbox")); }
+    b.stack.append(seg2(64 / pod * 100, "--a", "worker keeps 64 MiB"));
+    for (let i = 0; i < Math.min(fitB, 40); i++) { b.stack.append(seg2(act / pod * 100, "--t1", "guest")); if (over) b.stack.append(seg2(over / pod * 100, "--t3", "booked overhead")); }
+    setOut(a.out, micro && guestA <= 0 ? badge("Limit too small", "bad") : badge(`${fitA} fit`, fitA ? "ok" : "bad"), micro ? `Guest sees ${Math.max(0, guestA)} of ${act} MiB. VMM use isn't counted in placement.` : "Capacity is the full pod limit.");
+    const refuse = micro && act < 128;
+    setOut(b.out, refuse ? badge("Worker refuses < 128 MiB", "bad") : badge(`${fitB} fit`, fitB ? "ok" : "bad"), fitB < fitA ? `${fitA - fitB} fewer than before on the same pool.` : fitB === fitA ? "Same count, and each guest gets more." : "");
+    const needed = Math.ceil(64 + n * bookedB), neededOld = n * act;
+    need.innerHTML = richHTML(`To place **${n}** ${n > 1 ? "actors" : "actor"} per worker: **${neededOld} MiB** before, **${needed} MiB** now. ` + (st.pod < needed ? `This pool needs \`limits.memory\` raised by **${needed - st.pod} MiB**, or \`ResumeActor\` returns \`RESOURCE_EXHAUSTED\`.` : `This pool has room.`));
+  }
+  paint();
+}
+
+/* ---------- scene: suspend ---------- */
+function sceneSuspend(root, ctx) {
+  const st = { pod: 1088, disk: 200 };
+  const COPY = 400, USE = 225, BOOK = 256, WORKER = 32, RESERVED = 64;
+  let stop = null;
+  const mk = (kind, title) => {
+    const p = pane(kind, title, kind === "a" ? A_TITLE : B_TITLE);
+    const rows = ["a1", "a2", "a3", "a4"].map(n => { const fill = h("i"), s = h("span.st"); p.inner.append(h("div.actor", h("span.nm", n), h("div.bar", fill), s)); return { fill, s }; });
+    const stack = h("div.stack"), s1 = statBox("wave time"), s2 = statBox("peak page cache"), s3 = statBox("actors lost"), out = h("div.outcome");
+    p.inner.append(h("span.lab", "Worker pod memory"), stack, h("div.stats", s1, s2, s3), out);
+    return { ...p, kind, rows, stack, s1, s2, s3, out };
+  };
+  const A = mk("a", "4 writes at once, uncapped cache"), B = mk("b", "2 write slots, capped cache");
+  root.append(h("div.ctl",
+    seg("Pod size", [[1088, "Tight: 1088 MiB"], [2048, "Roomy: 2048 MiB"]], st.pod, v => { st.pod = +v; reset(); }),
+    slider("Disk write speed", 100, 800, 50, st.disk, v => v + " MiB/s", v => { st.disk = v; reset(); }),
+    h("button.btn.go", { onclick: start }, "Suspend all four"), h("button.btn", { onclick: reset }, "Reset")),
+    h("div.panes", A.el, B.el),
+    h("div.key", h("span", { style: "--k:var(--a)" }, "worker process"), h("span", { style: "--k:var(--t1)" }, "actor memory"), h("span", { style: "--k:var(--t3)" }, "page cache from snapshot writes")));
+  const fresh = () => ({ t: 0, prog: [0, 0, 0, 0], cache: 0, peak: 0, done: false, dead: false });
+  let SA = fresh(), SB = fresh();
+  function paint(P, s) {
+    const pod = st.pod;
+    s.prog.forEach((x, i) => {
+      P.rows[i].fill.style.width = (s.dead ? 0 : x / USE * 100) + "%";
+      const label = s.dead ? "CRASHED" : x >= USE ? "DONE" : x > 0 ? "WRITING" : s.t ? "waiting" : "RUNNING";
+      P.rows[i].s.className = "st " + label; P.rows[i].s.textContent = label;
+    });
+    const held = s.dead ? 0 : s.prog.reduce((a, x) => a + (x >= USE ? 0 : USE), 0);
+    P.stack.textContent = "";
+    const pc = v => Math.min(100, v / pod * 100);
+    P.stack.append(h("i", { style: `width:${pc(WORKER)}%;background:var(--a)` }), h("i", { style: `width:${pc(held)}%;background:var(--t1)` }), h("i", { style: `width:${pc(s.dead ? 0 : s.cache)}%;background:var(--t3)` }));
+    P.s1.set(s.dead || !s.t ? "–" : (s.wrote || s.t).toFixed(1) + "s");
+    P.s2.set(Math.round(s.peak) + " MiB"); P.s3.set(s.dead ? "4" : "0");
+  }
+  function step(P, s, dt) {
+    if (s.done || s.dead) return;
+    s.t += dt;
+    const held = s.prog.reduce((a, x) => a + (x >= USE ? 0 : USE), 0);
+    const slots = P.kind === "a" ? 4 : 2;
+    const active = s.prog.map((x, i) => x < USE ? i : -1).filter(i => i >= 0).slice(0, slots);
+    let room = Infinity;
+    if (P.kind === "b") {
+      // Same rule as checkpointCacheLimit in cmd/ateworker-gvisor/memory.go: a write the pod can lend all of
+      // has no limit, otherwise max(16 MiB headroom, booked - used) plus whatever it could borrow.
+      const lend = Math.max(0, st.pod - RESERVED - 4 * BOOK) / Math.max(1, active.length);
+      if (lend < USE) room = active.length * (Math.max(16, BOOK - USE) + lend) - s.cache;
+    }
+    const budget = Math.min(COPY * dt, Math.max(0, room) + st.disk * dt);
+    if (active.length) active.forEach(i => { s.prog[i] = Math.min(USE, s.prog[i] + budget / active.length); });
+    s.cache += active.length ? budget : 0;
+    s.cache = Math.max(0, s.cache - st.disk * dt);
+    s.peak = Math.max(s.peak, s.cache);
+    if (!active.length && !s.wrote) s.wrote = s.t;
+    const usage = WORKER + held + s.cache;
+    if (usage >= st.pod) {
+      s.dead = true;
+      setOut(P.out, badge("Worker OOM-killed", "bad"), `Page cache hit the pod limit at ${s.t.toFixed(1)}s. All four actors crash mid-suspend.`);
+    } else if (!active.length && s.cache < 1) {
+      s.done = true; s.cache = 0;
+      const tight = st.pod < 2000;
+      setOut(P.out, badge("All four suspended", "ok"), !tight ? "This pod had room to lend, so writes ran at full speed." : P.kind === "b" && st.disk < COPY ? "Slowed to disk speed instead of dying." : "The disk kept up at this speed. Slow it down to see the difference.");
+    }
+  }
+  function reset() { if (stop) stop(); SA = fresh(); SB = fresh(); setOut(A.out); setOut(B.out); paint(A, SA); paint(B, SB); }
+  function start() {
+    reset();
+    stop = ctx.loop(dt => { step(A, SA, dt); step(B, SB, dt); paint(A, SA); paint(B, SB); if ((SA.done || SA.dead) && (SB.done || SB.dead)) return false; });
+  }
+  reset();
+}
+
+/* ---------- scene: resume when the node is gone ---------- */
+function sceneResume(root, ctx) {
+  const st = { mode: "async", at: 8, ateletDies: true, revertFirst: false };
+  const UP_START = 5, UP_END = 6, MAX = 30;
+  const run = ctx.runner();
+  const pos = t => t / MAX * 100 + "%";
+  const cursor = h("div.cursor");
+  const tl = h("div.tl",
+    h("div.band", { style: `left:0;width:${pos(UP_START)};background:var(--bad)` }, "local only"),
+    h("div.band", { style: `left:${pos(UP_START)};width:${pos(UP_END - UP_START)};background:var(--warn)` }, ""),
+    h("div.band", { style: `left:${pos(UP_END)};width:${pos(MAX - UP_END)};background:var(--ok)` }, "upload exists in object storage"),
+    cursor, [0, 5, 10, 15, 20, 25, 30].map(t => h("span.tick", { style: `left:${pos(t)}` }, t + "m")));
+  const tlBox = h("div", tl, h("div.note", { style: "font-size:.74rem" }, "Upload starts about 5 minutes after the snapshot (--snapshot-upload-delay). Timing isn't promised; the 1-minute upload here is modeled."));
+  const A = pane("a", "Crash on an unreported upload", A_TITLE), B = pane("b", "Check the upload, restore elsewhere", B_TITLE);
+  const mk = P => { const steps = h("ol.steps"), out = h("div.outcome"); P.inner.append(steps, out); return { steps, out }; };
+  const a = mk(A), b = mk(B);
+  const slot = h("div");
+  const sAt = slider("Node deleted at", 0, 29, 1, st.at, v => v + " min after suspend", v => { st.at = v; paint(); });
+  root.append(h("div.ctl",
+    seg("Suspend mode", [["async", "Async (default)"], ["sync", "--mode=sync"]], st.mode, v => { st.mode = v; paint(); }),
+    sAt,
+    h("div", { style: "display:grid;gap:5px" },
+      check("atelet dies after uploading, before reporting", st.ateletDies, v => { st.ateletDies = v; paint(); }),
+      check("Operator runs revert before resuming", st.revertFirst, v => { st.revertFirst = v; paint(); })),
+    h("button.btn.go", { onclick: go }, "Resume the actor")), tlBox, h("div.panes", A.el, B.el));
+  function plan(ver) {
+    const lost = [["Resume finds no upload to restore", ""], ['CRASHED: "node holding the actor\'s latest snapshot no longer exists"', "bad"], ["Revert returns it to the last completed external snapshot", "warn"]];
+    const older = badge("Rolled back to older state", "warn"), latest = badge("Latest state restored", "ok");
+    if (st.mode === "sync") return { s: [["Sync suspend made the snapshot durable before returning", "ok"], ["Resume places it on another node, once one has room", ""], ["Restored from object storage", "ok"]], out: latest, why: "Nothing to lose. It costs a slower suspend." };
+    if (st.at < UP_END) return { s: lost, out: older, why: "The upload hadn't finished, so the snapshot went with the node." };
+    const unreported = st.ateletDies;
+    if (!unreported) return { s: [["atelet reported the upload as complete", "ok"], ["Resume places it on another node", ""], ["Restored from object storage", "ok"]], out: latest, why: "The normal path, in both releases." };
+    if (st.revertFirst) return { s: [["Upload is complete but still recorded PENDING", "warn"], ["Revert deletes an upload that was never reported complete", "bad"], ["Actor returns to the last completed external snapshot", "warn"]], out: older, why: "Order matters. Resume first." };
+    if (ver === "a") return { s: [["Upload is complete but still recorded PENDING", "warn"], ["Resume sees a gone node and crashes the actor", "bad"], ["The revert it now needs deletes the upload", "bad"]], out: badge("Good snapshot destroyed", "bad"), why: "The data was safe in storage, and recovery threw it away." };
+    return { s: [["Upload is complete but still recorded PENDING", "warn"], ["Resume releases the gone node and claims a worker on another", ""], ["atelet there reads the upload. The manifest is written last, so a partial upload returns NOT_FOUND", ""], ["Restored, and the snapshot is recorded COMPLETED", "ok"]], out: latest, why: "Same failure, no data loss." };
+  }
+  function paint() {
+    run.cancel();
+    cursor.style.left = pos(st.at); cursor.className = "cursor" + (st.at > 22 ? " flip" : "");
+    a.steps.textContent = ""; b.steps.textContent = ""; setOut(a.out); setOut(b.out);
+    if (st.mode === "sync") tlBox.style.opacity = .45; else tlBox.style.opacity = 1;
+  }
+  async function play(x, ver, r) {
+    const p = plan(ver);
+    for (const [txt, k] of p.s) { x.steps.append(h("li" + (k ? "." + k : ""), txt)); if (!await r.sleep(380)) return; }
+    setOut(x.out, p.out, p.why);
+  }
+  async function go() { paint(); const r = run.start(); await Promise.all([play(a, "a", r), play(b, "b", r)]); }
+  paint();
+}
+
+/* ---------- scene: node reboot ---------- */
+function sceneReboot(root, ctx) {
+  const st = { kind: "hard", first: false };
+  const CACHES = [["Image cache", 44], ["Snapshot cache", 16], ["Sandbox assets", 10], ["Bundle dirs", 10]];
+  const run = ctx.runner();
+  const mk = (kind, title) => {
+    const p = pane(kind, title, kind === "a" ? A_TITLE : B_TITLE);
+    const rows = CACHES.map(([n, c]) => { const cells = h("div.cells", Array.from({ length: c }, () => h("i"))); p.inner.append(h("div.cache-row", h("span", n), cells)); return cells; });
+    const log = logBox(), s1 = statBox("restores that work"), s2 = statBox("time to restore 5"), out = h("div.outcome");
+    p.inner.append(log, h("div.stats", s1, s2), out);
+    return { ...p, rows, log, s1, s2, out };
+  };
+  const A = mk("a", "Serves whatever survived"), B = mk("b", "Boot ID check, then clear");
+  root.append(h("div.ctl",
+    seg("What happened to the node", [["hard", "Unclean hard reset"], ["clean", "Clean reboot"]], st.kind, v => { st.kind = v; reset(); }),
+    check("First atelet start since the upgrade (no boot-ID record yet)", st.first, v => { st.first = v; reset(); }),
+    h("button.btn.go", { onclick: go }, "Reboot the node")), h("div.panes", A.el, B.el));
+  const cellsOf = P => P.rows.flatMap(r => [...r.children]);
+  function reset() { run.cancel(); [A, B].forEach(P => { cellsOf(P).forEach(c => { c.className = ""; }); P.log.clear(); P.s1.set("–"); P.s2.set("–"); setOut(P.out); }); }
+  async function go() {
+    reset();
+    const r = run.start();
+    const tear = P => { if (st.kind !== "hard") return; cellsOf(P).forEach((c, i) => { if ((i * 7) % 3 === 0) c.className = "torn"; }); };
+    tear(A); tear(B);
+    A.log.add("boot", st.kind === "hard" ? "Unsynced cache writes left entries empty or truncated." : "Caches were written out cleanly.", st.kind === "hard" ? "bad" : "");
+    B.log.add("boot", st.kind === "hard" ? "Unsynced cache writes left entries empty or truncated." : "Caches were written out cleanly.", st.kind === "hard" ? "bad" : "");
+    if (!await r.sleep(600)) return;
+    const willClear = !st.first;
+    if (st.first) B.log.add("boot", "No /var/lib/ate/cache-boot-id yet: atelet records the boot and clears nothing.", "warn");
+    else {
+      B.log.add("boot", "Boot ID differs from /var/lib/ate/cache-boot-id. Emptying caches.", "warn");
+      for (const c of cellsOf(B)) { c.className = "empty"; }
+    }
+    if (!await r.sleep(500)) return;
+    const broken = st.kind === "hard";
+    const play = async (P, cold, fails) => {
+      let ok = 0, t = 0; const cells = cellsOf(P).filter(c => c.className === "empty");
+      for (let i = 1; i <= 5; i++) {
+        if (fails) { t += .4; P.log.add(t, `Restore ${i}: unexpected end of JSON input`, "bad"); }
+        else {
+          t += cold ? 4 : 1;
+          if (cold) cells.splice(0, 16).forEach(c => { c.className = ""; });
+          ok++; P.log.add(t, `Restore ${i}: ok, ${cold ? "cold pull" : "warm cache"}`, "ok");
+        }
+        P.s1.set(`${ok}/5`); P.s2.set(fails ? "–" : t + "s");
+        if (!await r.sleep(cold ? 420 : 220)) return false;
+      }
+      return { ok, t };
+    };
+    const [ra, rb] = await Promise.all([play(A, false, broken), play(B, willClear, broken && !willClear)]);
+    if (!r.live()) return;
+    setOut(A.out, broken ? badge("Node is broken", "bad") : badge("Fast restores", "ok"), broken ? "Every restore on this node fails, and cache GC stops too." : "Warm caches, nothing to fix.");
+    if (st.first && broken) setOut(B.out, badge("Still broken", "bad"), "A node already torn stays broken. Reboot or replace it once after upgrading.");
+    else if (st.first) setOut(B.out, badge("Fast restores", "ok"), "The record now exists, so the next reboot is checked.");
+    else setOut(B.out, badge(broken ? "Node recovers itself" : "Cold, on purpose", broken ? "ok" : "warn"), broken ? "Slower, and correct. No operator needed." : "The check can't tell clean from unclean, so every reboot pays for cold caches.");
+  }
+  reset();
+}
+
+/* ---------- scene: golden crash messages ---------- */
+function sceneGolden(root, ctx) {
+  const CRASHES = {
+    tar: "atelet Run: unhandled tar entry",
+    mem: "killed for exceeding its memory limit",
+    worker: "assigned worker no longer exists",
+  };
+  const st = { crash: "tar" };
+  const run = ctx.runner();
+  const A = pane("a", "A generic reason", A_TITLE), B = pane("b", "The actor's own crash message", B_TITLE);
+  const mk = P => { const t = term(), s1 = statBox("commands to the root cause"), s2 = statBox("places you had to look"), out = h("div.outcome"); t.style.minHeight = "218px"; P.inner.append(t, h("div.stats", s1, s2), out); return { t, s1, s2, out }; };
+  const a = mk(A), b = mk(B);
+  root.append(h("div.ctl",
+    seg("Why the golden actor crashed", [["tar", "Bad image volume"], ["mem", "Over memory limit"], ["worker", "Worker went away"]], st.crash, v => { st.crash = v; reset(); }),
+    h("button.btn.go", { onclick: go }, "Debug the template")), h("div.panes", A.el, B.el),
+    rich("div.note", "While the golden build is failing, new actors cold-boot. That's slower, and not an error, so customers may see a slow start before anyone sees a failed template."));
+  function reset() { run.cancel(); [a, b].forEach(x => { x.t.show([`<span class="d"># template my-agent has no golden tag after 5 minutes</span>`]); x.s1.set("–"); x.s2.set("–"); setOut(x.out); }); }
+  const TABLE = [`<span class="p">$</span> kubectl ate get actor-templates -a demo`, `ATESPACE   NAME       GOLDEN TAG   ERROR   AGE`, `demo       my-agent                <span class="e">ERROR</span>   5m`];
+  const YAML = m => [`<span class="p">$</span> kubectl ate get actor-template my-agent -a demo -o yaml`, `status:`, `  goldenSnapshotStatus:`, `    errorMessage: <span class="e">${esc(m)}</span>`];
+  const BASE_MSG = "golden actor crashed before its snapshot was taken";
+  async function typeOut(x, chunks, r) {
+    let shown = [`<span class="d"># template my-agent has no golden tag after 5 minutes</span>`];
+    let n = 0;
+    for (const c of chunks) {
+      shown = shown.concat(c.lines); n += c.cmd ? 1 : 0;
+      x.t.show(shown); x.t.scrollTop = x.t.scrollHeight;
+      x.s1.set(n); x.s2.set(c.place);
+      if (!await r.sleep(800)) return false;
+    }
+    return true;
+  }
+  async function go() {
+    reset();
+    const r = run.start(), crash = CRASHES[st.crash];
+    const pa = typeOut(a, [
+      { cmd: 1, place: 1, lines: TABLE },
+      { cmd: 1, place: 1, lines: YAML(BASE_MSG) },
+      { cmd: 1, place: 2, lines: [`<span class="d"># why? find the golden actor</span>`, `<span class="p">$</span> kubectl ate get actors -a demo`, `...`] },
+      { cmd: 1, place: 2, lines: [`<span class="p">$</span> kubectl ate get actor &lt;golden-actor&gt; -a demo -o yaml`, `status:`, `  crash:`, `    message: <span class="g">${esc(crash)}</span>`] },
+    ], r);
+    const pb = typeOut(b, [
+      { cmd: 1, place: 1, lines: TABLE },
+      { cmd: 1, place: 1, lines: YAML(BASE_MSG + ": " + crash) },
+    ], r);
+    const [da, db] = await Promise.all([pa, pb]);
+    if (db && r.live()) setOut(b.out, badge("Root cause on the template", "ok"), "Whoever owns the template can act on it.");
+    if (da && r.live()) setOut(a.out, badge("Root cause found elsewhere", "warn"), "The failure and its reason lived on different objects.");
+  }
+  reset();
+}
+
+/* ---------- content ---------- */
+const TRACKS = [["net", "Access and networking"], ["sec", "Security"], ["run", "Runtime and reliability"]];
+const F = [
+  { id: "proxy", t: "net", name: "kubectl ate proxy actor", mount: sceneProxy,
+    head: "Open an actor from your laptop with one command",
+    q: "Can a developer use their agent's UI without learning our routing header?",
+    so: "Browsers, notebooks and WebSockets reach an actor without being Substrate-aware.",
+    who: "Developers, demo builders, support engineers.",
+    feel: "The first-run story gets shorter. A browser, Jupyter or a WebSocket client works against an actor, and a suspended actor wakes on first contact.",
+    act: "Include `atenet-client` in `--ingress-allowed-spiffe-ids`, and grant developers create, get and delete on `podcertificaterequests` in `ate-system`.",
+    say: "“Anything that speaks TCP can talk to your actor from your laptop.”",
+    roles: ["App teams", "Platform"], risk: "Dev access only",
+    fine: ["It's a developer tool, not a production ingress. Production browsers still need a reverse proxy that authenticates to the router and sets `ate-target-actor` from trusted context.",
+      "Everyone using it presents the same `atenet-client` SPIFFE ID, so the router can't tell one developer from another. Source has a TODO to move to JWT auth.",
+      "The RBAC above is in the system namespace, which is broad for a laptop tool. Decide who gets it.",
+      "It listens on `127.0.0.1` unless you pass `--address`. It carries raw TCP through a CONNECT tunnel, which is why WebSockets pass."],
+    prs: [3191], model: "Port parsing runs the same rules as `proxy.go`. Output messages are paraphrased except the `Proxying` line. The 200/101 responses are illustrative." },
+  { id: "creds", t: "net", name: "Multiple credential providers", mount: sceneCreds,
+    head: "Send each secret to the provider that owns it",
+    q: "Can one install use Kubernetes Secrets, Vault and a cloud token exchange at once?",
+    so: "One install can inject credentials from several systems, routed by URI host.",
+    who: "Platform teams with more than one secret system, and multi-team installs.",
+    feel: "Teams keep their existing secret stores. Moving to Substrate no longer means standardizing on one store first. It also opens the door to the planned token-exchange provider, so actors could call cloud APIs as themselves.",
+    act: "Pass `--credential-provider` a JSON array. The gateway sends each `ate-secret://` URI to the provider its host names, and keeps failing closed on any other host.",
+    say: "“Bring the secret systems you already have.”",
+    roles: ["Platform", "Security"], risk: "Thin test coverage",
+    fine: ["The PR states it was **not run** as a kind e2e with two providers, or on agentgateway with more than one entry. Test your combination before promising it.",
+      "The injection guide at this tag still documents only a single JSON object. The array form appears in the `ate-setup` usage text and the PR.",
+      "All providers share one CA and one client certificate.",
+      "The GCP Secret Manager provider moved out of tree to `agent-substrate-plugins/credprovider-gcp-secret-manager`. The token-exchange provider is planned, not shipped."],
+    prs: [3409, 3365], model: "Status codes come from the guide's failure table. Hostnames and the `sts` and `retired` providers are made up for the demo." },
+  { id: "boot", t: "net", name: "Egress during boot", mount: sceneBoot,
+    head: "Startup code can reach the hosts you allow",
+    q: "Can an agent download its model or clone its repo before it reports ready?",
+    so: "Workloads that fetch what they need to become ready can finally start.",
+    who: "Anyone whose agent pulls a model, a repo or config at startup.",
+    feel: "A whole class of workload stops crash-looping. Before, a fetch that the wakeup probe depended on could never succeed, which meant customers had to bake everything into the image.",
+    act: "Make sure the EgressPolicy exists before the actor resumes. If the golden actor needs the network too, give it `goldenEgressPolicy`, which is preview and needs the gate on server and client.",
+    say: "“Your agent can fetch what it needs while it boots, and only from where you allow.”",
+    roles: ["App teams", "Security"], risk: "Golden needs a preview",
+    fine: ["Policy still applies. With no policy there's no tunnel and DNS returns NXDOMAIN. Only egress moved earlier: ingress still waits for the probe.",
+      "This is the trap for Product: the golden actor has no policy by default. A template whose startup needs the network fails its golden build unless you use the preview field. New actors don't inherit `goldenEgressPolicy`.",
+      "Security reviewers should note that workload code can now talk to allowed hosts before it's ready. That's a reasonable default to state plainly, not hide."],
+    prs: [2117], model: "Lane order and the 30s default come from source. The 12s download is modeled." },
+  { id: "nonroot", t: "sec", name: "Non-root control plane", mount: sceneNonroot,
+    head: "The control plane drops root, with two named exceptions",
+    q: "What do we write on the security questionnaire?",
+    so: "Ten of twelve control-plane containers run non-root. The node agent doesn't.",
+    who: "Security reviewers and any customer with Pod Security or admission policies.",
+    feel: "Fewer findings in a customer's security review, and fewer exceptions to negotiate in locked-down clusters.",
+    act: "Don't write “no root anywhere”. Scope any namespace-wide `runAsNonRoot` policy so it excepts `atelet`, or it'll block the DaemonSet.",
+    say: "“Control-plane services run non-root with capabilities dropped. The node agent is the documented exception.”",
+    roles: ["Security", "Product"], risk: "Claim needs care",
+    fine: ["`atelet` and its `objectstore-plugin` sidecar stay `runAsUser: 0`. They do have `allowPrivilegeEscalation: false`, and capabilities dropped except `DAC_OVERRIDE` on atelet.",
+      "`ate-api-server` and `pod-certificate-controller` keep `NET_BIND_SERVICE`.",
+      "The egress gateway was already non-root in v0.6.0, so that part isn't new.",
+      "Worker pods aren't part of this change. The table covers the control plane only."],
+    prs: [3028], model: "The table is read directly from `manifests/ate-install` at both tags. Nothing is modeled except the scan animation." },
+  { id: "ecdsa", t: "sec", name: "ECDSA P-256 identity CA", mount: sceneEcdsa,
+    head: "Outside systems can trust an actor's identity",
+    q: "Can an actor prove who it is to a system outside the cluster?",
+    so: "New installs generate a CA that external relying parties accept as a trust anchor.",
+    who: "Teams federating actor identity with cloud or partner systems.",
+    feel: "Identity federation stops depending on whether the other side supports Ed25519, which many relying parties don't accept as a trust anchor.",
+    act: "If you need this on an existing cluster, rotate the pool. An upgrade alone keeps the old root.",
+    say: "“New clusters issue actor identity that outside systems can verify.”",
+    roles: ["Security", "Platform"], risk: "New installs only",
+    fine: ["The change applies to **newly generated pools**. Existing pools are kept on upgrade, so a cluster keeps its current root until it's rotated.",
+      "Cluster-internal pools (pod identity, service DNS, postgres) stay Ed25519.",
+      "`kubectl ate admin make-ca-pool --key-type` now defaults to `ECDSAP256`. Pass `--key-type ED25519` for pools only validated inside the cluster."],
+    prs: [3251], model: "The rejection is a stand-in for a relying party without Ed25519 trust anchors. No specific vendor was tested." },
+  { id: "core", t: "sec", name: "runsc core tagging", mount: sceneCore,
+    head: "Sandboxes stop sharing a physical core at the same moment",
+    q: "Do two customers' sandboxes ever run on sibling hyperthreads together?",
+    so: "On supporting kernels, gVisor sandboxes are isolated across SMT siblings.",
+    who: "Multi-tenant operators and their security reviewers.",
+    feel: "A stronger answer on cross-tenant side channels, with nothing to configure. The price is sibling threads sitting idle under contention, so dense pools may lose some throughput.",
+    act: "Confirm your node kernel supports core scheduling. Benchmark your own dense workloads before and after.",
+    say: "“Where the kernel supports it, sandboxes don't share a core at the same moment.”",
+    roles: ["Security", "Platform"], risk: "Depends on kernel",
+    fine: ["It's on automatically: the worker probes `prctl(PR_SCHED_CORE_GET)` once and passes `--enable-core-tags` to runsc only if that works. An old kernel gets no isolation, so don't claim this without checking.",
+      "This is in `ateworker-gvisor`. The change says nothing about micro-VM pools.",
+      "No performance figure comes with the change. The idle percentage here comes from a toy scheduler."],
+    prs: [2887], model: "The percentages are from a toy random scheduler in this page, not a measurement of runsc or Linux." },
+  { id: "stream", t: "sec", name: "Streaming RPC authz", mount: sceneStream,
+    head: "Streams now follow default-deny like everything else",
+    q: "Does “an RPC with no rule is denied” actually hold?",
+    so: "The docs' promise now holds for streams, with reflection as a deliberate exception.",
+    who: "Security reviewers and anyone writing a threat model.",
+    feel: "Nothing in normal use. It closes a gap between what the docs promised and what the server did, found in a bug bash. Click any cell to trace a call.",
+    act: "Nothing to do unless you built on an unlisted stream. Note reflection in your threat model.",
+    say: "“API access is default-deny for unary and streaming calls.”",
+    roles: ["Security"], risk: "Exception to note",
+    fine: ["**Reflection stays open** to any authenticated caller, on purpose, like Kubernetes discovery. A ServiceAccount with no grants can still list and describe services. The schema it returns is already public.",
+      "`ateapi.proto` defines no streaming RPCs, and a test enforces that, so the allowlist holds only reflection. Today this works as a safety net for anything registered later.",
+      "Unauthenticated callers still get `Unauthenticated` first."],
+    prs: [3262], model: "Results follow `authz/interceptor.go` and the authorization guide. “Any other stream” is a stand-in, since the server defines none today." },
+  { id: "gvisor", t: "run", name: "gVisor 20261026.0", mount: sceneGvisor,
+    head: "A runtime bump decides who keeps in-memory state",
+    q: "When the sandbox runtime changes, what happens to agents that are suspended?",
+    so: "The bundled runtime moves to a tagged release. Your version policy sets the blast radius.",
+    who: "Platform teams who own upgrades, and customers with long-lived agents.",
+    feel: "A running conversation or computation can survive a runtime bump, or restart with only disk data. Customers experience that as “it remembered” or “it forgot”.",
+    act: "If you maintain your own `SandboxConfig`, keep the previous version `Enabled` until suspended actors have moved. Treat removal as a user-visible event.",
+    say: "“Runtime upgrades don't have to cost a customer their session.”",
+    roles: ["Platform", "Product"], risk: "Policy choice",
+    fine: ["The move is from a nightly (`2026-10-17`, v4) to tagged releases (v6). The install manifest lists only v6.",
+      "If you pin your own config, `ateworker-gvisor` needs a release that includes the split rootfs and volume bundles, which is 20261019.0 or later.",
+      "This bench uses the v5 label as an example. Coming from v0.6.0 means a reinstall, since the skew policy only applies from 1.0.0.",
+      "Without a compatible worker, a durable snapshot falls back to ROOTFS and boots fresh on the default runtime."],
+    prs: [3364, 3177], model: "Restore and fallback rules come from the API guide. The fleet is invented, and every worker is assumed to have room." },
+  { id: "over", t: "run", name: "Over-limit isolation", mount: sceneOver,
+    head: "One actor's memory leak stays that actor's problem",
+    q: "If one customer's agent misbehaves, who else goes down?",
+    so: "A leak kills one actor instead of every actor on the worker.",
+    who: "Every multi-tenant customer. This is the headline reliability change.",
+    feel: "Noisy-neighbor outages turn into a single failed agent with a clear message: “killed for exceeding its memory limit”. Neighbors keep serving.",
+    act: "Check that node kernels have PSI (`memory.pressure`). Look for the warning at worker startup. Without PSI you don't get this protection, on either sandbox class.",
+    say: "“One agent running out of memory doesn't affect the others on its worker.”",
+    roles: ["Platform", "Product", "App teams"], risk: "Needs PSI",
+    fine: ["**PSI applies to micro-VM too.** Without it, a gVisor sandbox keeps `memory.max` and a micro-VM worker sets no limit, so the old failure remains.",
+      "The gVisor fix was reported on some nodes: the whole-worker kill comes from runc 1.5.2+ with systemd 253-258. Turn that toggle off to see the milder old behavior.",
+      "The killed actor is still `CRASHED`. It needs `kubectl ate revert actor` and loses work since its last snapshot. Isolation limits who's affected, not whether that actor fails.",
+      "On micro-VM the limit covers VMM and virtiofsd growth past what the actor booked. The guest itself can't exceed its RAM."],
+    prs: [3106, 3429], model: "The 25% stall share, 2s window, 250ms check and 16 MiB overshoot cap come from `cgroup/memwatch.go`. The stall rate is modeled so the kill lands about 1s after the limit, matching the PR's GKE test." },
+  { id: "micro", t: "run", name: "Micro-VM memory", mount: sceneMicro,
+    head: "Guests get what they asked for, and placement books the real cost",
+    q: "If I ask for 1 GiB, do I get 1 GiB? And will my pool still fit?",
+    so: "A 1 GiB guest now sees 1 GiB. Pools sized to an exact fit need more memory.",
+    who: "Micro-VM customers, and whoever sizes and prices pools.",
+    feel: "The number on the template matches what the workload sees. But density changes: a pool sized exactly to its actors may stop placing them.",
+    act: "**Breaking.** Re-run your sizing. Add 64 MiB per worker, plus 4 MiB + 8 MiB/GiB per micro-VM actor. Update any pricing or capacity model.",
+    say: "“What you request is what your guest gets.”",
+    roles: ["Platform", "Product"], risk: "Breaking",
+    fine: ["The 64 MiB worker reserve applies to gVisor pools too. Try the gVisor toggle.",
+      "The first version of this change booked 128 MiB + 8 MiB/GiB. A later commit in the same release lowered it to 4 MiB + 8 MiB/GiB. The PR warns these values are subject to tuning.",
+      "The micro-VM worker refuses to boot an actor under 128 MiB.",
+      "The guest still loses some memory to its kernel and kata-agent inside its limit. gVisor overhead stays at zero in accounting, though the sentry uses memory inside the actor's cgroup."],
+    prs: [3104, 3353], model: "All arithmetic is from `run.go` and `memory.go` at the tag. The 1036 MiB result for a 1 GiB actor matches the `memory.high` in PR #3429." },
+  { id: "suspend", t: "run", name: "Suspend without OOM", mount: sceneSuspend,
+    head: "Suspending can't take down a tight worker",
+    q: "Can saving an agent's state crash other agents?",
+    so: "Snapshot writes slow down under pressure instead of killing the worker.",
+    who: "Anyone running pools sized close to their actors, which is where the cost savings are.",
+    feel: "Tight pods become safe, so customers can pack denser and keep the savings. The trade is that a suspend wave in a tight pod now takes as long as the disk needs.",
+    act: "Nothing to turn on. If suspend latency is on your dashboards or in an SLO, re-baseline it for tight pools.",
+    say: "“Dense pools are safe to suspend. They may take a bit longer.”",
+    roles: ["Platform", "Product"], risk: "Slower when tight",
+    fine: ["A worker writes at most 2 snapshots at once. A newly placed actor waits for lent memory to be written back before it boots, so resume can feel that too.",
+      "Rootfs and durable-dir tars now flush every 8 MiB, which gives back some speed gained earlier. The PR says this can be tuned.",
+      "Pods with room to lend are unaffected and still suspend at full speed."],
+    prs: [3353], model: "The pod and actor sizes match the PR's GKE test (four 256 Mi actors filled to 225 MiB in 1088 Mi), and the cap follows `checkpointCacheLimit`. The 400 MiB/s copy rate and all timings are modeled, and it treats page cache as stuck until written back." },
+  { id: "resume", t: "run", name: "Resume after node loss", mount: sceneResume,
+    head: "A lost node doesn't have to destroy a good snapshot",
+    q: "When a node disappears, what does the customer lose?",
+    so: "If the upload exists, resume uses it, even if atelet never reported it.",
+    who: "Long-lived agents on spot or autoscaled nodes.",
+    feel: "One narrow, nasty case is gone: the data was safe in storage, and recovery used to delete it. The bigger window remains: an async suspend has nothing in storage for about 5 minutes.",
+    act: "If an agent's state matters, use `--mode=sync`. In runbooks, tell people to **resume before reverting**, since revert deletes an unreported upload.",
+    say: "“Sync suspends survive node loss. Async is faster, with a window of about five minutes.”",
+    roles: ["Platform", "App teams", "Product"], risk: "Async window remains",
+    fine: ["Slide the node deletion below 6 minutes: both releases lose the latest snapshot. This fix doesn't change that.",
+      "It covers a **deleted** node. Upload timing isn't promised by the docs.",
+      "Resume claims a worker before it knows the upload exists, so a missing upload costs one placement. It also waits until another node has room.",
+      "Substrate doesn't suspend for you on eviction. Your harness must do a sync suspend inside the 30-minute window, and spot nodes give far less."],
+    prs: [3094], model: "Paths come from the API guide and PR #3094. The 5-minute delay is the default. The 1-minute upload is modeled." },
+  { id: "reboot", t: "run", name: "Node reboots", mount: sceneReboot,
+    head: "A rebooted node fixes itself, at the cost of cold caches",
+    q: "After a crash, does a node recover without a person?",
+    so: "A torn cache can't break restores anymore. Every reboot now starts cold.",
+    who: "On-call engineers and anyone with unattended node reboots.",
+    feel: "Fewer “this node is cursed” incidents. The visible cost is slower restores right after any reboot, including clean ones.",
+    act: "After upgrading, reboot or replace any node that's already broken, once. Expect a cold-start bump in restore latency after node maintenance.",
+    say: "“Nodes recover from unclean reboots on their own.”",
+    roles: ["Platform"], risk: "One manual step",
+    fine: ["The PR calls this a **workaround**. The real fix is for caches to flush their writes to disk.",
+      "On first start, atelet only records the boot, since actors may be running on those caches. So an already-torn node stays broken until the next reboot. Try that checkbox.",
+      "A local snapshot not yet uploaded when the node reboots is lost, and no sandbox survives a reboot."],
+    prs: [3376], model: "The error text is from the PR's GKE test, which tore 92 image and 10 snapshot cache files. The cell pattern and restore times are modeled." },
+  { id: "golden", t: "run", name: "Golden crash messages", mount: sceneGolden,
+    head: "A failed template tells you why",
+    q: "How long does it take to learn why a template has no golden snapshot?",
+    so: "The crash reason is on the template, where its owner already looks.",
+    who: "Template authors and support.",
+    feel: "Less time spent on “it's slow and I don't know why”. Failures like a bad image volume show up on the object people already check.",
+    act: "Add `kubectl ate get actor-template <name> -a <atespace> -o yaml` to your support runbook. The table only shows an `ERROR` flag.",
+    say: "“Template failures explain themselves.”",
+    roles: ["App teams", "Product"], risk: "None",
+    fine: ["The `ERROR` column existed before. What's new is the crash text appended to the message, visible in `-o yaml` because it's too long for a table.",
+      "Nothing fails loudly for end users: actors created in the meantime cold-boot. Consider alerting on template errors."],
+    prs: [2644], model: "Crash strings are real constants or test values from the tag. The v0.6.0 debugging path is illustrative, and the golden actor's name is a placeholder." },
+];
+const byId = Object.fromEntries(F.map(f => [f.id, f]));
+const seen = new Set();
+
+/* ---------- rendering ---------- */
+const main = document.getElementById("main"), rail = document.getElementById("rail");
+let ctxNow = null;
+function buildRail() {
+  rail.textContent = "";
+  rail.append(h("button.btn.home", { onclick() { nav(""); } }, "Start here"));
+  let n = 0;
+  TRACKS.forEach(([k, label]) => {
+    rail.append(h("section", h("span.lab", label), F.filter(f => f.t === k).map(f => { n++; return h("button.item", { "data-id": f.id, onclick() { nav(f.id); } }, h("span.n", String(F.indexOf(f) + 1).padStart(2, "0")), h("span", f.name), h("i.seen")); })));
+  });
+  rail.append(h("div.progress", { id: "prog" }));
+}
+function paintRail(cur) {
+  rail.querySelectorAll("button.item").forEach(b => {
+    if (b.dataset.id === cur) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    b.classList.toggle("done", seen.has(b.dataset.id));
+  });
+  const p = document.getElementById("prog"); if (p) p.textContent = `${seen.size} of ${F.length} explored`;
+}
+function renderHome() {
+  main.append(h("div.home-hero",
+    h("span.lab", "Agent Substrate v1.0.0-rc.1"),
+    h("h2", "Fourteen changes, and what a customer notices from each"),
+    rich("p", "Each page runs the same input through the old behavior (channel A) and rc.1 (channel B), so you can break things and watch the difference. Under every bench is the product read: who feels it, what you have to do, what you can safely say, and the fine print.")),
+    h("div.how",
+      h("div", h("h3", "If you have five minutes"), rich("p", "Run **Over-limit isolation**, **Micro-VM memory** and **Resume after node loss**. They hold the biggest customer story, the breaking change and the biggest remaining risk.")),
+      h("div", h("h3", "If you're writing the launch"), rich("p", "Open the **Launch brief**. It lists every change with its owner and risk, and copies as Markdown. Check each fine-print list before you promise anything.")),
+      h("div", h("h3", "What this isn't"), rich("p", "It doesn't touch a cluster. Rules and constants come from source at the tag, and each page says what's modeled. It's a release candidate, with no compatibility guarantee until 1.0."))),
+    ...TRACKS.map(([k, label]) => h("section.home-track", h("h3", { style: "font-size:1.05rem" }, label), h("div.cards", F.filter(f => f.t === k).map(f => h("button.card", { onclick() { nav(f.id); } }, h("b", f.name), h("span", f.so), f.risk === "Breaking" ? h("span.tag.break", { style: "justify-self:start" }, "Breaking") : null))))),
+    foot());
+}
+const foot = () => rich("div.foot", "Simulation only. Derived from source and docs at tag `v1.0.0-rc.1` (commit `f86fde9d`), not from a running cluster. Timings are compressed. Before-state comparisons are against `v0.6.0`.");
+function renderFeature(f) {
+  const i = F.indexOf(f), tr = TRACKS.find(t => t[0] === f.t)[1];
+  const bench = h("section.bench", { "aria-label": "Simulation" });
+  main.append(
+    h("div.head", h("div.kick", h("span.lab", `${String(i + 1).padStart(2, "0")} of ${F.length} · ${tr} · ${f.name}`), f.risk === "Breaking" ? h("span.tag.break", "Breaking change") : f.risk !== "None" ? h("span.tag.opt", f.risk) : null),
+      h("h2", f.head), h("p.q", h("b", "The product question: "), f.q)),
+    bench,
+    h("section.lens", { "aria-label": "Product lens" },
+      h("div", h("span.lab", "Who feels it"), rich("p", f.who), rich("p", f.feel)),
+      h("div", h("span.lab", "What you do"), rich("p", f.act), h("div", { style: "display:flex;gap:4px;flex-wrap:wrap" }, f.roles.map(r => h("span.tag", r)))),
+      h("div", h("span.lab", "What you can say"), h("p.say", f.say))),
+    h("section.fine",
+      h("div", h("span.lab", "Fine print"), h("ul", f.fine.map(x => { const li = h("li"); li.innerHTML = richHTML(x); return li; }))),
+      h("div.src", h("span.lab", "Source and model"), rich("p", f.model), h("div.prs", f.prs.map(p => h("a", { href: REPO + p, target: "_blank", rel: "noopener" }, "#" + p))))),
+    h("div.pager",
+      i > 0 ? h("button.btn", { onclick() { nav(F[i - 1].id); } }, "← " + F[i - 1].name) : h("button.btn", { onclick() { nav(""); } }, "← Start here"),
+      i < F.length - 1 ? h("button.btn.go", { onclick() { nav(F[i + 1].id); } }, F[i + 1].name + " →") : h("button.btn.go", { onclick() { nav("brief"); } }, "Launch brief →")));
+  f.mount(bench, ctxNow);
+}
+function renderBrief() {
+  const ROLES = ["All", "Platform", "Security", "App teams", "Product"];
+  let role = "All";
+  const body = h("tbody"), copied = h("span.note", { "aria-live": "polite" });
+  const plain = s => s.replace(/\*\*/g, "");
+  function paint() {
+    body.textContent = "";
+    F.filter(f => role === "All" || f.roles.includes(role)).forEach(f => {
+      const cls = f.risk === "Breaking" ? ".n" : f.risk === "None" ? ".dim" : ".w";
+      const act = h("td"); act.innerHTML = richHTML(f.act);
+      body.append(h("tr", h("td", h("button", { onclick() { nav(f.id); } }, f.name)), h("td", f.so), act, h("td", f.roles.join(", ")), h("td", h("span" + cls, f.risk))));
+    });
+  }
+  function md() {
+    const rows = F.filter(f => role === "All" || f.roles.includes(role));
+    return `# Agent Substrate v1.0.0-rc.1 launch brief${role === "All" ? "" : ` (${role})`}\n\nDerived from source at tag v1.0.0-rc.1 (f86fde9d), not tested on a cluster.\n\n` +
+      rows.map(f => `## ${f.name}\n- **So what:** ${f.so}\n- **Who feels it:** ${f.who}\n- **What you do:** ${plain(f.act)}\n- **What you can say:** ${f.say}\n- **Risk:** ${f.risk}\n- **Fine print:**\n${f.fine.map(x => "  - " + plain(x)).join("\n")}\n- **PRs:** ${f.prs.map(p => "#" + p).join(", ")}`).join("\n\n") + "\n";
+  }
+  async function copy() {
+    try { await navigator.clipboard.writeText(md()); copied.textContent = "Copied as Markdown."; }
+    catch { const ta = h("textarea", { style: "position:fixed;opacity:0" }); ta.value = md(); document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); copied.textContent = ok ? "Copied as Markdown." : "Copy failed in this browser."; }
+  }
+  main.append(
+    h("div.head", h("span.lab", "Launch brief"), h("h2", "Who does what before you ship this"),
+      rich("p.q", "One breaking change. Most of the rest need a claim worded carefully, or a node-level prerequisite checked.")),
+    h("section.bench", h("div.ctl", seg("Show work for", ROLES.map(r => [r, r]), role, v => { role = v; paint(); }), h("button.btn.go", { onclick: copy }, "Copy as Markdown"), copied),
+      h("div.tbl.brief", h("table", h("thead", h("tr", h("th", "Change"), h("th", "So what"), h("th", "What you do"), h("th", "Owners"), h("th", "Watch out"))), body))),
+    h("section.how",
+      h("div", h("h3", "Check before upgrading"), rich("p", "Re-size pools for the 64 MiB reserve and micro-VM overhead. Confirm PSI and core scheduling on node kernels. Reboot or replace any node that's already broken, once.")),
+      h("div", h("h3", "Don't overclaim"), rich("p", "Not “no root”: `atelet` stays root. Not “all streams denied”: reflection stays open. Not “all clusters”: the ECDSA CA is for new pools. Not “no data loss”: async suspend still has a window.")),
+      h("div", h("h3", "Worth testing yourself"), rich("p", "Two credential providers together, which the PR didn't run end to end. Suspend latency on tight pools. Core tagging's cost on your own workload."))),
+    foot());
+  paint();
+}
+function nav(id) { if (location.hash.slice(1) === id) route(); else location.hash = id; }
+function route() {
+  const id = location.hash.slice(1);
+  if (ctxNow) ctxNow.dispose();
+  ctxNow = makeCtx();
+  main.textContent = "";
+  const f = byId[id];
+  if (f) { seen.add(id); renderFeature(f); }
+  else if (id === "brief") renderBrief();
+  else renderHome();
+  paintRail(id);
+  window.scrollTo(0, 0);
+  document.title = (f ? f.name : id === "brief" ? "Launch brief" : "Start") + " · Substrate rc.1 product bench";
+}
+
+/* ---------- chrome ---------- */
+const speedBox = document.getElementById("speed");
+[[.5, "½×"], [1, "1×"], [2, "2×"]].forEach(([v, t]) => speedBox.append(h("button", { type: "button", "aria-pressed": v === SPEED, onclick() { SPEED = v; [...speedBox.children].forEach((b, i) => b.setAttribute("aria-pressed", [.5, 1, 2][i] === v)); } }, t)));
+document.getElementById("brand").addEventListener("click", () => nav(""));
+document.getElementById("brief-btn").addEventListener("click", () => nav("brief"));
+document.getElementById("theme").addEventListener("click", () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+});
+addEventListener("hashchange", route);
+addEventListener("keydown", e => {
+  if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+  const ids = ["", ...F.map(f => f.id), "brief"], i = ids.indexOf(location.hash.slice(1));
+  if (e.key === "ArrowRight" && i < ids.length - 1) nav(ids[i + 1]);
+  if (e.key === "ArrowLeft" && i > 0) nav(ids[i - 1]);
+});
+buildRail();
+route();
+})();
+</script>

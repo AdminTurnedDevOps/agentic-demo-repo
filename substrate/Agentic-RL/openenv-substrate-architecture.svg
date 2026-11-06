@@ -1,0 +1,320 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1090" width="1920" height="1090" font-family="Excalifont, Virgil, 'Chalkboard SE', 'Comic Sans MS', 'Segoe Print', cursive">
+<title>OpenEnv on Agent Substrate: the agentic RL loop</title>
+<defs>
+<marker id="ah-2f9e44" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#2f9e44" stroke-width="1.6" stroke-linecap="round"/></marker>
+<marker id="ah-6741d9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#6741d9" stroke-width="1.6" stroke-linecap="round"/></marker>
+<marker id="ah-1971c2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#1971c2" stroke-width="1.6" stroke-linecap="round"/></marker>
+<marker id="ah-e03131" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#e03131" stroke-width="1.6" stroke-linecap="round"/></marker>
+<marker id="ah-1e1e1e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#1e1e1e" stroke-width="1.6" stroke-linecap="round"/></marker>
+<marker id="ah-868e96" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#868e96" stroke-width="1.6" stroke-linecap="round"/></marker>
+</defs>
+<rect x="0" y="0" width="1920" height="1090" fill="#ffffff"/>
+<text x="40.0" y="60.0" font-size="34" fill="#1e1e1e" text-anchor="start">
+<tspan x="40.0" dy="0.0">OpenEnv on Agent Substrate: the agentic RL loop</tspan>
+</text>
+<text x="40.0" y="91.0" font-size="17" fill="#495057" text-anchor="start">
+<tspan x="40.0" dy="0.0">White-box path: TRL owns the agent loop and the weights, OpenEnv defines the environment and its reward, Agent Substrate runs every copy of it in a sandbox with no way out.</tspan>
+</text>
+<rect x="30" y="125" width="500" height="600" rx="10" fill="#fff9db"/>
+<path d="M29.8,125.2 Q280.9,125.7 531.4,124.9 Q529.7,424.6 530.0,725.3 Q278.5,725.9 29.0,725.0 Q29.9,424.0 29.8,125.2" fill="none" stroke="#f08c00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<path d="M31.5,126.5 Q280.3,125.3 530.5,125.4 Q528.6,424.3 528.9,723.4 Q279.4,724.3 30.1,723.6 Q30.9,425.4 31.5,126.5" fill="none" stroke="#f08c00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<text x="280.0" y="155.0" font-size="19" fill="#e67700" text-anchor="middle">
+<tspan x="280.0" dy="0.0">GPU node pool (nvidia-l4)</tspan>
+</text>
+<rect x="55" y="175" width="450" height="530" rx="10" fill="#ffec99"/>
+<path d="M55.0,175.5 Q279.5,174.3 504.9,174.3 Q505.2,439.4 506.6,706.6 Q282.0,705.9 56.1,705.7 Q56.4,440.3 55.0,175.5" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M56.5,176.1 Q278.9,175.4 503.4,174.1 Q505.5,438.9 506.3,704.9 Q280.4,704.4 56.5,704.7 Q57.6,441.0 56.5,176.1" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="280.0" y="206.0" font-size="21" fill="#1e1e1e" text-anchor="middle">
+<tspan x="280.0" dy="0.0">Trainer Job: TRL GRPOTrainer</tspan>
+</text>
+<rect x="75" y="225" width="410" height="95" rx="10" fill="#ffffff"/>
+<path d="M73.8,224.2 Q278.0,224.4 483.7,223.6 Q484.0,271.6 486.0,319.0 Q279.6,319.2 75.2,319.8 Q73.8,271.5 73.8,224.2" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M76.5,226.0 Q279.5,227.3 484.4,226.2 Q483.5,272.4 484.1,319.7 Q280.8,319.6 76.1,320.5 Q75.8,272.2 76.5,226.0" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="280.0" y="258.2" font-size="20" fill="#1e1e1e" text-anchor="middle">
+<tspan x="280.0" dy="0.0">vLLM, colocated in-process</tspan>
+</text>
+<text x="280.0" y="284.2" font-size="15" fill="#343a40" text-anchor="middle">
+<tspan x="280.0" dy="0.0">Qwen3-1.7B + LoRA</tspan>
+<tspan x="280.0" dy="18.8">writes the next turn (a tool call)</tspan>
+</text>
+<rect x="75" y="350" width="410" height="130" rx="10" fill="#ffffff"/>
+<path d="M73.7,350.3 Q279.1,351.2 484.2,350.3 Q483.6,414.3 484.6,479.9 Q281.5,480.7 76.5,479.9 Q74.5,414.4 73.7,350.3" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M75.8,351.4 Q278.8,352.5 484.0,351.4 Q484.5,416.4 486.2,480.3 Q279.9,480.3 74.7,478.7 Q75.5,414.6 75.8,351.4" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="280.0" y="391.4" font-size="20" fill="#1e1e1e" text-anchor="middle">
+<tspan x="280.0" dy="0.0">environment_factory</tspan>
+</text>
+<text x="280.0" y="417.4" font-size="15" fill="#343a40" text-anchor="middle">
+<tspan x="280.0" dy="0.0">8 × SandboxedPython (OpenEnv GenericEnvClient)</tspan>
+<tspan x="280.0" dy="18.8">one per GRPO rollout slot</tspan>
+<tspan x="280.0" dy="18.8">tools: run_python(code), submit_solution(code)</tspan>
+</text>
+<rect x="75" y="510" width="410" height="85" rx="10" fill="#ffffff"/>
+<path d="M74.0,510.7 Q279.8,509.2 483.6,509.1 Q483.2,552.1 485.2,596.1 Q280.1,594.2 75.4,594.3 Q73.9,552.2 74.0,510.7" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M75.2,508.8 Q279.0,508.9 484.6,511.3 Q484.4,554.4 486.5,595.5 Q281.6,596.5 75.6,595.3 Q74.3,552.4 75.2,508.8" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="280.0" y="538.2" font-size="20" fill="#1e1e1e" text-anchor="middle">
+<tspan x="280.0" dy="0.0">get_reward()</tspan>
+</text>
+<text x="280.0" y="564.2" font-size="15" fill="#343a40" text-anchor="middle">
+<tspan x="280.0" dy="0.0">reset → solution + hidden tests + random nonce</tspan>
+<tspan x="280.0" dy="18.8">reward = 1 only if all pass</tspan>
+</text>
+<rect x="75" y="620" width="410" height="65" rx="10" fill="#ffffff"/>
+<path d="M74.9,620.7 Q280.3,621.7 484.4,621.6 Q484.7,654.4 483.6,685.1 Q279.3,686.2 75.8,686.3 Q76.3,654.4 74.9,620.7" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M74.7,620.9 Q279.4,620.9 486.2,620.2 Q487.0,653.3 485.4,684.6 Q280.9,684.7 75.3,685.3 Q75.6,653.3 74.7,620.9" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="280.0" y="660.0" font-size="20" fill="#1e1e1e" text-anchor="middle">
+<tspan x="280.0" dy="0.0">GRPO step → new LoRA weights</tspan>
+</text>
+<path d="M279.8,321.1 Q278.1,336.2 278.7,350.8" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-linecap="round" marker-end="url(#ah-1e1e1e)" marker-start="url(#ah-1e1e1e)"/>
+<path d="M279.9,319.1 Q280.6,335.6 280.6,350.0" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-linecap="round"/>
+<text x="290.0" y="335.0" font-size="13" fill="#868e96" text-anchor="start">
+<tspan x="290.0" dy="0.0">tool call / result</tspan>
+</text>
+<path d="M279.2,478.4 Q278.6,493.7 279.4,510.6" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-linecap="round" marker-end="url(#ah-1e1e1e)"/>
+<path d="M281.3,480.5 Q280.1,496.3 279.8,511.3" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-linecap="round"/>
+<path d="M279.0,594.8 Q280.9,607.8 281.0,621.3" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-linecap="round" marker-end="url(#ah-1e1e1e)"/>
+<path d="M280.3,594.4 Q280.4,608.0 278.8,620.0" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-linecap="round"/>
+<path d="M75.7,653.4 Q60.3,652.2 44.3,650.9 Q44.1,461.9 44.8,271.3 Q60.6,271.4 74.1,271.7" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="8 7" marker-end="url(#ah-868e96)"/>
+<path d="M73.6,650.5 Q58.8,649.6 46.2,650.5 Q45.8,460.2 45.7,272.2 Q60.8,271.9 74.4,272.9" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="8 7"/>
+<rect x="690" y="125" width="420" height="600" rx="10" fill="#e7f5ff"/>
+<path d="M688.9,123.6 Q900.1,123.5 1110.4,124.8 Q1110.4,424.4 1110.4,725.5 Q899.5,725.9 691.0,726.5 Q690.4,424.2 688.9,123.6" fill="none" stroke="#1971c2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<path d="M689.3,124.5 Q900.9,123.8 1110.6,125.1 Q1111.5,426.0 1110.4,725.8 Q899.1,725.8 689.7,725.9 Q689.8,426.2 689.3,124.5" fill="none" stroke="#1971c2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<text x="900.0" y="155.0" font-size="19" fill="#1971c2" text-anchor="middle">
+<tspan x="900.0" dy="0.0">ate-system (Substrate)</tspan>
+</text>
+<rect x="715" y="180" width="370" height="150" rx="10" fill="#a5d8ff"/>
+<path d="M714.6,180.2 Q900.9,181.3 1086.2,180.9 Q1086.7,255.9 1086.4,329.9 Q900.3,330.4 715.5,329.1 Q716.2,255.8 714.6,180.2" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M715.1,180.9 Q899.9,181.8 1084.4,181.3 Q1085.3,254.3 1086.1,329.5 Q900.6,328.6 713.7,329.8 Q715.1,254.6 715.1,180.9" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="900.0" y="222.0" font-size="20" fill="#1e1e1e" text-anchor="middle">
+<tspan x="900.0" dy="0.0">atenet-router</tspan>
+</text>
+<text x="900.0" y="248.0" font-size="15" fill="#343a40" text-anchor="middle">
+<tspan x="900.0" dy="0.0">agentgateway dataplane, plaintext :80</tspan>
+<tspan x="900.0" dy="18.8">routes every request on the header</tspan>
+<tspan x="900.0" dy="18.8">ate-target-actor: rl-lab/coder-N</tspan>
+<tspan x="900.0" dy="18.8">resumes a suspended actor on demand</tspan>
+</text>
+<rect x="715" y="365" width="370" height="125" rx="10" fill="#a5d8ff"/>
+<path d="M714.5,365.9 Q900.2,364.9 1083.8,363.9 Q1085.5,426.3 1085.1,490.7 Q899.9,490.7 716.1,490.6 Q714.8,428.8 714.5,365.9" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M715.4,365.1 Q900.1,366.0 1086.1,365.2 Q1086.4,427.5 1084.4,489.6 Q900.4,489.7 716.1,491.3 Q715.9,428.2 715.4,365.1" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="900.0" y="403.9" font-size="20" fill="#1e1e1e" text-anchor="middle">
+<tspan x="900.0" dy="0.0">ate-api-server</tspan>
+</text>
+<text x="900.0" y="429.9" font-size="15" fill="#343a40" text-anchor="middle">
+<tspan x="900.0" dy="0.0">actor lifecycle: create / resume / revert</tspan>
+<tspan x="900.0" dy="18.8">ActorTemplate → golden snapshot</tspan>
+<tspan x="900.0" dy="18.8">no GPUs for actors (by design today)</tspan>
+</text>
+<rect x="715" y="525" width="370" height="175" rx="10" fill="#ffc9c9"/>
+<path d="M715.3,523.5 Q901.4,523.2 1086.5,525.1 Q1085.7,612.8 1084.7,701.0 Q901.0,701.5 715.2,700.0 Q714.7,611.7 715.3,523.5" fill="none" stroke="#e03131" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M713.8,524.8 Q900.9,524.6 1086.0,526.3 Q1086.1,611.7 1084.9,699.4 Q898.7,699.2 714.0,700.4 Q714.4,612.2 713.8,524.8" fill="none" stroke="#e03131" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="900.0" y="570.1" font-size="20" fill="#1e1e1e" text-anchor="middle">
+<tspan x="900.0" dy="0.0">atenet-egress (policy point)</tspan>
+</text>
+<text x="900.0" y="596.1" font-size="15" fill="#343a40" text-anchor="middle">
+<tspan x="900.0" dy="0.0">the actors have NO EgressPolicy:</tspan>
+<tspan x="900.0" dy="18.8">DNS relay answers NXDOMAIN</tspan>
+<tspan x="900.0" dy="18.8">no egress tunnel is built</tspan>
+<tspan x="900.0" dy="18.8">link-local 169.254.0.0/16 dropped</tspan>
+<tspan x="900.0" dy="18.8">before it reaches any proxy</tspan>
+</text>
+<rect x="1270" y="125" width="620" height="600" rx="10" fill="#ebfbee"/>
+<path d="M1269.5,125.4 Q1579.2,125.4 1888.7,125.7 Q1888.5,425.2 1888.8,725.0 Q1579.1,723.7 1269.2,724.0 Q1268.7,425.0 1269.5,125.4" fill="none" stroke="#2f9e44" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<path d="M1270.4,125.1 Q1581.7,124.8 1891.1,125.4 Q1890.7,425.8 1891.1,724.1 Q1580.3,726.3 1270.8,726.0 Q1271.5,424.7 1270.4,125.1" fill="none" stroke="#2f9e44" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<text x="1580.0" y="155.0" font-size="19" fill="#2f9e44" text-anchor="middle">
+<tspan x="1580.0" dy="0.0">WorkerPool rl-lab: one gVisor sandbox per actor</tspan>
+</text>
+<rect x="1295" y="180" width="275" height="88" rx="10" fill="#b2f2bb"/>
+<path d="M1294.2,180.7 Q1431.5,180.2 1569.2,178.7 Q1569.0,222.5 1571.1,267.7 Q1433.9,268.3 1295.9,266.8 Q1296.2,222.8 1294.2,180.7" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1295.0,180.8 Q1432.6,180.7 1570.0,180.6 Q1569.7,222.8 1569.0,266.6 Q1430.6,265.9 1293.7,266.5 Q1295.2,224.8 1295.0,180.8" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1432.5" y="210.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1432.5" dy="0.0">coder-0</tspan>
+</text>
+<text x="1432.5" y="235.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1432.5" dy="0.0">OpenEnv coding-env server</tspan>
+<tspan x="1432.5" dy="17.5">reset / step over /ws</tspan>
+</text>
+<rect x="1590" y="180" width="275" height="88" rx="10" fill="#b2f2bb"/>
+<path d="M1591.4,178.7 Q1727.5,179.9 1863.6,181.4 Q1864.5,224.0 1864.9,268.8 Q1727.6,269.2 1589.4,267.9 Q1589.6,223.2 1591.4,178.7" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1590.8,179.7 Q1727.9,180.2 1864.0,178.9 Q1864.8,222.5 1865.0,266.4 Q1728.4,267.7 1591.3,269.0 Q1592.2,225.1 1590.8,179.7" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1727.5" y="210.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1727.5" dy="0.0">coder-1</tspan>
+</text>
+<text x="1727.5" y="235.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1727.5" dy="0.0">OpenEnv coding-env server</tspan>
+<tspan x="1727.5" dy="17.5">reset / step over /ws</tspan>
+</text>
+<rect x="1295" y="285" width="275" height="88" rx="10" fill="#b2f2bb"/>
+<path d="M1294.2,286.3 Q1433.0,286.7 1570.8,285.9 Q1571.5,329.1 1571.0,372.7 Q1434.2,372.4 1296.3,374.2 Q1294.9,330.2 1294.2,286.3" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1293.4,284.5 Q1432.3,285.1 1570.4,285.4 Q1569.9,329.6 1569.1,374.4 Q1433.5,373.8 1295.5,372.5 Q1295.0,329.1 1293.4,284.5" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1432.5" y="315.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1432.5" dy="0.0">coder-2</tspan>
+</text>
+<text x="1432.5" y="340.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1432.5" dy="0.0">OpenEnv coding-env server</tspan>
+<tspan x="1432.5" dy="17.5">reset / step over /ws</tspan>
+</text>
+<rect x="1590" y="285" width="275" height="88" rx="10" fill="#b2f2bb"/>
+<path d="M1591.5,283.5 Q1728.2,283.7 1865.4,285.8 Q1864.2,330.2 1864.2,372.7 Q1726.5,372.4 1588.6,372.0 Q1591.2,327.9 1591.5,283.5" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1591.6,285.4 Q1728.0,284.5 1866.0,283.6 Q1864.9,328.7 1865.3,373.8 Q1727.2,373.0 1588.5,374.4 Q1591.1,329.7 1591.6,285.4" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1727.5" y="315.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1727.5" dy="0.0">coder-3</tspan>
+</text>
+<text x="1727.5" y="340.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1727.5" dy="0.0">OpenEnv coding-env server</tspan>
+<tspan x="1727.5" dy="17.5">reset / step over /ws</tspan>
+</text>
+<rect x="1295" y="390" width="275" height="88" rx="10" fill="#b2f2bb"/>
+<path d="M1295.1,390.3 Q1431.8,388.6 1569.6,389.3 Q1569.4,432.7 1570.5,478.2 Q1431.6,479.1 1294.3,478.7 Q1294.4,435.5 1295.1,390.3" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1295.8,388.6 Q1434.8,389.4 1571.6,391.4 Q1570.2,436.4 1568.6,479.3 Q1432.2,478.5 1294.8,477.9 Q1296.4,434.0 1295.8,388.6" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1432.5" y="420.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1432.5" dy="0.0">coder-4</tspan>
+</text>
+<text x="1432.5" y="445.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1432.5" dy="0.0">OpenEnv coding-env server</tspan>
+<tspan x="1432.5" dy="17.5">reset / step over /ws</tspan>
+</text>
+<rect x="1590" y="390" width="275" height="88" rx="10" fill="#b2f2bb"/>
+<path d="M1590.3,388.8 Q1727.7,389.7 1865.4,389.9 Q1864.6,432.6 1864.1,476.6 Q1727.3,476.5 1590.1,476.8 Q1590.9,432.9 1590.3,388.8" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1591.6,391.4 Q1728.3,389.8 1865.7,389.2 Q1865.2,434.4 1863.8,479.3 Q1727.6,479.1 1590.9,478.4 Q1591.9,434.2 1591.6,391.4" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1727.5" y="420.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1727.5" dy="0.0">coder-5</tspan>
+</text>
+<text x="1727.5" y="445.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1727.5" dy="0.0">OpenEnv coding-env server</tspan>
+<tspan x="1727.5" dy="17.5">reset / step over /ws</tspan>
+</text>
+<rect x="1295" y="495" width="275" height="88" rx="10" fill="#b2f2bb"/>
+<path d="M1294.2,496.5 Q1433.1,495.4 1571.3,496.2 Q1570.0,537.9 1568.5,581.6 Q1430.4,582.6 1294.3,582.8 Q1294.4,540.0 1294.2,496.5" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1294.6,494.9 Q1432.6,495.0 1569.1,494.5 Q1570.6,538.6 1570.8,584.1 Q1432.0,582.4 1293.6,581.8 Q1294.9,538.0 1294.6,494.9" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1432.5" y="525.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1432.5" dy="0.0">coder-6</tspan>
+</text>
+<text x="1432.5" y="550.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1432.5" dy="0.0">OpenEnv coding-env server</tspan>
+<tspan x="1432.5" dy="17.5">reset / step over /ws</tspan>
+</text>
+<rect x="1590" y="495" width="275" height="88" rx="10" fill="#b2f2bb"/>
+<path d="M1590.5,496.6 Q1726.5,496.8 1864.4,495.2 Q1864.1,538.8 1865.8,584.3 Q1727.9,583.4 1589.8,582.6 Q1590.6,539.1 1590.5,496.6" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1590.9,493.6 Q1727.0,493.7 1864.1,495.5 Q1863.5,539.5 1863.7,582.4 Q1726.9,582.1 1590.7,583.6 Q1591.3,538.8 1590.9,493.6" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1727.5" y="525.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1727.5" dy="0.0">coder-7</tspan>
+</text>
+<text x="1727.5" y="550.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1727.5" dy="0.0">OpenEnv coding-env server</tspan>
+<tspan x="1727.5" dy="17.5">reset / step over /ws</tspan>
+</text>
+<rect x="1295" y="610" width="570" height="90" rx="10" fill="#ffc9c9"/>
+<path d="M1296.3,611.4 Q1582.4,611.6 1866.3,609.8 Q1865.5,654.3 1866.0,699.4 Q1579.9,699.2 1294.4,699.7 Q1295.1,655.3 1296.3,611.4" fill="none" stroke="#e03131" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1294.0,610.2 Q1580.9,609.6 1866.0,610.1 Q1864.9,655.2 1866.1,700.2 Q1580.1,700.7 1294.0,700.8 Q1295.1,655.9 1294.0,610.2" fill="none" stroke="#e03131" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1580.0" y="641.6" font-size="19" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1580.0" dy="0.0">redteam probe actor</tspan>
+</text>
+<text x="1580.0" y="666.4" font-size="14" fill="#343a40" text-anchor="middle">
+<tspan x="1580.0" dy="0.0">curl → metadata server, internet, Kubernetes API, vLLM, 1.1.1.1</tspan>
+<tspan x="1580.0" dy="17.5">every attempt fails: proof the sandbox has no way out</tspan>
+</text>
+<path d="M486.0,413.6 Q599.6,333.8 715.1,255.9" fill="none" stroke="#1971c2" stroke-width="1.8" stroke-linecap="round" marker-end="url(#ah-1971c2)" marker-start="url(#ah-1971c2)"/>
+<path d="M485.8,416.3 Q598.9,336.4 713.7,255.4" fill="none" stroke="#1971c2" stroke-width="1.8" stroke-linecap="round"/>
+<text x="610.0" y="189.0" font-size="14" fill="#1971c2" text-anchor="middle">
+<tspan x="610.0" dy="0.0">① reset() /</tspan>
+<tspan x="610.0" dy="17.5">step(code)</tspan>
+<tspan x="610.0" dy="17.5">WebSocket /ws +</tspan>
+<tspan x="610.0" dy="17.5">ate-target-actor</tspan>
+</text>
+<text x="610.0" y="444.0" font-size="14" fill="#1971c2" text-anchor="middle">
+<tspan x="610.0" dy="0.0">③ observation:</tspan>
+<tspan x="610.0" dy="17.5">stdout, exit_code</tspan>
+</text>
+<path d="M1085.5,229.2 Q1189.8,227.7 1294.1,224.8" fill="none" stroke="#1971c2" stroke-width="1.8" stroke-linecap="round" marker-end="url(#ah-1971c2)" marker-start="url(#ah-1971c2)"/>
+<path d="M1084.7,229.5 Q1190.6,227.1 1296.5,224.6" fill="none" stroke="#1971c2" stroke-width="1.8" stroke-linecap="round"/>
+<text x="1190.0" y="259.0" font-size="14" fill="#1971c2" text-anchor="middle">
+<tspan x="1190.0" dy="0.0">② mTLS CONNECT</tspan>
+<tspan x="1190.0" dy="17.5">to the worker's</tspan>
+<tspan x="1190.0" dy="17.5">atunnel</tspan>
+</text>
+<path d="M1085.7,430.7 Q1191.8,435.6 1296.3,439.7" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="8 7" marker-end="url(#ah-868e96)"/>
+<path d="M1086.1,431.0 Q1192.2,436.4 1296.1,441.2" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="8 7"/>
+<text x="1190.0" y="465.0" font-size="13" fill="#868e96" text-anchor="middle">
+<tspan x="1190.0" dy="0.0">restore from</tspan>
+<tspan x="1190.0" dy="16.2">golden snapshot,</tspan>
+<tspan x="1190.0" dy="16.2">revert between runs</tspan>
+</text>
+<rect x="1270" y="760" width="620" height="110" rx="10" fill="#f1f3f5"/>
+<path d="M1270.1,760.7 Q1580.2,759.4 1891.0,759.7 Q1889.6,814.1 1889.7,868.9 Q1579.8,871.3 1270.8,871.6 Q1269.4,815.7 1270.1,760.7" fill="none" stroke="#868e96" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M1268.8,760.5 Q1578.7,758.8 1890.9,759.0 Q1889.0,813.7 1888.6,869.9 Q1578.8,871.1 1270.3,871.3 Q1269.7,815.2 1268.8,760.5" fill="none" stroke="#868e96" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1580.0" y="795.0" font-size="20" fill="#1e1e1e" text-anchor="middle">
+<tspan x="1580.0" dy="0.0">Golden snapshot (object storage)</tspan>
+</text>
+<text x="1580.0" y="823.0" font-size="15" fill="#343a40" text-anchor="middle">
+<tspan x="1580.0" dy="0.0">ActorTemplate coding-env → golden tag. Every actor restores from it,</tspan>
+<tspan x="1580.0" dy="18.8">so every run starts from the same clean memory + filesystem.</tspan>
+</text>
+<path d="M1579.0,759.3 Q1578.5,742.7 1579.0,725.8" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="8 7" marker-end="url(#ah-868e96)"/>
+<path d="M1581.0,759.9 Q1581.1,742.7 1579.2,726.2" fill="none" stroke="#868e96" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="8 7"/>
+<rect x="690" y="760" width="420" height="170" rx="10" fill="#fff5f5"/>
+<path d="M690.2,761.5 Q900.1,760.3 1109.9,759.1 Q1108.7,846.4 1108.6,931.4 Q900.1,929.9 691.0,929.6 Q689.4,845.5 690.2,761.5" fill="none" stroke="#e03131" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<path d="M689.6,760.9 Q901.0,760.7 1110.7,760.3 Q1110.1,845.8 1108.9,928.9 Q898.6,929.1 689.4,929.2 Q688.7,845.7 689.6,760.9" fill="none" stroke="#e03131" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<text x="900.0" y="791.0" font-size="19" fill="#e03131" text-anchor="middle">
+<tspan x="900.0" dy="0.0">Everything outside the sandbox</tspan>
+</text>
+<text x="710.0" y="824.0" font-size="16" fill="#c92a2a" text-anchor="start">
+<tspan x="710.0" dy="0.0">✗  internet: huggingface.co, 1.1.1.1</tspan>
+<tspan x="710.0" dy="20.0">✗  GCE metadata 169.254.169.254</tspan>
+<tspan x="710.0" dy="20.0">✗  Kubernetes API</tspan>
+<tspan x="710.0" dy="20.0">✗  other Services (vLLM, agentgateway)</tspan>
+</text>
+<path d="M1293.4,681.0 Q1201.3,765.5 1111.1,851.0" fill="none" stroke="#e03131" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="8 7" marker-end="url(#ah-e03131)"/>
+<path d="M1295.7,678.7 Q1203.9,764.5 1109.9,849.9" fill="none" stroke="#e03131" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="8 7"/>
+<text x="1150.0" y="751.0" font-size="16" fill="#e03131" text-anchor="middle">
+<tspan x="1150.0" dy="0.0">blocked</tspan>
+</text>
+<rect x="30" y="760" width="500" height="170" rx="10" fill="#f3f0ff"/>
+<path d="M31.1,759.4 Q281.1,759.6 530.9,759.7 Q530.3,845.0 531.3,928.7 Q280.7,928.4 31.0,929.1 Q30.1,843.8 31.1,759.4" fill="none" stroke="#6741d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<path d="M29.9,760.7 Q280.5,761.0 529.6,760.6 Q528.0,844.8 528.7,929.7 Q279.8,929.9 29.9,931.5 Q30.0,846.0 29.9,760.7" fill="none" stroke="#6741d9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 8"/>
+<text x="280.0" y="791.0" font-size="19" fill="#6741d9" text-anchor="middle">
+<tspan x="280.0" dy="0.0">After training: base vs trained eval</tspan>
+</text>
+<rect x="45" y="815" width="130" height="90" rx="10" fill="#ffffff"/>
+<path d="M43.4,816.6 Q109.2,814.9 176.0,814.1 Q175.4,859.6 175.4,904.3 Q109.4,904.0 44.6,905.1 Q44.6,860.4 43.4,816.6" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M46.4,815.2 Q111.5,815.3 175.7,814.5 Q175.1,858.8 176.0,903.7 Q110.8,903.9 43.9,903.7 Q44.2,858.8 46.4,815.2" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="110.0" y="855.2" font-size="17" fill="#1e1e1e" text-anchor="middle">
+<tspan x="110.0" dy="0.0">eval Job</tspan>
+</text>
+<text x="110.0" y="878.5" font-size="13" fill="#343a40" text-anchor="middle">
+<tspan x="110.0" dy="0.0">MBPP test split</tspan>
+</text>
+<rect x="200" y="815" width="150" height="90" rx="10" fill="#d0bfff"/>
+<path d="M198.9,813.8 Q274.9,814.5 349.7,813.6 Q350.3,858.8 351.3,904.8 Q275.5,904.0 200.0,905.5 Q199.2,860.1 198.9,813.8" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M201.5,815.9 Q275.1,815.3 350.5,815.3 Q349.5,860.6 348.5,904.5 Q274.8,905.2 199.5,905.5 Q199.7,861.3 201.5,815.9" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="275.0" y="847.1" font-size="17" fill="#1e1e1e" text-anchor="middle">
+<tspan x="275.0" dy="0.0">agentgateway</tspan>
+</text>
+<text x="275.0" y="870.4" font-size="13" fill="#343a40" text-anchor="middle">
+<tspan x="275.0" dy="0.0">rl-llm</tspan>
+<tspan x="275.0" dy="16.2">logs model + tokens</tspan>
+</text>
+<rect x="375" y="815" width="140" height="90" rx="10" fill="#ffffff"/>
+<path d="M376.3,815.2 Q445.9,815.9 514.5,815.0 Q513.5,861.4 513.9,905.7 Q445.5,904.6 376.6,905.1 Q375.4,859.5 376.3,815.2" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M375.2,815.6 Q444.0,817.0 514.5,816.4 Q514.6,860.8 514.6,904.9 Q444.3,905.1 373.8,906.5 Q375.5,862.3 375.2,815.6" fill="none" stroke="#1e1e1e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="445.0" y="847.1" font-size="17" fill="#1e1e1e" text-anchor="middle">
+<tspan x="445.0" dy="0.0">vLLM</tspan>
+</text>
+<text x="445.0" y="870.4" font-size="13" fill="#343a40" text-anchor="middle">
+<tspan x="445.0" dy="0.0">qwen3-1.7b</tspan>
+<tspan x="445.0" dy="16.2">qwen3-1.7b-grpo</tspan>
+</text>
+<path d="M176.0,860.3 Q186.9,861.6 198.8,861.0" fill="none" stroke="#6741d9" stroke-width="1.8" stroke-linecap="round" marker-end="url(#ah-6741d9)"/>
+<path d="M174.2,860.2 Q187.7,858.6 201.1,859.0" fill="none" stroke="#6741d9" stroke-width="1.8" stroke-linecap="round"/>
+<path d="M348.5,859.0 Q362.9,859.7 376.6,861.4" fill="none" stroke="#6741d9" stroke-width="1.8" stroke-linecap="round" marker-end="url(#ah-6741d9)"/>
+<path d="M350.5,860.8 Q363.3,859.4 374.6,860.3" fill="none" stroke="#6741d9" stroke-width="1.8" stroke-linecap="round"/>
+<rect x="30" y="960" width="1860" height="100" rx="10" fill="#ffffff"/>
+<path d="M29.0,959.9 Q959.1,959.4 1888.9,959.6 Q1889.9,1008.2 1890.2,1059.0 Q960.6,1058.2 30.1,1059.2 Q30.7,1009.8 29.0,959.9" fill="none" stroke="#868e96" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M29.9,959.7 Q961.0,961.0 1890.4,960.6 Q1890.4,1010.5 1890.8,1060.8 Q960.5,1062.2 30.0,1061.6 Q30.0,1010.7 29.9,959.7" fill="none" stroke="#868e96" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="50.0" y="991.0" font-size="19" fill="#1e1e1e" text-anchor="start">
+<tspan x="50.0" dy="0.0">One episode</tspan>
+</text>
+<text x="50.0" y="1019.0" font-size="15" fill="#343a40" text-anchor="start">
+<tspan x="50.0" dy="0.0">① reset() gives the episode a fresh interpreter in its actor   →   the model writes code and calls run_python   →   ② ③ step() runs it in gVisor and returns stdout   →</tspan>
+<tspan x="50.0" dy="18.8">submit_solution records the answer   →   get_reward() resets and grades with hidden tests + a nonce   →   GRPO updates the LoRA weights   →   repeat, 8 rollouts at a time</tspan>
+</text>
+</svg>
