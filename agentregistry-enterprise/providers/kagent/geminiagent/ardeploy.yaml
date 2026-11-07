@@ -1,7 +1,7 @@
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:
-  name: k8shelper-kagent
+  name: k8shelper
 spec:
   targetRef:
     kind: Agent
@@ -10,10 +10,12 @@ spec:
   runtimeRef:
     kind: Runtime
     name: kagent
-  deploymentRefs:
-    - name: github-copilot-mcp-kagent
+  runtimeConfig:
+    # Overrides the catalog Agent's image; keep it in sync with K8SHELPER_IMAGE.
+    image: ${K8SHELPER_IMAGE}
+    deployedBy: michael.levan@solo.io
   env:
     MODEL_PROVIDER: gemini
-    MODEL_NAME: gemini-3.5-flash
-    # Example full image for reference (set via K8SHELPER_IMAGE before envsubst on the Agent yaml):
-    # northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-3.5-flash
+    MODEL_NAME: gemini-2.5-flash
+    # Filled in by envsubst at apply time; never commit the real key.
+    GOOGLE_API_KEY: "${GOOGLE_API_KEY}"

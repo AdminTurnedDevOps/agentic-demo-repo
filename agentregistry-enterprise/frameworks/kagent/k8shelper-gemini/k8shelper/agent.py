@@ -127,7 +127,7 @@ def list_available_tools() -> dict:
 
 def create_model():
     """Use a Gemini model."""
-    return os.getenv("MODEL_NAME", "gemini-3.5-flash")
+    return os.getenv("MODEL_NAME", "gemini-2.5-flash")
 
 
 mcp_tools = get_mcp_tools()

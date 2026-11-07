@@ -1,15 +1,5 @@
 # Agentic RL on Agent Substrate with OpenEnv
 
-> This lab was written and run against kagent's Substrate fork `v0.7.0-alpha1`. In upstream v1.0.0, the
-> agentgateway dataplane still adds the plaintext `http: 80` port to
-> `atenet-router` that this lab routes through. `ate-setup` requires
-> `--credential-provider` (for example `'{"name":"k8s.io"}'`). v1.0.0 also runs containers as
-> the image's `USER` and in its `WORKDIR` (they used to run as root in `/`), and
-> mounts tmpfs on `/tmp` and `/dev/shm`.
->
-> **TODO (v1.0.0):** re-run Steps 3–5 to confirm the coding-env and probe images
-> still start under their own `USER`.
-
 Tldr; agentic RL lets a model act in an environment many times, scores each
 attempt, and updates the weights toward what scored well. The model's actions
 are untrusted code, so the environment has to be a real sandbox. In this lab,

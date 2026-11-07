@@ -390,7 +390,7 @@ curl -s http://localhost:8080/v1/chat/completions \
   -d '{"model":"any","messages":[{"role":"user","content":"hi"}]}' | jq -r .model
 ```
 
-## From Keyword CEL To True Semantic Routing
+## From Keyword CEL To Semantic Routing
 
 Three rungs, each moving the decision closer to real semantics:
 

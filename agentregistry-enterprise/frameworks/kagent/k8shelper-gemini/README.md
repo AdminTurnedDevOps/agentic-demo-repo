@@ -4,11 +4,11 @@ Kubernetes helper agent for kagent demos.
 
 ## Model Configuration
 
-The agent reads the Gemini model from `MODEL_NAME` and defaults to `gemini-3.5-flash`:
+The agent reads the Gemini model from `MODEL_NAME` and defaults to `gemini-2.5-flash`:
 
 ```bash
 export MODEL_PROVIDER=gemini
-export MODEL_NAME=gemini-3.5-flash
+export MODEL_NAME=gemini-2.5-flash
 export GOOGLE_API_KEY=<your-google-api-key>
 ```
 
@@ -28,11 +28,11 @@ From the repo root:
 cd k8shelper-gemini
 
 # Build the linux/amd64 image locally (cross-compile on Apple Silicon etc.)
-docker buildx build --platform linux/amd64 -t k8shelpergemini:gemini-3.5-flash --load .
+docker buildx build --platform linux/amd64 -t k8shelpergemini:gemini-2.5-flash --load .
 
 # Tag + push the specific version (and optionally :latest)
-export K8SHELPER_IMAGE="northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-3.5-flash"
-docker tag k8shelpergemini:gemini-3.5-flash "${K8SHELPER_IMAGE}"
+export K8SHELPER_IMAGE="northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-2.5-flash"
+docker tag k8shelpergemini:gemini-2.5-flash "${K8SHELPER_IMAGE}"
 docker push "${K8SHELPER_IMAGE}"
 
 # Optional latest alias
@@ -43,7 +43,7 @@ docker push northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-i
 The image is now available at:
 
 ```
-northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-3.5-flash
+northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-2.5-flash
 ```
 
 ## Deploy to kagent
@@ -54,7 +54,7 @@ These steps assume you have already registered a `kagent` Runtime (see `provider
 
 ```bash
 # From the root of agentregistry-enterprise
-export K8SHELPER_IMAGE="northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-3.5-flash"
+export K8SHELPER_IMAGE="northamerica-northeast1-docker.pkg.dev/field-engineering-us/mlevan-images/k8shelpergemini:gemini-2.5-flash"
 
 envsubst < providers/kagent/geminiagent/k8shelpergemini.yaml | arctl apply -f -
 arctl get agents
