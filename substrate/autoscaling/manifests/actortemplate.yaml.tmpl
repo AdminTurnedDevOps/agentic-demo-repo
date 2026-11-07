@@ -1,8 +1,8 @@
 # ActorTemplate for the burst lab. This is NOT a Kubernetes object: it is the
-# protojson form of ateapipb.ActorTemplate, created through the ate API.
+# protojson form of substrate.ateapi.v1.ActorTemplate, created through the ate API.
 #
-# Rendered with envsubst (only the two variables below are substituted):
-#   envsubst '${COUNTER_IMAGE} ${BUCKET_NAME}' < manifests/actortemplate.yaml.tmpl \
+# Rendered with envsubst (only the variable below is substituted):
+#   envsubst '${COUNTER_IMAGE}' < manifests/actortemplate.yaml.tmpl \
 #     | kubectl ate create actor-template -f -
 #
 # The atespace ate-lab-burst must exist first (kubectl ate create atespace ate-lab-burst).
@@ -10,6 +10,11 @@
 # The workload is the upstream counter demo (demos/counter in the Substrate
 # repo). Every reply prints the sandbox IP, an in-memory count, and a file
 # count, so you can see which worker served a request and that state survived.
+#
+# There is no sandboxConfig in v1.0.0: the sandbox class comes from the
+# WorkerPool the workerSelector picks (sandboxClasses: gvisor). Snapshots go to
+# ate-api-server's --snapshot-location; a per-template storageLocation needs
+# the PerTemplateSnapshotLocation preview gate, so this lab doesn't set one.
 
 metadata:
   atespace: ate-lab-burst
@@ -32,14 +37,11 @@ snapshotConfig:
   # Process memory + rootfs + volumes: the in-memory count keeps climbing
   # across suspend/resume, which makes worker hand-offs easy to see.
   preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
-  storageLocation: gs://${BUCKET_NAME}/ate-lab-burst/
-sandboxConfig:
-  sandboxClass: SANDBOX_CLASS_GVISOR
-  configName: gvisor-default
 # Sizes the sandbox and is what the scheduler fits against a worker's capacity.
-# More than half of the worker's 1Gi limit (workerpool.yaml.tmpl), so each
-# worker holds exactly one actor.
+# v1.0.0 requires both cpu and memory. Memory is more than half of the worker's
+# 1Gi limit (workerpool.yaml.tmpl), so each worker holds exactly one actor; CPU
+# is half of the worker's 500m, so it never is the limit that bites.
 resources:
   limits:
-  - name: memory
-    quantity: 768Mi
+    cpuMillicores: 250
+    memoryBytes: 805306368 # 768Mi

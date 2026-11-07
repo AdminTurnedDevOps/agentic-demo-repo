@@ -1,7 +1,7 @@
 # Namespace + WorkerPool for the burst lab.
 #
-# Rendered with envsubst (only ${ATEOM_IMAGE} is substituted):
-#   envsubst '${ATEOM_IMAGE}' < manifests/workerpool.yaml.tmpl | kubectl apply -f -
+# Rendered with envsubst (only ${WORKER_IMAGE} is substituted):
+#   envsubst '${WORKER_IMAGE}' < manifests/workerpool.yaml.tmpl | kubectl apply -f -
 #
 # replicas: 2 is the starting size. Once the HPA in hpa.yaml is applied it owns
 # spec.replicas through the WorkerPool /scale subresource. Re-applying this file
@@ -12,7 +12,7 @@ kind: Namespace
 metadata:
   name: ate-lab-burst
 ---
-apiVersion: ate.dev/v1alpha1
+apiVersion: ate.dev/v1
 kind: WorkerPool
 metadata:
   name: burst
@@ -22,12 +22,12 @@ metadata:
     workload: burst
 spec:
   replicas: 2
-  workerImage: ${ATEOM_IMAGE}
+  workerImage: ${WORKER_IMAGE}
   sandboxClasses:
   - name: gvisor
   # One actor per worker. A gVisor worker offers 1000 actor slots
-  # (ateom --max-actors), so slots alone would let all six actors share two
-  # workers and nothing would ever park. The worker also reports its ateom
+  # (ateworker-gvisor --max-actors), so slots alone would let all six actors
+  # share two workers and nothing would ever park. The worker also reports its
   # container limits as capacity, and the scheduler only places an actor where
   # the template's resources.limits still fit. The template asks for 768Mi of
   # this 1Gi, so a second actor never fits. With limits only, requests default

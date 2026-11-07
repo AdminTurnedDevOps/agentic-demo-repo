@@ -1,13 +1,14 @@
 # MicroVM WorkerPool for the egress lab's Claude agent.
 # Apply with: ko apply -f workerpool.yaml
-# Requires: nodes labeled ate.dev/sandboxClass=microvm, and
-# hack/install-microvm-deps.sh --install (cluster-wide SandboxConfig `microvm`).
+# Requires: KVM-capable nodes (workers request the ate.dev/kvm device), and the
+# cluster-wide SandboxConfig `microvm`, which `ate-setup deploy ate-system`
+# installs by default.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: ate-demo-egress-agent
 ---
-apiVersion: ate.dev/v1alpha1
+apiVersion: ate.dev/v1
 kind: WorkerPool
 metadata:
   name: claude-egress
@@ -16,8 +17,19 @@ metadata:
     workload: claude-egress
 spec:
   replicas: 1
-  sandboxClass: microvm
-  workerImage: ko://github.com/agent-substrate/substrate/cmd/ateom-microvm
+  sandboxClasses:
+  - name: microvm
+    configRef:
+      name: microvm
+  workerImage: ko://go.ate.dev/substrate/cmd/ateworker-microvm
   template:
-    nodeSelector:
-      ate.dev/sandboxClass: microvm
+    # Worker capacity comes from the limits. The agent template asks for 1 CPU
+    # and 2Gi, and the microVM's VMM/virtiofsd overhead counts on top of that,
+    # so the memory limit sits above 2Gi.
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2560Mi
+      requests:
+        cpu: 250m
+        memory: 2560Mi

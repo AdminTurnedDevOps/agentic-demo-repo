@@ -1,5 +1,8 @@
 # AgentHarness: Hermes Backend on Agent Substrate
 
+> **Agent Substrate v1.0.0 note (2026-11-06):** This guide targets kagent `1.0.0-alpha14` with Substrate `0.5.0-alpha2`, the Substrate fork that kagent installs and pins, not an upstream Agent Substrate v1.0.0 install. That Substrate predates v1.0.0: it uses `ate.dev/v1alpha1`, `ateom-gvisor` worker images, and the `ateapi.Control` gRPC service with `actor_id`. kagent OSS `v1.0.0-rc3` now pins `kagent-dev/substrate v1.0.0` (`ate.dev/v1`, `substrate.ateapi.v1.Control`), and this guide has not been re-tested against it. Don't run kagent's Substrate and an upstream `ate-setup` install ([setup-gke.md](../install-and-setup/setup-gke.md)) in the same cluster: both own `ate-system` and the `ate.dev` CRDs.
+
+
 An `AgentHarness` is a generic remote execution environment with **no agent runtime baked in**  The backend (`hermes` here) is the sandbox control plane that provisions the environment, and **Agent Substrate is the required compute layer underneath**: kagent generates a per-harness `ActorTemplate` and creates an `Actor` from it, scheduled onto an `ate.dev` `WorkerPool`.
 
 The layering looks like this:

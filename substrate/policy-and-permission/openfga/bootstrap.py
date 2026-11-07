@@ -30,7 +30,7 @@ def post(path, data):
 def actor_uid(name):
     result = json.loads(run("kubectl", "ate", "get", "actor", name,
                             "-a", "ate-demo-counter", "-o", "json"))
-    uid = result["actors"][0]["metadata"]["uid"]
+    uid = result["metadata"]["uid"]
     if not uid:
         raise ValueError("actor has no UID: " + name)
     return uid

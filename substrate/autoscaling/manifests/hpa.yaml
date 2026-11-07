@@ -16,10 +16,11 @@
 # ratio 6 / (0.7 * 8) ~= 1.07 is inside the HPA's default 10% tolerance.
 # That idle headroom is what lets the next resume land without parking.
 #
-# Adapted from the upstream demo (demos/autoscaled-workerpool/hpa-kind.yaml).
-# Differences: lab namespace/pool names, maxReplicas 10, a 60s scale-down
-# window (upstream: 300s) so the lab doesn't make you wait 5 minutes, and the
-# busy-worker selector (upstream still selects at_capacity alone).
+# Adapted from the pre-1.0 upstream demo (demos/autoscaled-workerpool/hpa-kind.yaml),
+# which Substrate v1.0.0 no longer ships. Differences: lab namespace/pool
+# names, maxReplicas 10, a 60s scale-down window (upstream: 300s) so the lab
+# doesn't make you wait 5 minutes, and the busy-worker selector (upstream
+# selected at_capacity alone).
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -27,7 +28,7 @@ metadata:
   namespace: ate-lab-burst
 spec:
   scaleTargetRef:
-    apiVersion: ate.dev/v1alpha1
+    apiVersion: ate.dev/v1
     kind: WorkerPool
     name: burst
   minReplicas: 2          # warm floor

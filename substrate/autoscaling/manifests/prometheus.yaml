@@ -4,8 +4,8 @@
 # Kubernetes External Metrics API. With GMP that means the
 # custom-metrics-stackdriver-adapter plus Workload Identity IAM. A small
 # in-cluster Prometheus plus prometheus-adapter (prometheus-adapter.yaml) keeps
-# the lab self-contained and matches the upstream kind demo
-# (demos/autoscaled-workerpool).
+# the lab self-contained and matches the pre-1.0 upstream kind demo
+# (demos/autoscaled-workerpool, not shipped in v1.0.0).
 #
 # It scrapes only ate-system pods annotated prometheus.io/scrape=true, on the
 # port each pod's prometheus.io/port annotation names. With the agentgateway

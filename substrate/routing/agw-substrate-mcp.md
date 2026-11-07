@@ -13,16 +13,14 @@ This connects two separate control planes:
 1. **agentgateway** understands MCP: sessions, `tools/list`, `tools/call`,
    policy, metrics, and one stable client-facing endpoint.
 2. **Agent Substrate** understands actor lifecycle: snapshot, release the
-   worker, restore on demand, and route by actor DNS name.
+   worker, restore on demand, and route by the `ate-target-actor` header.
 
 The request path is:
 
 ```text
 MCP client
   -> agentgateway /mcp
-  -> everything.tools.actors.resources.substrate.ate.dev:80/mcp
-  -> Kubernetes DNS stub domain
-  -> atenet-router
+  -> atenet-router (mTLS, ate-target-actor: tools/everything)
   -> ResumeActor (if suspended)
   -> restored MCP server on a warm Substrate worker
 ```
@@ -41,8 +39,8 @@ actor-level scale-to-zero.
 | Beat | Proof |
 |---|---|
 | MCP server as an actor | The reference `mcp/everything` Streamable HTTP server runs inside a gVisor-backed ActorTemplate instead of a Deployment. |
-| agentgateway to actor DNS | An `AgentgatewayBackend` targets the actor's uniform DNS name, while `hostRewrite: Auto` preserves the hostname at the Substrate router. |
-| First-call wake | The actor starts `STATUS_SUSPENDED`; the MCP `initialize` request causes atenet to invoke `ResumeActor` before forwarding it. |
+| agentgateway to the Substrate router | An agentgateway backend targets `atenet-router` over mTLS and names the actor with `ate-target-actor: tools/everything` (see the Step 5 TODO). |
+| First-call wake | The actor starts `ACTOR_STATE_SUSPENDED`; the MCP `initialize` request causes atenet to invoke `ResumeActor` before forwarding it. |
 | Session survives suspension | Suspend the actor after an MCP handshake, then reuse the same client session ID for `tools/call`. Full-state restore preserves the server-side MCP session. |
 ---
 
@@ -56,8 +54,9 @@ kubectl get pods -n agentgateway-system
 kubectl get gatewayclass agentgateway
 ```
 
-Build `kubectl-ate` from the same Substrate checkout used by this lab. Older
-plugin binaries predate Atespaces and fail with `unknown flag: --atespace`:
+Build `kubectl-ate` from the same Substrate **v1.0.0** checkout used by this
+lab (`git clone --branch v1.0.0 https://github.com/agent-substrate/substrate.git`).
+Older plugin binaries predate Atespaces and fail with `unknown flag: --atespace`:
 
 ```bash
 go install ./cmd/kubectl-ate
@@ -72,54 +71,50 @@ The final command must show `--atespace`. If it does not, another
 `kubectl-ate` binary appears earlier on `PATH`; invoke
 `$(go env GOPATH)/bin/kubectl-ate` directly or remove the stale binary.
 
+Step 5's interim path uses `kubectl ate proxy actor`, which presents the
+`spiffe://cluster.local/ns/ate-system/sa/atenet-client` identity to the
+router. The Substrate install must list it in
+`--ingress-allowed-spiffe-ids` (see
+[microVM on Substrate](../microvm/microvm-substrate-imp.md#prerequisites)).
+
 ---
 
 # Part 1: Deployment & Configuration
 
 ## Step 1: Prepare the Substrate environment
 
-**Why `ko`?**: The source-oriented development manifest does not initially point to a prebuilt, pullable image. `ko` builds that package into a container, pushes it, and replaces the `ko://` reference with the resulting registry image. This is specifically the `ateom-gvisor` helper image, not gVisor itself. It contains the `ATE` component that controls actor workloads through gVisor. The actual `runsc` sandbox binary is supplied separately through the selected SandboxConfig. In the below, its only used to pull/store the `ateom` image. The MCP creation via the Template is done with standard ATE CRDs.
+**Why `ko`?**: The source-oriented development manifest does not initially point to a prebuilt, pullable image. `ko` builds that package into a container, pushes it, and replaces the `ko://` reference with the resulting registry image. This is specifically the `ateworker-gvisor` worker image, not gVisor itself. It contains the `ATE` component that controls actor workloads through gVisor. The actual `runsc` sandbox binary is supplied separately through the selected SandboxConfig. In the below, its only used to pull/store the `ateworker-gvisor` image. The WorkerPool is a CRD; the MCP ActorTemplate is created through the ate API with `kubectl ate`.
 
-Set the snapshot bucket and the registry where `ko` will publish the
-`ateom-gvisor` image. If the Substrate environment file is already
-configured, source it:
+Set the registry where `ko` will publish the `ateworker-gvisor` image. If the
+Substrate environment file is already configured, source it:
 
 ```bash
 source .ate-dev-env.sh
 
-: "${BUCKET_NAME:?BUCKET_NAME must name the existing Substrate snapshot bucket}"
 : "${KO_DOCKER_REPO:?KO_DOCKER_REPO must name a writable container registry}"
 ```
 
-Otherwise, export both values explicitly:
+Otherwise, export it explicitly:
 
 ```bash
-export BUCKET_NAME="your-substrate-snapshot-bucket"
 export KO_DOCKER_REPO="gcr.io/your-project-id/ate-images"
 ```
 
-`BUCKET_NAME` becomes the `gs://` snapshot location in the ActorTemplate.
-`KO_DOCKER_REPO` is required separately because `ko apply` must push the
-locally built `ateom-gvisor` image before applying the WorkerPool CRD.
+`KO_DOCKER_REPO` is required because `ko apply` must push the locally built
+`ateworker-gvisor` image before applying the WorkerPool CRD. Snapshots no
+longer need a bucket in the template: they go to the install's
+`SNAPSHOT_LOCATION`, and transfers use per-actor tokens rather than the
+node's Workload Identity.
 
-Select a node pool configured with the GKE Metadata Server. Snapshot upload
-uses the `ate-system/atelet` Workload Identity principal, so a pool without
-`GKE_METADATA` can run the worker but fails checkpoint upload with
-`Provided scope(s) are not authorized`:
+Select the node pool for Substrate gVisor workers:
 
 ```bash
 export SUBSTRATE_NODE_POOL=""
-
-gcloud container node-pools describe "$SUBSTRATE_NODE_POOL" \
-  --cluster="$CLUSTER_NAME" \
-  --location="$CLUSTER_LOCATION" \
-  --project="$PROJECT_ID" \
-  --format='value(config.workloadMetadataConfig.mode)'
 ```
 
-The command must print `GKE_METADATA`. Use the pool configured for Substrate
-in your cluster; `substrate-gvisor` is the name used by the setup tooling,
-not a universal GKE name. Check that pool's taints too:
+Use the pool configured for Substrate in your cluster; `substrate-gvisor` is
+the name used by the setup tooling, not a universal GKE name. Check that
+pool's taints too:
 
 ```bash
 kubectl get nodes \
@@ -199,11 +194,11 @@ For release `2026.7.4`, the validated image contains
 `node /app/dist/index.js streamableHttp` and serves the session-based MCP
 endpoint at `/mcp`.
 
-**Why The Pause Container?**: it's not related to Substrate's suspend/"pause actor" feature despite the name collision — it's sandbox plumbing, the actor-runtime equivalent of the Pod infra container, and the field is required because runsc needs a root container to build the sandbox around. What the pause container is for — structure while the actor is running (and inside the snapshot). A gVisor sandbox needs one root container to anchor the sandbox, its network namespace, and any durable-dir mounts. The pause container is that anchor; your MCP server runs as an app container inside it. When the actor suspends, the pause container is checkpointed along with everything else; when it resumes, it's restored along with everything else. It's cargo, not the crane.
-
 ---
 
 ## Step 3: Deploy the MCP ActorTemplate and one warm worker
+
+The WorkerPool is still a Kubernetes CRD, applied with `ko`:
 
 ```bash
 cat <<EOF | ./hack/run-tool.sh ko apply -f -
@@ -212,7 +207,7 @@ kind: Namespace
 metadata:
   name: mcp-substrate
 ---
-apiVersion: ate.dev/v1alpha1
+apiVersion: ate.dev/v1
 kind: WorkerPool
 metadata:
   name: mcp-tools
@@ -221,7 +216,9 @@ metadata:
     workload: mcp-tools
 spec:
   replicas: 1
-  ateomImage: ko://github.com/agent-substrate/substrate/cmd/ateom-gvisor
+  workerImage: ko://go.ate.dev/substrate/cmd/ateworker-gvisor
+  sandboxClasses:
+  - name: gvisor
   template:
     nodeSelector:
       cloud.google.com/gke-nodepool: ${SUBSTRATE_NODE_POOL}
@@ -230,58 +227,75 @@ spec:
       operator: Equal
       value: gvisor
       effect: NoSchedule
----
-apiVersion: ate.dev/v1alpha1
-kind: ActorTemplate
+    # Worker capacity comes from the limits; the actor below asks for
+    # 1 CPU and 512Mi.
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 1Gi
+EOF
+```
+
+The ActorTemplate is no longer a CRD. It is an ate API record that lives in
+an atespace, so create the atespace first, then the template:
+
+```bash
+kubectl ate create atespace tools
+
+cat <<EOF | kubectl ate create actor-template -f -
 metadata:
+  atespace: tools
   name: everything-mcp
-  namespace: mcp-substrate
-spec:
-  pauseImage: "registry.k8s.io/pause:3.10.2@sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4"
-  containers:
-  - name: mcp
-    image: ${MCP_IMAGE}
-    command:
-    - node
-    - /app/dist/index.js
-    - streamableHttp
-    env:
-    - name: PORT
-      value: "80"
-  workerSelector:
-    matchLabels:
-      workload: mcp-tools
-  snapshotsConfig:
-    onPause: Full
-    onCommit: Full
-    location: gs://${BUCKET_NAME}/mcp-substrate/everything/
+workerSelector:
+  matchLabels:
+    workload: mcp-tools
+containers:
+- name: mcp
+  image: ${MCP_IMAGE}
+  command:
+  - node
+  - /app/dist/index.js
+  - streamableHttp
+  env:
+  - name: PORT
+    value: "80"
+resources:
+  limits:
+    cpuMillicores: 1000
+    memoryBytes: 536870912 # 512Mi
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
 EOF
 ```
 
 The upstream server does not expose a dedicated HTTP readiness endpoint, so
-this template intentionally omits `readyz`. Substrate applies its golden-actor
-warmup before taking the initial full snapshot; subsequent resumes restore the
-already-listening socket with the process.
+this template intentionally omits `wakeupProbe`. Substrate applies its ~20s
+golden-actor warmup before taking the golden snapshot; subsequent resumes
+restore the already-listening socket with the process. `MEMORY` fidelity is
+what keeps the in-memory MCP session across suspend/resume in Part 2.
 
 Ensure everything is up and operational
 
 ```bash
-kubectl get workerpool,actortemplate,pods -n mcp-substrate
+kubectl get workerpool,pods -n mcp-substrate
+kubectl ate get actor-templates -a tools
 ```
+
+Wait until the template's `GOLDEN TAG` is set before creating the actor.
 
 ---
 
 ## Step 4: Create the MCP actor
 
-Create an atespace and one actor named `everything`:
-
-```bash
-kubectl ate create atespace tools
-```
+Create one actor named `everything` in the `tools` atespace. `--template`
+resolves the template by name within the actor's own atespace:
 
 ```bash
 kubectl ate create actor everything \
-  --template mcp-substrate/everything-mcp \
+  --template everything-mcp \
   --atespace tools
 ```
 
@@ -292,54 +306,53 @@ kubectl ate get actor everything --atespace tools
 The actor should show:
 
 ```text
-STATUS_SUSPENDED   ATEOM POD: <none>
+ACTOR_STATE_SUSPENDED   WORKER POD: <none>
 ```
 
-Its address exists even while its process does not:
+Its address exists even while its process does not. There is no actor DNS
+name anymore: a client reaches the actor through `atenet-router` and names it
+with the header:
 
 ```text
-everything.tools.actors.resources.substrate.ate.dev
+ate-target-actor: tools/everything
 ```
 
-Substrate installs a kube-dns stub domain for
-`actors.resources.substrate.ate.dev`.
-
-Verify that an ordinary pod can resolve the actor name to the atenet router:
-
-```bash
-kubectl run actor-dns-check --rm -i --restart=Never \
-  --image=busybox:1.36 -- \
-  nslookup everything.tools.actors.resources.substrate.ate.dev
-```
-
-The returned address is the router Service, not a worker IP. The worker is
-chosen only when a request arrives.
-
-> **A `SERVFAIL` here is expected and fine.** busybox `nslookup` queries both
-> A (IPv4) and AAAA (IPv6) records. The atenet DNS server only answers A
-> queries for the actor domain (its CoreDNS config defines a `template IN A`
-> block and nothing for AAAA), so the AAAA half fails with `SERVFAIL` and
-> busybox exits non-zero — which also makes the pod report
-> `terminated (Error)`. As long as the output includes a `Name:`/`Address:`
-> block resolving the actor name to an IPv4 address, the check passed.
-> Nothing in the request path uses IPv6; agentgateway routes over IPv4.
-
-You'll see in the next section that `everything.tools.actors.resources.substrate.ate.dev` (the DNS name) is used in the `AgentgatewayBackend` so traffic can be routed to the MCP Server running in the Substrate Actor
+The worker is chosen only when a request arrives. You'll see in the next
+section that this header is what agentgateway has to send so traffic can be
+routed to the MCP Server running in the Substrate Actor
 
 ---
 
 ## Step 5: Put agentgateway in front of the actor
 
-Create a Gateway, an MCP-aware backend, a route, and an explicit hostname
-rewrite policy.
+Create a Gateway, an MCP-aware backend, and a route.
 
-The backend's target is the **actor DNS name**, not the `atenet-router`
-Service name. This gives agentgateway two things at once:
+In v1.0.0 the backend's target is the `atenet-router` Service, and the actor
+is named by a header, not by DNS. The router contract is:
 
-- Kubernetes DNS resolves the target to the router.
-- The HTTP authority remains
-  `everything.tools.actors.resources.substrate.ate.dev`, which tells atenet
-  which actor to resume.
+- **Target:** `atenet-router.ate-system.svc`, port `443` (HTTPS only; the
+  router no longer serves plain HTTP).
+- **Client certificate:** agentgateway must present a Pod Identity
+  certificate (signer `podidentity.podcert.ate.dev/identity`) whose SPIFFE ID
+  is in the install's `--ingress-allowed-spiffe-ids`, for example
+  `spiffe://cluster.local/ns/<agentgateway-namespace>/sa/<agentgateway-sa>`.
+- **Server CA:** verify the router against the `servicedns.podcert.ate.dev/identity`
+  ClusterTrustBundle (label `podcert.ate.dev/canarying: live`).
+- **Actor:** set `ate-target-actor: tools/everything` on every upstream
+  request. atenet resumes the actor named there; `Host` is application
+  metadata only.
+
+> **TODO (v1.0.0):** Not verified for the Kubernetes agentgateway CRDs:
+> mounting the Pod Identity `podCertificate` and the router CA into the
+> agentgateway proxy pod, pointing the MCP backend's backend TLS at them,
+> and setting the `ate-target-actor` request header on the MCP target. The
+> manifests below are the pre-v1.0.0 version of this step. Their backend
+> targets `everything.tools.actors.resources.substrate.ate.dev:80` over plain
+> HTTP, and that DNS name, the stub domain, and the Host-header routing no
+> longer exist, so the backend will not route as written. The previous
+> `hostRewrite: Auto` policy (`substrate-actor-host`) is dropped for the same
+> reason. Until the backend is reworked, use the interim path at the end of
+> this step.
 
 ```bash
 kubectl apply -f - <<'EOF'
@@ -391,27 +404,8 @@ spec:
     - group: agentgateway.dev
       kind: AgentgatewayBackend
       name: substrate-mcp
----
-apiVersion: enterpriseagentgateway.solo.io/v1alpha1
-kind: EnterpriseAgentgatewayPolicy
-metadata:
-  name: substrate-actor-host
-  namespace: mcp-substrate
-spec:
-  targetRefs:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: substrate-mcp
-  traffic:
-    hostRewrite:
-      mode: Auto
 EOF
 ```
-
-`AgentgatewayBackend` targets already default to automatic host rewriting.
-The explicit policy makes the integration contract visible and protects the
-demo from an accidental route-level override: atenet rejects requests whose
-Host does not match `<actor>.<atespace>.actors.resources.substrate.ate.dev`.
 
 Ensure the resources were created.
 
@@ -419,12 +413,34 @@ Ensure the resources were created.
 kubectl get all -n mcp-substrate
 ```
 
+### Interim path: reach the actor with `kubectl ate proxy`
+
+Until the backend above is reworked, `kubectl ate proxy actor` gives you a
+verified route to the actor through `atenet-router`. It opens an mTLS
+CONNECT tunnel to the router with `ate-target-actor: tools/everything`, so
+every request still goes through atenet's resume-on-request path. It skips
+agentgateway, so Step 7's gateway logs do not apply on this path.
+
+```bash
+kubectl ate proxy actor everything -a tools >/tmp/pf-agw-substrate.log 2>&1 &
+
+export PF_PID=$!
+export MCP_URL=http://localhost:8000/mcp
+MCP_HEADERS=(-H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream')
+```
+
+This forwards `127.0.0.1:8000` to the actor's port 80. Skip the
+port-forward in Step 6 if you use this path; the rest of the lab is
+unchanged.
+
 ---
 
 ## Step 6: First MCP request wakes the suspended Actor
 
 Port-forward agentgateway. Do not port-forward atenet; every MCP request in
-this lab must pass through both layers.
+this lab must pass through both layers. (On the Step 5 interim path, skip
+this block: `kubectl ate proxy` already set `MCP_URL` and `MCP_HEADERS`.)
 
 ```bash
 kubectl -n mcp-substrate port-forward \
@@ -444,7 +460,8 @@ kubectl ate get actor everything --atespace tools
 
 Now initialize an MCP session. Preserve both headers and body so an HTTP
 error is not hidden by the SSE parser. A successful response contains the
-agentgateway client session ID; keep it for every later request.
+MCP session ID (agentgateway's client session ID when it is in the path);
+keep it for every later request.
 
 ```bash
 HTTP_STATUS=$(curl -sS -D /tmp/mcp-substrate-headers.txt \
@@ -483,19 +500,21 @@ fi
 ```
 
 Do not continue to `notifications/initialized` or `tools/list` unless the
-status is `HTTP 200` and `$MCP_SID` is non-empty. For example, an Envoy
+status is `HTTP 200` and `$MCP_SID` is non-empty. For example, a router
 `HTTP 503` is a routing/backend failure, not an MCP response.
 
 The first call is slower than a warm request because this happened inside
 the request path:
 
-1. agentgateway opened its MCP target at the actor DNS name.
-2. Kubernetes DNS returned the atenet router.
-3. atenet parsed `everything.tools` from the Host header.
-4. atenet called `ResumeActor`.
-5. atelet restored the MCP process from object storage into the warm worker.
-6. Envoy rewrote the upstream target to the worker IP on port 80.
-7. The restored MCP server handled `initialize`.
+1. agentgateway (or `kubectl ate proxy`) sent the request to `atenet-router`
+   over mTLS with `ate-target-actor: tools/everything`.
+2. atenet read `tools/everything` from the `ate-target-actor` header.
+3. atenet called `ResumeActor`.
+4. The MCP process was restored from the template's golden snapshot into the
+   warm worker.
+5. The router's dataplane (Envoy or agentgateway, per `--atenet-dataplane`)
+   forwarded the request to the worker on port 80.
+6. The restored MCP server handled `initialize`.
 
 Verify the actor is now running and bound to the one worker:
 
@@ -545,7 +564,7 @@ time curl -sS "${MCP_HEADERS[@]}" -H "Mcp-Session-Id: $MCP_SID" \
 This is the baseline: agentgateway's MCP handling plus two HTTP proxies,
 with no actor restore in the path.
 
-You can ensure that the traffic is going through agentgateway by looking at the logs.
+You can ensure that the traffic is going through agentgateway by looking at the logs (not on the Step 5 interim path, which bypasses agentgateway).
 
 ```bash
 kubectl logs mcp-substrate-gateway-xxxx-xxxx -n mcp-substrate
@@ -569,13 +588,13 @@ kubectl ate get actor everything --atespace tools
 kubectl ate get workers
 ```
 
-The actor now shows `STATUS_SUSPENDED` and no `ATEOM POD`; the worker shows
-no assigned actor. The `mcp/everything` process is gone from compute. Its
-RAM, filesystem, open listener, and server-side MCP session state are in the
-snapshot bucket.
+The actor now shows `ACTOR_STATE_SUSPENDED` and `WORKER POD` `<none>`; the
+worker shows no assigned actor. The `mcp/everything` process is gone from
+compute. Its RAM, filesystem, open listener, and server-side MCP session
+state are in the snapshot (by default `suspend` uploads it to storage in the
+background; add `--mode=sync` to wait for the upload).
 
-agentgateway still exposes `http://localhost:8080/mcp`, and the client still
-holds `$MCP_SID`.
+agentgateway still exposes `$MCP_URL`, and the client still holds `$MCP_SID`.
 
 ---
 
@@ -599,8 +618,9 @@ time curl -sS "${MCP_HEADERS[@]}" -H "Mcp-Session-Id: $MCP_SID" \
 
 The tool call succeeds. That single result proves two separate things:
 
-- **Routing wake-up:** agentgateway sent the request to the actor DNS name;
-  atenet restored the suspended actor before forwarding it.
+- **Routing wake-up:** the request reached atenet with
+  `ate-target-actor: tools/everything`; atenet restored the suspended actor
+  before forwarding it.
 - **MCP state survival:** the old `$MCP_SID` remained valid. The MCP server's
   in-memory session manager was checkpointed and restored with the process.
 
@@ -622,16 +642,19 @@ session through process termination. Substrate thawed the same server state.
 
 ## Cleanup
 
-Stop the port-forward, then suspend and delete the actor before deleting its
-atespace:
+Stop the port-forward (or `kubectl ate proxy`), then suspend and delete the
+actor and its template before deleting their atespace:
 
 ```bash
 kill "$PF_PID" 2>/dev/null
 
 kubectl ate suspend actor everything --atespace tools 2>/dev/null
 kubectl ate delete actor everything --atespace tools
+kubectl ate delete actor-template everything-mcp --atespace tools
 kubectl ate delete atespace tools
 ```
+
+Deleting the template also deletes its golden actor and golden snapshot.
 
 Delete agentgateway and Substrate demo resources. The main Substrate and
 agentgateway control planes remain installed:
@@ -640,7 +663,6 @@ agentgateway control planes remain installed:
 kubectl delete namespace mcp-substrate
 ```
 
-Snapshot objects under
-`gs://${BUCKET_NAME}/mcp-substrate/everything/` may remain. Remove that
-prefix manually if the actor/template cleanup in your current Substrate
-version does not garbage-collect it.
+Actor snapshot objects live under the install's `SNAPSHOT_LOCATION` (for
+example `gs://${BUCKET_NAME}/`). If any remain after the actor and template
+are deleted, remove them manually.

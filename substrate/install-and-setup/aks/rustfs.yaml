@@ -1,0 +1,181 @@
+# In-cluster S3 (RustFS) for Agent Substrate snapshots on AKS.
+#
+# Adapted from upstream v1.0.0 manifests/ate-install/kind/rustfs.yaml. Changes:
+# - Credentials come from the ate-objectstore-s3 Secret (created in setup-aks.md
+#   Step 4) instead of being hardcoded. The objectstore-plugin sidecars read the
+#   same Secret through substrate-v1.0.0-aks.patch.
+# - 100Gi claim on the cluster's default StorageClass (Azure Disk on AKS).
+# - Recreate strategy: the disk is ReadWriteOnce, so a rolling update would
+#   wait forever on a multi-attach if the new pod lands on another node.
+# - Resource requests, so it isn't the first thing evicted under pressure.
+#
+# One replica on one Azure Disk. This is fine for a demo, not for production:
+# losing the disk loses every snapshot.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustfs-data
+  namespace: ate-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  namespace: ate-system
+spec:
+  selector:
+    app: rustfs
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs
+  namespace: ate-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rustfs
+  template:
+    metadata:
+      labels:
+        app: rustfs
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+      - name: rustfs
+        image: rustfs/rustfs:1.0.3@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9000
+          name: api
+        - containerPort: 9001
+          name: console
+        env:
+        - name: RUSTFS_ADDRESS
+          value: ":9000"
+        - name: RUSTFS_CONSOLE_ADDRESS
+          value: ":9001"
+        - name: RUSTFS_CONSOLE_ENABLE
+          value: "true"
+        - name: RUSTFS_VOLUMES
+          value: "/data"
+        - name: RUSTFS_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ate-objectstore-s3
+              key: AWS_ACCESS_KEY_ID
+        - name: RUSTFS_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ate-objectstore-s3
+              key: AWS_SECRET_ACCESS_KEY
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: rustfs-data
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rustfs-bucket-init
+  namespace: ate-system
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: create-bucket
+        image: amazon/aws-cli:2.38.5@sha256:c8156a0e74e13929a42d7e60f0d4e14e7d28d980cd21822505d4bff80e5460c1
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: ate-objectstore-s3
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ate-objectstore-s3
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_REGION
+          value: us-east-1
+        - name: AWS_ENDPOINT_URL
+          value: http://rustfs.ate-system.svc:9000
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          for i in $(seq 1 60); do
+            if aws s3api head-bucket --bucket ate-snapshots 2>/dev/null; then
+              echo "bucket ate-snapshots already exists"
+              exit 0
+            fi
+            if aws s3api create-bucket --bucket ate-snapshots 2>/dev/null; then
+              echo "bucket ate-snapshots created"
+              exit 0
+            fi
+            echo "waiting for rustfs to become available... ($i/60)"
+            sleep 2
+          done
+          echo "timed out waiting for rustfs"
+          exit 1
+---
+# The ate-system bundle denies ingress to every pod in the namespace by
+# default. RustFS's S3 API is reached by the objectstore-plugin sidecars of
+# ate-api-server and atelet, and by the bucket-init Job. Its console is not
+# admitted; use a port-forward.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rustfs
+  namespace: ate-system
+spec:
+  podSelector:
+    matchLabels:
+      app: rustfs
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchExpressions:
+        - key: app
+          operator: In
+          values:
+          - ate-api-server
+          - atelet
+    - podSelector:
+        matchLabels:
+          batch.kubernetes.io/job-name: rustfs-bucket-init
+    ports:
+    - protocol: TCP
+      port: api

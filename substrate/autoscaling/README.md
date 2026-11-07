@@ -26,7 +26,8 @@ the actor.
 
 - A worker frees up within the budget: the request is served with `200`, late
   by however long it waited.
-- The budget runs out first: the router gives up and returns `504`.
+- The budget runs out first: the router gives up and returns `503` ("no worker
+  has room for the actor"), about one budget after the request arrived.
 
 Requests for the same actor that arrive while it is parked wait on the same
 resume and end with it.
@@ -38,41 +39,45 @@ before the router does.
 
 **Parking off.** The sibling setting `requestParking.max` caps how many
 requests can be parked at once (default `1024`). `max: 0` turns parking off: a
-request that finds no free worker gets `429` right away, with no wait.
+request that finds no free worker gets the same `503` right away, with no wait.
+With agentgateway v1.7.0 (the image Substrate v1.0.0 installs) the status code
+is the same either way, so this lab tells the two apart by how long the `503`
+took.
 
 ## What this lab proves
 
 1. **Parking absorbs short contention.** With 6 actors on 2 workers and actors
    that keep suspending, every request returns `200`. Turn parking off and the
-   same load returns `429`s.
+   same load returns fast `503`s.
 2. **Parking does not add capacity.** When actors stay hot, a 5s park budget
-   runs out and requests fail with `504`. The pool is simply too small.
+   runs out and requests fail with `503` after waiting it out. The pool is
+   simply too small.
 3. **The HPA adds capacity.** `ate-api-server` exports
    `ate_workerpool_workers`, a worker count per pool and state. prometheus-adapter
    serves the busy ones (`partial` + `at_capacity`) to an HPA that writes
-   `WorkerPool.spec.replicas`. The pool grows from 2 to 8 and the `504`s stop.
+   `WorkerPool.spec.replicas`. The pool grows from 2 to 8 and the `503`s stop.
 4. **Together they cover the gap.** Raise the park budget to cover the HPA's
    scale-up time, and a burst that starts on 2 workers is served while the
-   pool grows, with far fewer `504`s.
+   pool grows, with far fewer `503`s.
 
 ## What Substrate pieces this uses
 
 | Piece | Role in this lab | Source |
 |---|---|---|
-| `WorkerPool` (`ate.dev/v1alpha1`) | Warm worker pods. Has a `/scale` subresource (`specpath=.spec.replicas`), so an HPA can target it directly. | `pkg/api/v1alpha1/workerpool_types.go` |
+| `WorkerPool` (`ate.dev/v1`) | Warm worker pods. Has a `/scale` subresource (`specpath=.spec.replicas`), so an HPA can target it directly. | `api/infra/k8s/ate/v1/workerpool_types.go` |
 | ActorTemplate (ate API, not a CRD) | The counter workload, created with `kubectl ate create actor-template`. | `manifests/actortemplate.yaml.tmpl` |
-| agentgateway dataplane for atenet | `--atenet-dataplane=agentgateway` swaps the `atenet-router` Deployment's containers for a single `agentgateway` container. Its config is the ConfigMap `ate-system/atenet-router-agentgateway-config`. | `manifests/ate-install/components/agentgateway/` |
-| `substrateIngress.requestParking` | On a retryable resume failure (`ResourceExhausted`, `FailedPrecondition`, `Unavailable`) agentgateway holds the request and retries `ResumeActor` until `budget` (default `5s`) runs out, then returns `504`. `max` (default `1024`) caps waiting requests; `max: 0` turns parking off. On by default. | agentgateway `crates/agentgateway/src/http/substrate/ingress.rs` |
+| agentgateway dataplane for atenet | `--atenet-dataplane=agentgateway` swaps the `atenet-router` Deployment's containers for a single `agentgateway` container (v1.7.0). Its config is the ConfigMap `ate-system/atenet-router-agentgateway-config`: an mTLS-only HTTPS gateway on 8443 and a CONNECT listener on 8444, both limited to `--ingress-allowed-spiffe-ids`. | `manifests/ate-install/components/agentgateway/`, `.../agentgateway-static-mtls/` |
+| `substrateIngress.requestParking` | On a retryable resume failure (`ResourceExhausted`, `FailedPrecondition`, `Unavailable`) agentgateway holds the request and retries `ResumeActor` until `budget` (default `5s`) runs out, then returns `503` "no worker has room for the actor". `max` (default `1024`) caps waiting requests; `max: 0` turns parking off. On by default. | agentgateway `crates/agentgateway/src/http/substrate/ingress.rs` |
 | `ate.workerpool.workers` metric | Worker count per pool, state (`idle`, `partial`, `at_capacity`, `unschedulable`) and sandbox class. Exported as `ate_workerpool_workers` on `ate-api-server:9090/metrics`. | `cmd/ateapi/internal/controlapi/metrics.go` |
-| Worker capacity | A gVisor worker offers 1000 actor slots (`ateom --max-actors`) and reports its `ateom` container's CPU and memory limits. The scheduler places an actor only where its template's `resources.limits` still fit. This lab sizes both so each worker holds one actor. | `cmd/ateapi/internal/scheduling/scheduling.go` |
+| Worker capacity | A gVisor worker offers 1000 actor slots (`ateworker-gvisor --max-actors`) and reports its worker container's CPU and memory limits. The scheduler places an actor only where its template's `resources.limits` still fit. This lab sizes both so each worker holds one actor. | `cmd/ateapi/internal/scheduling/scheduling.go` |
 | Router metrics | `agentgateway_substrate_request_parking_active` (gauge) and `agentgateway_atenet_router_route_duration_seconds` (labels `ate_router_outcome`, `ate_router_resume`), on the router pod's `:15020/metrics`. | agentgateway `crates/agentgateway/src/telemetry/metrics.rs` |
-| HPA + prometheus-adapter | External metric, `AverageValue` target, adapted from upstream. | `demos/autoscaled-workerpool/` |
+| HPA + prometheus-adapter | External metric, `AverageValue` target, adapted from the pre-1.0 upstream demo. | `demos/autoscaled-workerpool/` (not in v1.0.0) |
 
 ## How the two mechanisms fit
 
 ```mermaid
 flowchart LR
-    client["burst.sh<br/>(6 actor loops)"] -->|"ate-target-actor header"| router["atenet-router (agentgateway)<br/>substrateIngress parks up to budget"]
+    client["burst.sh<br/>(6 actor loops)"] -->|"kubectl ate proxy actor<br/>(mTLS CONNECT + ate-target-actor)"| router["atenet-router (agentgateway)<br/>substrateIngress parks up to budget"]
     router -->|"ResumeActor (retried)"| api["ate-api-server"]
     api -->|"assigns free worker"| pool["WorkerPool burst<br/>(worker pods)"]
     api -->|":9090/metrics<br/>ate_workerpool_workers"| prom["Prometheus"]
@@ -92,7 +97,7 @@ They work on different time scales:
 |---|---|---|
 | Reacts in | ~100ms retries | scrape (15s) + HPA sync (~15s) + worker pod start |
 | Fixes | moments of contention: a worker frees up soon | lasting demand: you need more workers |
-| Fails as | `504` once the budget runs out | `504`s while the pool is still growing |
+| Fails as | `503` once the budget runs out | `503`s while the pool is still growing |
 
 ---
 
@@ -100,18 +105,26 @@ They work on different time scales:
 
 1. Cluster
 
-- A **GKE Standard** cluster with Agent Substrate installed and healthy, set up
-  as in the [setup lab](../setup.md) (`./hack/install-ate.sh --deploy-ate-system`).
-  This lab was written against Substrate `main` at commit `ea273bda`. The API is
-  pre-1.0, so use that commit or later and build the images below from the same
-  checkout you installed from.
-- The **agentgateway** router dataplane. Add these flags to your install
-  command (or re-run it with them):
-  `--atenet-dataplane=agentgateway --credential-provider='{"enabled":false}'`.
-  The installer only allows a credential provider with the Envoy dataplane, so
-  egress credential injection must be off. The `atenet-router` Deployment then
-  runs a single `agentgateway` container.
-- The snapshot **GCS bucket** from setup, with atelet's IAM already granted.
+- A **GKE Standard** cluster with Agent Substrate **v1.0.0** installed and
+  healthy, set up as in the [setup lab](../install-and-setup/setup-gke.md)
+  (`go run ./cmd/ate-setup deploy ate-system ...` from a `v1.0.0` checkout).
+  Build the counter image below from the same checkout you installed from.
+- The **agentgateway** router dataplane. Add these flags to your
+  `ate-setup deploy ate-system` command (or re-run it with them):
+  `--atenet-dataplane=agentgateway --credential-provider='{"enabled":false}'
+  --ingress-allowed-spiffe-ids=spiffe://cluster.local/ns/ate-system/sa/atenet-client`.
+  `--credential-provider` is required. This lab doesn't use egress credential
+  injection, so it turns it off; `'{"name":"k8s.io"}'` also works on
+  agentgateway. The SPIFFE ID is the client
+  certificate `kubectl ate proxy` presents; without it the router lets no
+  client reach actors. The `atenet-router` Deployment then runs a single
+  `agentgateway` container.
+- The snapshot location from setup (`SNAPSHOT_LOCATION`, the
+  `--snapshot-location` ate-api-server writes snapshots under), with IAM
+  already granted.
+- `kubectl ate` from the same v1.0.0 checkout (`go install ./cmd/kubectl-ate`).
+  `kubectl ate proxy` needs permission to create, get and delete
+  `podcertificaterequests` in `ate-system`; a cluster admin has it.
 
 Health check before you start:
 
@@ -128,9 +141,9 @@ kubectl ate get atespaces
 ## Environment
 
 ```bash
-export SUBSTRATE_DIR=~/gitrepos/substrate            # your Substrate checkout
+export SUBSTRATE_DIR=~/gitrepos/substrate            # your Substrate checkout (v1.0.0)
 export KO_DOCKER_REPO=gcr.io/<project-id>/ate-images  # same as setup
-export BUCKET_NAME=<your-snapshot-bucket>             # same as setup
+export SNAPSHOT_LOCATION=gs://<your-snapshot-bucket>/ # same as setup
 
 cd ~/gitrepos/agentic-demo-repo/substrate/autoscaling
 ```
@@ -139,26 +152,31 @@ Every command below runs from this `autoscaling/` directory.
 
 ## Step 1: Build the worker and workload images
 
-The pool needs the `ateom-gvisor` worker image, and the template needs the
+The pool needs the `ateworker-gvisor` worker image, and the template needs the
 upstream counter workload. Build both from the checkout you installed from, so
 the worker matches the control plane version. `ko build` prints the pushed
 image reference (with digest) on stdout.
 
 ```bash
-git clone https://github.com/agent-substrate/substrate
+git clone --branch v1.0.0 https://github.com/agent-substrate/substrate
 
 cd substrate
 ```
 
 ```bash
-export ATEOM_IMAGE=$(cd "$SUBSTRATE_DIR" && \
-  ./hack/run-tool.sh ko build --platform=linux/amd64 ./cmd/ateom-gvisor)
+export WORKER_IMAGE=$(cd "$SUBSTRATE_DIR" && \
+  ./hack/run-tool.sh ko build --platform=linux/amd64 ./cmd/ateworker-gvisor)
 export COUNTER_IMAGE=$(cd "$SUBSTRATE_DIR" && \
   ./hack/run-tool.sh ko build --platform=linux/amd64 ./demos/counter)
 
-echo "ATEOM_IMAGE=$ATEOM_IMAGE"
+echo "WORKER_IMAGE=$WORKER_IMAGE"
 echo "COUNTER_IMAGE=$COUNTER_IMAGE"
 ```
+
+> Installed from the published release images instead? The worker is published
+> too, so you can skip its build:
+> `export WORKER_IMAGE=ghcr.io/agent-substrate/substrate/ateworker-gvisor:v1.0.0`.
+> Demo images like the counter are not published, so it still needs `ko build`.
 
 > Already running another pool built from the same install? You can reuse its
 > worker image:
@@ -168,12 +186,12 @@ echo "COUNTER_IMAGE=$COUNTER_IMAGE"
 
 ```bash
 # Namespace + 2-worker WorkerPool
-envsubst '${ATEOM_IMAGE}' < manifests/workerpool.yaml.tmpl | kubectl apply -f -
+envsubst '${WORKER_IMAGE}' < manifests/workerpool.yaml.tmpl | kubectl apply -f -
 kubectl -n ate-lab-burst rollout status deployment/burst --timeout=10m
 
 # Atespace + ActorTemplate (through the ate API)
 kubectl ate create atespace ate-lab-burst
-envsubst '${COUNTER_IMAGE} ${BUCKET_NAME}' < manifests/actortemplate.yaml.tmpl \
+envsubst '${COUNTER_IMAGE}' < manifests/actortemplate.yaml.tmpl \
   | kubectl ate create actor-template -f -
 ```
 
@@ -292,26 +310,34 @@ curl -s localhost:9091/api/v1/label/__name__/values \
 
 ### a. Watch one request park
 
-Open a router port-forward in **terminal 1** and leave it running:
+The router has no plaintext port in v1.0.0. `kubectl ate proxy actor` opens a
+local port per actor and tunnels each connection to the router over mTLS,
+setting `ate-target-actor` for you. Opening a proxy doesn't resume anything;
+the first request through it does.
+
+In **terminal 1**, start proxies for `a1`, `a2` and `a3` and leave them
+running:
 
 ```bash
-kubectl -n ate-system port-forward svc/atenet-router 8000:80
+kubectl ate proxy actor a1 8001:80 -a ate-lab-burst &
+kubectl ate proxy actor a2 8002:80 -a ate-lab-burst &
+kubectl ate proxy actor a3 8003:80 -a ate-lab-burst &
+wait
 ```
 
 In **terminal 2**, fill both workers:
 
 ```bash
-curl -s -H "ate-target-actor: ate-lab-burst/a1" http://localhost:8000
-curl -s -H "ate-target-actor: ate-lab-burst/a2" http://localhost:8000
-kubectl ate get workers -n ate-lab-burst      # both ASSIGNED
+curl -s http://localhost:8001
+curl -s http://localhost:8002
+kubectl ate get workers -n ate-lab-burst      # both ASSIGNED(1/1000)
 ```
 
 Now request `a3`, timing it. The pool is full, so the request **parks** and
 `curl` hangs:
 
 ```bash
-curl -s -w '-> HTTP %{http_code} in %{time_total}s\n' \
-  -H "ate-target-actor: ate-lab-burst/a3" http://localhost:8000
+curl -s -w '-> HTTP %{http_code} in %{time_total}s\n' http://localhost:8003
 ```
 
 Within 5 seconds, free a worker from **terminal 3**:
@@ -323,18 +349,20 @@ kubectl ate suspend actor a1 -a ate-lab-burst
 Back in terminal 2, the parked `curl` finishes with `HTTP 200`. Its
 `time_total` is how long the request sat parked.
 
-Missed the 5s window? The first `curl` returns `504` instead. Run it again to
-see the `200` now that the Worker is free:
+Missed the 5s window? The first `curl` returns `503` (`no worker has room for
+the actor`) after about 5s instead. Run it again to see the `200` now that the
+Worker is free:
 
 ```bash
-curl -s -w '-> HTTP %{http_code} in %{time_total}s\n' \
-  -H "ate-target-actor: ate-lab-burst/a3" http://localhost:8000
+curl -s -w '-> HTTP %{http_code} in %{time_total}s\n' http://localhost:8003
 ```
 
 ### b. Churn load: zero failures
 
 `churn` mode runs one request → suspend loop per actor. Six actors fight over
-two workers, but each one gives its worker back right after its request:
+two workers, but each one gives its worker back right after its request.
+`burst.sh` starts its own `kubectl ate proxy actor` per actor (local ports
+`18080`-`18085`, override with `BURST_LOCAL_PORT`) and stops them on exit:
 
 ```bash
 ./scripts/burst.sh -m churn -d 45
@@ -346,9 +374,9 @@ Expected shape (your counts will differ):
 ==> results (churn, 45s, pool now 2/2)
     total requests : <n>
     200 OK         : <n>
-    504            : 0   <- park budget ran out
-    429            : 0   <- pool full, parking off
-    503            : 0   <- parking lot full / transient / stale assignment
+    503 after >=1s : 0   <- parked, then the park budget ran out
+    503 under 1s   : 0   <- not parked: parking off / lot full / transient / stale assignment
+    504            : 0   <- the resume itself outlasted the budget
     other          : 0
     200 latency    : avg <s>  p50 <s>  p95 <s>  max <s>
     200s over 1s   : <n>   <- requests that waited (parked) before being served
@@ -357,12 +385,20 @@ Expected shape (your counts will differ):
 ```
 
 The `200s over 1s` line counts requests that parked and then succeeded.
+`kubectl ate proxy` opens a fresh port-forward to the router for every
+connection, so every request also pays that setup time; compare against a
+`hold` run on a free pool if the count looks high.
+
+> **TODO (v1.0.0):** Re-run churn and hold on a v1.0.0 cluster and re-capture
+> the sample output, the 1s threshold, and the per-request proxy overhead.
+> The 503/504 split above comes from reading agentgateway v1.7.0's source, not
+> from a live run.
 
 agentgateway caches an actor's worker assignment for 5s (`cacheTtl`). In churn
 mode an actor's next request often arrives within 5s of its suspend, so it
 first goes to the old worker. That worker's tunnel answers `421` with
 `x-ate-assignment-stale`, and agentgateway drops the cached entry and resolves
-again. An occasional `503` in churn mode is that retry running out, not
+again. An occasional fast `503` in churn mode is that retry running out, not
 parking.
 
 ### c. Same load, parking off
@@ -372,8 +408,12 @@ parking.
 ./scripts/burst.sh -m churn -d 45
 ```
 
-Put parking back on before Scenario 2. This restarts the router, so restart
-your terminal 1 port-forward if you use it again:
+The failures now land in `503 under 1s`: with parking off, a request that
+finds the pool full fails right away instead of waiting.
+
+Put parking back on before Scenario 2. This restarts the router; your terminal
+1 proxies survive it, because `kubectl ate proxy` picks a ready router pod for
+each new connection:
 
 ```bash
 ./scripts/router-parking.sh default
@@ -390,12 +430,13 @@ hot, so the first two actors to land keep both workers:
 ./scripts/burst.sh -m hold -d 60
 ```
 
-The live ticker shows the pool stuck at `2/2` while `504`s keep coming:
+The live ticker shows the pool stuck at `2/2` while `503`s keep coming (each
+one after waiting out the 5s budget):
 
 ```text
-    t      pool s/r     200     429     503     504     other
-    5s     2/2          <n>     0       0       <n>     0
-    10s    2/2          <n>     0       0       <n>     0
+    t      pool s/r     200     503     504     other
+    5s     2/2          <n>     <n>     0       0
+    10s    2/2          <n>     <n>     0       0
     ...
 ```
 
@@ -427,7 +468,7 @@ What to look for in the ticker:
 
 - `pool s/r` climbs: `2/2 -> 3/... -> 5/... -> 8/8`, one HPA step at a time
   (see the blind spot above).
-- `504` per window falls to `0` once the pool has a worker for each hot actor.
+- `503` per window falls to `0` once the pool has a worker for each hot actor.
 - The summary's `failure window` gives you the **time to absorb the burst**.
   Write it down in the [results table](#results-template).
 
@@ -476,23 +517,25 @@ sum(agentgateway_substrate_request_parking_active)
 make clean
 ```
 
-Check for leftover snapshot objects under the lab's prefix, and delete them
-only if you are sure nothing else uses that prefix:
+Check for leftover snapshot objects under the lab's atespace prefix, and
+delete them only if you are sure nothing else uses that prefix:
 
 ```bash
-gcloud storage ls "gs://${BUCKET_NAME}/ate-lab-burst/"
-# gcloud storage rm -r "gs://${BUCKET_NAME}/ate-lab-burst/"
+gcloud storage ls --recursive "${SNAPSHOT_LOCATION%/}/atespaces/ate-lab-burst/"
+# gcloud storage rm -r "${SNAPSHOT_LOCATION%/}/atespaces/ate-lab-burst/"
 ```
 
 ---
 
 ## References
 
-- Substrate: `manifests/ate-install/components/agentgateway/` (the agentgateway
-  dataplane overlay), `demos/autoscaled-workerpool/README.md`,
-  `cmd/kubectl-ate/README.md`. `docs/request-parking.md` and
-  `demos/parking/README.md` describe the Envoy router's parking; agentgateway's
-  uses the same defaults and retryable errors.
+- Substrate v1.0.0: `manifests/ate-install/components/agentgateway/` and
+  `.../agentgateway-static-mtls/` (the agentgateway dataplane overlays),
+  `docs/reference/kubectl-ate.md` (`proxy actor`), `cmd/kubectl-ate/README.md`.
+  `docs/concepts/request-parking.md` and `demos/parking/README.md` describe the
+  Envoy router's parking; agentgateway's uses the same defaults (`5s`, `1024`)
+  but answers a spent budget with `503` from its own status mapping.
+  `demos/autoscaled-workerpool/` was removed before v1.0.0.
 - agentgateway: `crates/agentgateway/src/http/substrate/ingress.rs`
   (`substrateIngress`, `requestParking`) and
   `crates/agentgateway/src/telemetry/metrics.rs`

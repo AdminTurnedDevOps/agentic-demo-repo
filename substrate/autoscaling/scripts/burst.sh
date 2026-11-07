@@ -7,11 +7,15 @@
 # prints a live line every 5 seconds with the WorkerPool size, so you can watch
 # the pool grow and the failures stop.
 #
-# What agentgateway's failure codes mean here:
-#   504  a parked request's budget ran out before a worker freed up
-#   429  the pool was full and parking is off (ResourceExhausted)
-#   503  parking lot full, a transient resume state, or a stale cached
+# What agentgateway's failure codes mean here (agentgateway v1.7.0, the image
+# Substrate v1.0.0 installs):
+#   503  "no worker has room for the actor": the park budget ran out (slow
+#        503, after about the budget) or parking is off (fast 503). Also the
+#        parking lot full, a transient resume state, or a stale cached
 #        assignment that could not be re-resolved in time
+#   504  the resume itself did not finish within the budget
+# The summary splits 503s by latency, since the code alone doesn't tell a
+# parked request that gave up from one that was never parked.
 #
 # Two modes:
 #   churn  request -> kubectl ate suspend -> repeat. Actors keep giving their
@@ -21,19 +25,22 @@
 #          keep their worker, so demand is sustained. Parking alone can't fix
 #          this; only more workers can.
 #
-# By default the script opens its own port-forward to svc/atenet-router and
-# closes it on exit, so a router rollout between runs never leaves you with a
-# stale forward. Pass -r to use a router URL you manage yourself.
+# The router has no plaintext port in v1.0.0, so the script starts one
+# `kubectl ate proxy actor` per actor (local ports BURST_LOCAL_PORT,
+# BURST_LOCAL_PORT+1, ...) and stops them on exit. Each proxy presents the
+# atenet-client certificate and sets ate-target-actor on its CONNECT tunnel,
+# so requests need no header, and a router rollout between runs never leaves
+# you with a stale proxy.
 #
 # Usage:
 #   ./scripts/burst.sh [-m churn|hold] [-d secs] [-i secs] [-a atespace]
-#                      [-n namespace] [-p pool] [-r router_url] [actor ...]
+#                      [-n namespace] [-p pool] [actor ...]
 #
 # Examples:
 #   ./scripts/burst.sh -m churn -d 30          # actors a1..a6, 30s
 #   ./scripts/burst.sh -m hold -d 120 a1 a2 a3 a4 a5 a6
 #
-# Prerequisites: kubectl, the kubectl-ate plugin (churn mode), curl, awk.
+# Prerequisites: kubectl, the kubectl-ate plugin, curl, awk.
 # Works with the macOS system bash (3.2).
 
 set -uo pipefail
@@ -44,15 +51,14 @@ INTERVAL=1
 ATESPACE="ate-lab-burst"
 POOL_NAMESPACE="ate-lab-burst"
 POOL="burst"
-ROUTER=""
 LOCAL_PORT="${BURST_LOCAL_PORT:-18080}"
 TICK=5
 
 usage() {
-  sed -n '3,36p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,44p' "$0" | sed 's/^# \{0,1\}//'
 }
 
-while getopts ":m:d:i:a:n:p:r:h" opt; do
+while getopts ":m:d:i:a:n:p:h" opt; do
   case "${opt}" in
     m) MODE="${OPTARG}" ;;
     d) DURATION="${OPTARG}" ;;
@@ -60,7 +66,6 @@ while getopts ":m:d:i:a:n:p:r:h" opt; do
     a) ATESPACE="${OPTARG}" ;;
     n) POOL_NAMESPACE="${OPTARG}" ;;
     p) POOL="${OPTARG}" ;;
-    r) ROUTER="${OPTARG}" ;;
     h) usage; exit 0 ;;
     *) echo "unknown option -${OPTARG}; use -h for help" >&2; exit 2 ;;
   esac
@@ -78,46 +83,47 @@ if [[ ${#ACTORS[@]} -eq 0 ]]; then
 fi
 
 TMP="$(mktemp -d)"
-PF_PID=""
+proxy_pids=()
 pids=()
 
 cleanup() {
   if [[ ${#pids[@]} -gt 0 ]]; then
     kill "${pids[@]}" 2>/dev/null
   fi
-  if [[ -n "${PF_PID}" ]]; then
-    kill "${PF_PID}" 2>/dev/null
+  if [[ ${#proxy_pids[@]} -gt 0 ]]; then
+    kill "${proxy_pids[@]}" 2>/dev/null
   fi
   rm -rf "${TMP}"
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# ---- router endpoint -------------------------------------------------------
-if [[ -z "${ROUTER}" ]]; then
-  ROUTER="http://localhost:${LOCAL_PORT}"
-  kubectl -n ate-system port-forward svc/atenet-router "${LOCAL_PORT}:80" \
-    >"${TMP}/port-forward.out" 2>&1 &
-  PF_PID=$!
-  # Poll until the forward accepts connections (any HTTP status counts).
+# ---- one actor proxy per actor ---------------------------------------------
+# A probe request would resume the actor before the burst starts, so readiness
+# is the proxy's own "Proxying ..." line (printed once it listens), not a curl.
+i=0
+for a in "${ACTORS[@]}"; do
+  kubectl ate proxy actor "${a}" "$((LOCAL_PORT + i)):80" -a "${ATESPACE}" \
+    >"${TMP}/proxy-${a}.out" 2>&1 &
+  proxy_pids+=($!)
+  i=$((i + 1))
+done
+for a in "${ACTORS[@]}"; do
   ready=0
-  for _ in $(seq 1 40); do
-    code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' "${ROUTER}/" 2>/dev/null)
-    if [[ "${code}" != "000" ]]; then
+  for _ in $(seq 1 120); do
+    if grep -q '^Proxying ' "${TMP}/proxy-${a}.out" 2>/dev/null; then
       ready=1
-      break
-    fi
-    if ! kill -0 "${PF_PID}" 2>/dev/null; then
       break
     fi
     sleep 0.5
   done
   if [[ "${ready}" -ne 1 ]]; then
-    echo "port-forward to svc/atenet-router did not come up:" >&2
-    cat "${TMP}/port-forward.out" >&2
+    echo "kubectl ate proxy actor ${a} did not come up:" >&2
+    cat "${TMP}/proxy-${a}.out" >&2
     exit 1
   fi
-fi
+done
+ROUTER="localhost:${LOCAL_PORT}-$((LOCAL_PORT + ${#ACTORS[@]} - 1)) (kubectl ate proxy)"
 
 pool_size() {
   kubectl -n "${POOL_NAMESPACE}" get workerpool "${POOL}" \
@@ -134,12 +140,12 @@ DEADLINE=$((START + DURATION))
 # One loop per actor. Each response is logged as:
 #   <epoch_when_done> <http_code> <time_total_seconds> <actor>
 drive() {
-  local actor="$1" log="${TMP}/$1.log" line
+  local actor="$1" port="$2" log="${TMP}/$1.log" line
   while [[ $(date +%s) -lt ${DEADLINE} ]]; do
     # -m 180 is a client-side ceiling well above any park budget used in the
     # lab, so the router (not curl) decides when a parked request gives up.
     line=$(curl -s -o /dev/null -m 180 -w '%{http_code} %{time_total}' \
-      -H "ate-target-actor: ${ATESPACE}/${actor}" "${ROUTER}/" 2>/dev/null)
+      "http://localhost:${port}/" 2>/dev/null)
     echo "$(date +%s) ${line:-000 0} ${actor}" >>"${log}"
     if [[ "${MODE}" == "churn" ]]; then
       # Give the worker back, standing in for an agent going idle.
@@ -150,13 +156,15 @@ drive() {
   done
 }
 
+i=0
 for a in "${ACTORS[@]}"; do
-  drive "${a}" &
+  drive "${a}" "$((LOCAL_PORT + i))" &
   pids+=($!)
+  i=$((i + 1))
 done
 
 # ---- live ticker -----------------------------------------------------------
-printf "    %-6s %-12s %-7s %-7s %-7s %-7s %-7s\n" "t" "pool s/r" "200" "429" "503" "504" "other"
+printf "    %-6s %-12s %-7s %-7s %-7s %-7s\n" "t" "pool s/r" "200" "503" "504" "other"
 last=${START}
 while :; do
   alive=0
@@ -169,8 +177,8 @@ while :; do
       -v t="$((now - START))s" -v pool="$(pool_size)" '
         $1 > from && $1 <= to { c[$2]++; n++ }
         END {
-          other = n - c[200] - c[429] - c[503] - c[504]
-          printf "    %-6s %-12s %-7d %-7d %-7d %-7d %-7d\n", t, pool, c[200], c[429], c[503], c[504], other
+          other = n - c[200] - c[503] - c[504]
+          printf "    %-6s %-12s %-7d %-7d %-7d %-7d\n", t, pool, c[200], c[503], c[504], other
         }'
     last=${now}
   fi
@@ -194,13 +202,14 @@ awk -v start="${START}" '
   { n++; c[$2]++ }
   $2 == 200 { ok++; lat[ok] = $3; sum += $3; if ($3 > 1) slow++ }
   $2 != 200 { fail++; t = $1 - start; if (first == "" || t < first) first = t; if (last == "" || t > last) last = t }
-  $2 != 200 && $2 != 429 && $2 != 503 && $2 != 504 { other++; codes[$2]++ }
+  $2 == 503 { if ($3 >= 1) slow503++; else fast503++ }
+  $2 != 200 && $2 != 503 && $2 != 504 { other++; codes[$2]++ }
   END {
     printf "    total requests : %d\n", n
     printf "    200 OK         : %d\n", c[200]
-    printf "    504            : %d   <- park budget ran out\n", c[504]
-    printf "    429            : %d   <- pool full, parking off\n", c[429]
-    printf "    503            : %d   <- parking lot full / transient / stale assignment\n", c[503]
+    printf "    503 after >=1s : %d   <- parked, then the park budget ran out\n", slow503
+    printf "    503 under 1s   : %d   <- not parked: parking off / lot full / transient / stale assignment\n", fast503
+    printf "    504            : %d   <- the resume itself outlasted the budget\n", c[504]
     printf "    other          : %d", other
     for (k in codes) printf "  [%s x%d]", k, codes[k]
     printf "\n"

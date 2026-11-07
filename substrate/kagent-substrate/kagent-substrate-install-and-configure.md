@@ -1,3 +1,5 @@
+> **Agent Substrate v1.0.0 note (2026-11-06):** This guide targets kagent enterprise `0.5.3` with the `ateom-gvisor:v0.0.8` worker, the Substrate fork that kagent installs and pins, not an upstream Agent Substrate v1.0.0 install. That Substrate predates v1.0.0: it uses `ate.dev/v1alpha1`, `ateom-gvisor` worker images, and the `ateapi.Control` gRPC service with `actor_id`. kagent OSS `v1.0.0-rc3` now pins `kagent-dev/substrate v1.0.0` (`ate.dev/v1`, `substrate.ateapi.v1.Control`), and this guide has not been re-tested against it. Don't run kagent's Substrate and an upstream `ate-setup` install ([setup-gke.md](../install-and-setup/setup-gke.md)) in the same cluster: both own `ate-system` and the `ate.dev` CRDs.
+
 The Quickstart below shows you how to upgrade your existing kagent enterprise environment to enable Agent Substrate and how to deploy Substrate Agents with BYO Agents, Declarative Agents, and Agent Harnesses (OpenClaw and Hermes)
 
 ## Install

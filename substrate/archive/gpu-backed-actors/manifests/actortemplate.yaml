@@ -1,0 +1,21 @@
+# protojson-shaped ateapi.ActorTemplate (not a Kubernetes object). Create with
+# `kubectl ate create actor-template -f -` after the ate-demo-gpu atespace exists.
+metadata:
+  atespace: ate-demo-gpu
+  name: gpu-agent
+workerSelector:
+  matchLabels:
+    workload: gpu
+containers:
+- name: gpu-agent
+  image: ${GPU_WORKLOAD_IMAGE}
+  wakeupProbe:
+    httpGet:
+      path: /readyz
+      port: 80
+resources:
+  limits:
+    cpuMillicores: 1000
+    memoryBytes: 2147483648 # 2Gi
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY

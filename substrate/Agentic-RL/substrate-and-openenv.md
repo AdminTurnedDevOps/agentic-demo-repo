@@ -1,5 +1,15 @@
 # Agentic RL on Agent Substrate with OpenEnv
 
+> This lab was written and run against kagent's Substrate fork `v0.7.0-alpha1`. In upstream v1.0.0, the
+> agentgateway dataplane still adds the plaintext `http: 80` port to
+> `atenet-router` that this lab routes through. `ate-setup` requires
+> `--credential-provider` (for example `'{"name":"k8s.io"}'`). v1.0.0 also runs containers as
+> the image's `USER` and in its `WORKDIR` (they used to run as root in `/`), and
+> mounts tmpfs on `/tmp` and `/dev/shm`.
+>
+> **TODO (v1.0.0):** re-run Steps 3–5 to confirm the coding-env and probe images
+> still start under their own `USER`.
+
 Tldr; agentic RL lets a model act in an environment many times, scores each
 attempt, and updates the weights toward what scored well. The model's actions
 are untrusted code, so the environment has to be a real sandbox. In this lab,
@@ -102,7 +112,7 @@ does not exist yet.
 ### Cluster
 
 - A **GKE Standard** cluster running Agent Substrate, installed as in
-  [setup.md](../setup.md) and with the **agentgateway dataplane** for
+  [setup-gke.md](../install-and-setup/setup-gke.md) and with the **agentgateway dataplane** for
   `atenet-router` (`--atenet-dataplane=agentgateway`), the same install as
   [llmgateway-with-substrate.md](../egress/llmgateway-with-substrate.md). This
   matters: the Envoy dataplane serves only TLS and requires every ingress
@@ -343,9 +353,9 @@ the same as every actor cloned from it. Wait for the golden tag:
 
 ```bash
 until kubectl ate get actor-template coding-env -a "${ATESPACE}" -o json \
-  | jq -e '.actorTemplates[0].status.goldenSnapshotStatus.goldenTag.name' >/dev/null; do
+  | jq -e '(.actorTemplates[0] // .).status.goldenSnapshotStatus.goldenTag.name' >/dev/null; do
   err=$(kubectl ate get actor-template coding-env -a "${ATESPACE}" -o json \
-    | jq -r '.actorTemplates[0].status.goldenSnapshotStatus.errorMessage // empty')
+    | jq -r '(.actorTemplates[0] // .).status.goldenSnapshotStatus.errorMessage // empty')
   if [ -n "${err}" ]; then echo "golden snapshot failed: ${err}"; break; fi
   echo "waiting for golden snapshot..."; sleep 5
 done
@@ -1234,10 +1244,10 @@ kubectl delete namespace "${POOL_NS}"
   [Training with OpenEnv](https://github.com/huggingface/OpenEnv/blob/main/docs/source/guides/training.md),
   [Harbor environment](https://github.com/huggingface/OpenEnv/blob/main/docs/source/environments/harbor.md)
 - TRL: [OpenEnv integration](https://huggingface.co/docs/trl/openenv) (`environment_factory`, colocate vs server mode)
-- Substrate: [api-guide.md](https://github.com/agent-substrate/substrate/blob/main/docs/api-guide.md) (templates, golden snapshots, `RevertActor`, GPUs),
-  [network-egress.md](https://github.com/agent-substrate/substrate/blob/main/docs/network-egress.md) (DNS relay, link-local drop),
-  [router README](https://github.com/agent-substrate/substrate/blob/main/cmd/atenet/internal/router/README.md) (ingress client authentication)
+- Substrate: [api-guide.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/reference/api-guide.md) (templates, golden snapshots, `RevertActor`, GPUs),
+  [network-egress.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/guides/network-egress.md) (DNS relay, link-local drop),
+  [router README](https://github.com/agent-substrate/substrate/blob/v1.0.0/cmd/atenet/internal/router/README.md) (ingress client authentication)
 - agentgateway: [Kubernetes docs](https://agentgateway.dev/docs/kubernetes/latest/),
   [CEL reference](https://github.com/agentgateway/agentgateway/blob/v1.6.0/schema/cel.md)
 - Earlier labs: [llmgateway-with-substrate.md](../egress/llmgateway-with-substrate.md),
-  [setup.md](../setup.md)
+  [setup-gke.md](../install-and-setup/setup-gke.md)

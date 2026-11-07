@@ -469,7 +469,7 @@ eksctl delete cluster \
 ## How Substrate Uses MicroVM
 
 [Agent Substrate](https://github.com/agent-substrate/substrate), the actor
-runtime covered in [the Substrate demo](../setup.md), added a microVM sandbox
+runtime covered in [the Substrate demo](../install-and-setup/setup-gke.md), added a microVM sandbox
 class in June 2026 ([issue #123](https://github.com/agent-substrate/substrate/issues/123),
 [PR #287](https://github.com/agent-substrate/substrate/pull/287)) and it's a
 useful counter-example to everything above: same microVM building blocks,
@@ -480,8 +480,9 @@ Substrate offers two sandbox classes for actors:
 - **gVisor**: `runsc` nested inside the worker pod. Full checkpoint/restore,
   including disk. Software isolation (userspace kernel, shared host kernel).
 - **microVM**: Cloud Hypervisor nested inside the worker pod. Hardware-enforced
-  isolation with memory-only snapshots; RAM state survives suspend/resume while
-  the rootfs resets to a golden image.
+  isolation with the same `VOLUMES`/`ROOTFS`/`MEMORY` snapshot fidelities; RAM
+  state survives suspend/resume, and rootfs upper layers and `durableDir`
+  volumes are saved as tar archives.
 
 Both follow the same architectural signature: the sandbox runs *inside* an
 ordinary worker pod under Substrate's own control, rather than underneath the
@@ -499,7 +500,7 @@ different node) in about 75 ms via userfaultfd on-demand restore, versus
 ~1.8 s for an eager restore. Idle agents cost nothing but storage. The Kata
 shim has no snapshot API, so Substrate kept Kata's guest components (the
 guest kernel and Kata Agent), dropped the shim, and drives Cloud Hypervisor
-directly through its own runtime (`ateom-microvm`). The result: microVM-grade
+directly through its own runtime (`ateworker-microvm`). The result: microVM-grade
 isolation per agent, with the density and suspend/resume economics that
 stateless Kata pods can't match.
 

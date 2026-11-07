@@ -1,6 +1,6 @@
 # Burst Without 503s lab: automation for the README steps.
 #
-# Required env for deploy: ATEOM_IMAGE, COUNTER_IMAGE, BUCKET_NAME (see README Environment and Step 1).
+# Required env for deploy: WORKER_IMAGE, COUNTER_IMAGE (see README Step 1).
 # The README walks the same steps by hand; the scenarios themselves are run with
 # scripts/burst.sh and scripts/router-parking.sh.
 
@@ -18,17 +18,17 @@ help:
 	@echo "targets: deploy actors suspend-all monitoring hpa clean lint"
 
 check-env:
-	@for v in ATEOM_IMAGE COUNTER_IMAGE BUCKET_NAME; do \
-	  if [[ -z "$${!v:-}" ]]; then echo "missing env: $$v (see README Environment and Step 1)" >&2; exit 1; fi; \
+	@for v in WORKER_IMAGE COUNTER_IMAGE; do \
+	  if [[ -z "$${!v:-}" ]]; then echo "missing env: $$v (see README Step 1)" >&2; exit 1; fi; \
 	done
 
 ## Pool, atespace, template; waits for the golden snapshot (README Step 2).
 deploy: check-env
-	envsubst '$${ATEOM_IMAGE}' < manifests/workerpool.yaml.tmpl | kubectl apply -f -
+	envsubst '$${WORKER_IMAGE}' < manifests/workerpool.yaml.tmpl | kubectl apply -f -
 	kubectl -n $(NAMESPACE) rollout status deployment/burst --timeout=10m
 	kubectl ate get atespace $(ATESPACE) >/dev/null 2>&1 || kubectl ate create atespace $(ATESPACE)
 	kubectl ate get actor-template burst -a $(ATESPACE) >/dev/null 2>&1 || \
-	  envsubst '$${COUNTER_IMAGE} $${BUCKET_NAME}' < manifests/actortemplate.yaml.tmpl \
+	  envsubst '$${COUNTER_IMAGE}' < manifests/actortemplate.yaml.tmpl \
 	    | kubectl ate create actor-template -f -
 	@echo "waiting for golden snapshot (up to 15m)"
 	@for i in $$(seq 1 180); do \
@@ -74,7 +74,7 @@ hpa:
 clean:
 	-kubectl delete -f manifests/hpa.yaml --ignore-not-found
 	-./scripts/router-parking.sh default
-	-@for a in $(ACTORS); do kubectl ate delete actor $$a -a $(ATESPACE) --any-state; done
+	-@for a in $(ACTORS); do kubectl ate delete actor $$a -a $(ATESPACE); done
 	-kubectl ate delete actor-template burst -a $(ATESPACE)
 	-kubectl ate delete atespace $(ATESPACE)
 	-kubectl delete -f manifests/prometheus-adapter.yaml --ignore-not-found

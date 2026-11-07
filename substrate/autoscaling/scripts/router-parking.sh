@@ -11,7 +11,8 @@
 # Requires Substrate installed with --atenet-dataplane=agentgateway. In that
 # mode the atenet-router Deployment runs agentgateway, and actor resume (and
 # request parking) is agentgateway's substrateIngress route policy, configured
-# in the ConfigMap ate-system/atenet-router-agentgateway-config.
+# in the ConfigMap ate-system/atenet-router-agentgateway-config (v1.0.0 writes
+# it from manifests/ate-install/components/agentgateway-static-mtls/).
 #
 # All four routes in that config share one substrateIngress block through the
 # YAML anchor &substrate-ingress, so the script edits the anchored block once
@@ -36,7 +37,7 @@ ANCHOR="substrate-ingress"
 STATS_PORT="${ROUTER_STATS_LOCAL_PORT:-15020}"
 
 usage() {
-  sed -n '3,27p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,28p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 preflight() {

@@ -30,7 +30,7 @@ def main():
                             "openfga-actors-ids", "-o", "json"))["data"]
     actor = json.loads(output("kubectl", "ate", "get", "actor", args.target,
                               "-a", "ate-demo-counter", "-o", "json"))
-    uid = actor["actors"][0]["metadata"]["uid"]
+    uid = actor["metadata"]["uid"]
     tuple_key = {"user": "user:" + args.caller, "relation": "allowed_caller",
                  "object": "actor:" + uid}
     prefix = "/stores/" + ids["store"]

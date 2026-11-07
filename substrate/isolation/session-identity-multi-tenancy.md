@@ -16,30 +16,36 @@ Tldr; Moving an actors "state" from one pod to another via a restore/checkpoint.
 This lab demonstrates two things:
 
 1. **Atespace multi-tenancy**: two tenants each run an actor with the *same
-   ID* (`agent-1`), and Substrate keeps their state, addressing, and snapshots
-   completely separate.
+   name* (`agent-1`), and Substrate keeps their state, identity, access, and
+   snapshots completely separate.
 2. **State teleport**: an actor is suspended (checkpointed to object storage,
    worker released) and then resumed onto a **different worker pod**, and its
-   durable state continues exactly where it left off. The pod is cattle; the
-   actor's state is the stable thing.
+   state continues exactly where it left off. The pod is cattle; the actor's
+   state is the stable thing.
 
 ## What Substrate pieces this uses
 
 | Concept | Where it lives |
 |---|---|
-| `Atespace` | Tenancy/addressing boundary for actors, independent of Kubernetes namespaces. Actors are keyed `actor:<atespace>:<id>`. |
-| DNS mesh routing | `Host: <actor-id>.<atespace>.actors.resources.substrate.ate.dev` through the `atenet-router`. The atespace segment is **required** - an actor ID is only unique within its atespace. |
-| Suspend / resume | Suspend checkpoints the actor's sandbox and uploads the snapshot to the GCS bucket; resume restores it into any free worker. The actor is never in two places, and between the two it exists only as an object in the bucket. |
-| Counter demo workload | Reused as the actor. Its response prints an in-memory count and a durable-file count - the file count is the state-survival proof across suspend (see the snapshot-tiering note in Step 2). Worker assignment is read from `kubectl ate get actors`. |
+| `Atespace` | Tenancy/addressing boundary for actors, independent of Kubernetes namespaces. An actor is named `<atespace>/<name>`; the name is only unique within its atespace. |
+| Access policies | One `default` access policy per atespace (plus one global) binds principals to `owner`, `editor`, or `viewer`. `ate-api-server` checks every API call against them, so a tenant's people can manage their atespace and nothing else. |
+| Actor identity | Substrate-issued identities name the atespace: actor JWTs carry `sub: actor/<atespace>/<name>`, and the worker's certificate for an actor is `spiffe://<trust-domain>/worker-for-actor/<atespace>/<name>`. Same name in two atespaces, two different identities. |
+| `ate-target-actor` routing | The `atenet-router` picks the actor from the `ate-target-actor: <atespace>/<name>` header, resuming it first if it is suspended. `kubectl ate proxy actor` sets it for you on an mTLS CONNECT tunnel. The atespace is **required** - a name alone is ambiguous. |
+| Suspend / resume | Suspend checkpoints the actor's sandbox and uploads the snapshot under `<snapshot-location>/atespaces/<atespace>/...`; resume restores it into a free worker. The actor is never in two places, and between the two it exists only as a snapshot. |
+| Counter demo workload | Reused as the actor. Its response prints an in-memory count, a durable-file count, and a root-filesystem count - the state-survival proof across suspend. Worker assignment is read from `kubectl ate get actors`. |
 ---
 
 ## Prerequisites
 
-- A GKE cluster with the Substrate control plane installed and the **counter
-  demo** deployed. Follow the main [setup lab](../setup.md) through
-  `hack/install-ate.sh --deploy-ate-system --deploy-demo-counter`.
+- A GKE cluster with the Substrate **v1.0.0** control plane installed and the
+  **counter demo** deployed. Follow the main [setup lab](../install-and-setup/setup-gke.md), then
+  run `go run ./cmd/ate-setup deploy demo counter` from the same v1.0.0
+  checkout. The install needs
+  `--ingress-allowed-spiffe-ids=spiffe://cluster.local/ns/ate-system/sa/atenet-client`,
+  the client certificate `kubectl ate proxy` presents; without it the router
+  lets no client reach actors.
 - The `kubectl-ate` plugin installed (`go install ./cmd/kubectl-ate` from the
-  Substrate repo checkout) and reachable on your `PATH` (kubectl discovers
+  same Substrate checkout) and reachable on your `PATH` (kubectl discovers
   plugins by scanning `PATH` for `kubectl-*` binaries).
 - Local tools: `curl`, `kubectl`.
 
@@ -47,21 +53,26 @@ Confirm the control plane and template are healthy before starting:
 
 ```bash
 kubectl get pods -n ate-system
-kubectl get actortemplate counter -n ate-demo-counter
+kubectl ate get actor-templates -a ate-demo-counter
+kubectl ate get workers -n ate-demo-counter
 ```
 
-The `counter` ActorTemplate should show `Ready`, which means its golden
-snapshot exists in your GCS bucket.
+The `counter` ActorTemplate should have its `GOLDEN TAG` filled in, which means
+its golden snapshot exists in your snapshot bucket. The counter pool has
+**3** workers, all `FREE`; the teleport step below counts on that, so make
+sure no other lab's actors are running on it.
 
 ---
 
-## Step 1 - Two tenants, one agent ID
+## Step 1 - Two tenants, one agent name
 
 An `atespace` is to Actors as `namespace` is to Pods.
 
 Create two Atespaces and an actor named `agent-1` in **each**. The
 `kubectl-ate` CLI auto-port-forwards to the `ate-api-server`, so these run
-directly from your terminal:
+directly from your terminal. Both actors use the counter template, which lives
+in the `ate-demo-counter` atespace, so it's referenced as
+`<atespace>/<template>`:
 
 ```bash
 kubectl ate create atespace tenant-a
@@ -79,44 +90,89 @@ Note: there is no "default" atespace, so listing always takes `--atespace` or `-
 kubectl ate get actors -A
 ```
 
-You'll see both `agent-1` entries with their atespace, status, assigned worker
-(`<namespace>/<pod>`), and IP columns.
+You'll see both `agent-1` entries with their atespace, template, state,
+assigned worker (`WORKER POD`, as `<namespace>/<pod>`), and worker IP columns.
 
-Now drive traffic through the DNS mesh. Port-forward the router and address
-each actor by its full host, actor ID **and** atespace:
+Now drive traffic through the router. There is no plaintext router port in
+v1.0.0: `kubectl ate proxy actor` opens a local port, tunnels each connection
+to the router over mTLS, and sets `ate-target-actor` to the actor's
+**atespace and name**. One proxy per tenant:
 
 ```bash
-kubectl -n ate-system port-forward svc/atenet-router 8000:80 &
+kubectl ate proxy actor agent-1 8001:80 -a tenant-a &
+kubectl ate proxy actor agent-1 8002:80 -a tenant-b &
 
 # Hit tenant-a's agent-1 three times
 for i in 1 2 3; do
-  curl -s -H "Host: agent-1.tenant-a.actors.resources.substrate.ate.dev" http://localhost:8000/
+  curl -s http://localhost:8001/
 done
 
 # Hit tenant-b's agent-1 once
-curl -s -H "Host: agent-1.tenant-b.actors.resources.substrate.ate.dev" http://localhost:8000/
+curl -s http://localhost:8002/
 ```
 
-The counter responds with:
+The last two lines of output:
 
 ```
-hello from: <sandbox-ip> | preserved memory count: 3 | preserved file counter: 3
-hello from: <sandbox-ip> | preserved memory count: 1 | preserved file counter: 1
+preserved memory count: 3 | preserved file counter: 3 | preserved rootfs counter: 3
+preserved memory count: 1 | preserved file counter: 1 | preserved rootfs counter: 1
 ```
 
-**That's the tenancy proof.** You gave the Actors the same name, so same actor ID, same template, same WorkerPool, but tenant-a's count is 3 and tenant-b's is 1. Different DNS names, different state-store keys, different snapshot paths in the bucket. Neither tenant can address or observe the other's actor. (First requests may take a moment; a newly created actor starts `SUSPENDED`, and the router's ext_proc filter auto-resumes it from the golden snapshot before forwarding.)
+**That's the tenancy proof.** You gave the Actors the same name, same template, same WorkerPool, but tenant-a's count is 3 and tenant-b's is 1. Different `ate-target-actor` values, different actor identities (`actor/tenant-a/agent-1` vs `actor/tenant-b/agent-1`), different snapshot paths in the bucket. (First requests may take a moment; a newly created actor starts `ACTOR_STATE_SUSPENDED`, and the router resumes it from the golden snapshot before forwarding.)
 
-> The `hello from:` address is the actor's **sandbox-internal link-local IP**.
-> It looks the same regardless of which worker pod is serving, so it does NOT
-> identify the worker. Worker identity comes from the `ATEOM POD` column:
+> Worker identity comes from the `WORKER POD` column, not from anything the
+> counter prints:
 
 ```bash
 kubectl ate get actors --atespace=tenant-a
 ```
 
-Record tenant-a's `ATEOM POD` value (e.g.
-`ate-demo-counter/counter-deployment-xxxxx-yyyyy`). You'll compare it after
-the teleport.
+Record tenant-a's `WORKER POD` value (e.g.
+`ate-demo-counter/counter-xxxxx-yyyyy`). You'll compare it after the
+teleport.
+
+### Who can manage which tenant: access policies
+
+Separate state is half of tenancy. The other half is that tenant-a's people
+can't touch tenant-b. In v1.0.0 that is an **access policy** per atespace,
+checked by `ate-api-server` on every call.
+
+So far you've been acting as the shared `ate-client` ServiceAccount, which
+`ate-setup` makes a bootstrap owner (global `owner`). Create a ServiceAccount
+for a tenant-a user, make it an `editor` of tenant-a, and act as it:
+
+```bash
+kubectl create namespace ate-users
+kubectl -n ate-users create serviceaccount tenant-a-dev
+
+cat > tenant-a-policy.yaml <<'EOF'
+bindings:
+- role: editor
+  members:
+  - user:system:serviceaccount:ate-users:tenant-a-dev
+EOF
+kubectl ate create access-policy -a tenant-a -f tenant-a-policy.yaml
+
+kubectl create token -n ate-users tenant-a-dev --audience api.ate-system.svc > tenant-a-dev.token
+```
+
+```bash
+kubectl ate --token-file tenant-a-dev.token get actors -a tenant-a   # allowed
+kubectl ate --token-file tenant-a-dev.token get actors -a tenant-b   # PermissionDenied
+kubectl ate --token-file tenant-a-dev.token suspend actor agent-1 -a tenant-b   # PermissionDenied
+```
+
+The denied calls name the principal in the error. An editor can create,
+suspend, resume, and delete actors in its atespace, but not change the access
+policy (that's `owner`) or see workers (that's a global role).
+
+> **Where the boundary ends.** Access policies govern the **API**. The router
+> is one shared ingress: any client on `--ingress-allowed-spiffe-ids` can reach
+> any actor in any atespace (that's how your `kubectl ate proxy` reached both).
+> Substrate v1.0.0 doesn't yet enforce per-atespace network policy or quotas,
+> and the atespace is the only grant scope (no per-actor grants). If tenants
+> must not reach each other's actors, put your own authorizing gateway in front
+> of the router (see the [OpenFGA lab](../policy-and-permission/openfga/openfga.md)).
 
 ---
 
@@ -126,118 +182,119 @@ Current state of tenant-a's agent:
 
 ```bash
 kubectl ate get actors --atespace=tenant-a
-curl -s -H "Host: agent-1.tenant-a.actors.resources.substrate.ate.dev" http://localhost:8000/
-# hello from: <sandbox-ip> | preserved memory count: 4 | preserved file counter: 4
+curl -s http://localhost:8001/
+# preserved memory count: 4 | preserved file counter: 4 | preserved rootfs counter: 4
 ```
 
-Note the `ATEOM POD` column value. Suspend the actor as its snapshot uploads to
-the bucket and the worker slot is released:
+Note the `WORKER POD` column value. Right now both `agent-1`s are running, so
+two of the counter pool's three workers are taken.
+
+**Occupy its old worker.** v1.0.0 resumes an actor on the node that holds its
+local snapshot when it can, so left alone `agent-1` may well land back where it
+was. Make that impossible: park one filler on the free worker now.
 
 ```bash
-kubectl ate suspend actor agent-1 --atespace=tenant-a
+kubectl ate create actor filler-1 --template=ate-demo-counter/counter --atespace=tenant-b
+kubectl ate resume actor filler-1 --atespace=tenant-b
+```
+
+Suspend the actor. `--mode=sync` returns only once the snapshot is in object
+storage (the default, async, returns as soon as it's captured on the node and
+uploads in the background):
+
+```bash
+kubectl ate suspend actor agent-1 --atespace=tenant-a --mode=sync
 ```
 
 ```bash
 kubectl ate get actors --atespace=tenant-a
 
-# STATUS: STATUS_SUSPENDED, ATEOM POD: <none>
+# STATE: ACTOR_STATE_SUSPENDED, WORKER POD: <none>
 ```
 
-> Don't be surprised if the actor already shows `STATUS_SUSPENDED` before you
-> run the command. Substrate **idle-suspends actors automatically** after a
-> short quiet period. That's the core efficiency feature doing its job; if it
-> beat you to it, just skip the suspend and continue.
-
-**Occupy its old worker** The resume of the Actor is likely to land elsewhere. The
-counter demo's WorkerPool has 5 replicas; parking a few filler actors on the
-pool takes the old slot. Use **3** fillers, not more: tenant-b's `agent-1` may
-still be running (idle-suspend takes about a minute), and 3 fillers + tenant-b
-+ the slot you're saving for the wake-up accounts for all 5 workers.
-(Placement picks any free worker. This makes a different worker *likely*, not
-guaranteed. If the agent lands on the same pod, suspend it and repeat with
-another filler.)
+Its old worker is now the only free one. Take it with a second filler, then
+free a *different* worker by suspending tenant-b's `agent-1`:
 
 ```bash
-for i in 1 2 3; do
-  kubectl ate create actor filler-$i --template=ate-demo-counter/counter --atespace=tenant-b
-  curl -s -H "Host: filler-$i.tenant-b.actors.resources.substrate.ate.dev" http://localhost:8000/ > /dev/null
-done
+kubectl ate create actor filler-2 --template=ate-demo-counter/counter --atespace=tenant-b
+kubectl ate resume actor filler-2 --atespace=tenant-b
+kubectl ate suspend actor agent-1 --atespace=tenant-b
+kubectl ate get workers -n ate-demo-counter
 ```
 
-> If the wake-up curl below returns `actor "agent-1" unavailable: no free
-> workers available`, the pool is genuinely full - every worker is assigned to
-> a running actor (`kubectl ate get workers` shows who's holding each slot).
-> That's an honest capacity signal from an oversubscribed system, and the fix
-> is the same thing Substrate does on idle: free a slot. Suspend a filler
-> (`kubectl ate suspend actor filler-1 --atespace=tenant-b`) and retry.
-> Don't count on idle-suspension freeing one quickly - in practice actors can
-> stay RUNNING for a while, so the manual suspend is the reliable path.
+Exactly one worker is `FREE`, and it isn't the one you recorded.
+
+> If the wake-up curl below returns `no worker has room for the actor`, the
+> pool is genuinely full - every worker is assigned to a running actor
+> (`kubectl ate get workers` shows who's holding each slot). That's an honest
+> capacity signal from an oversubscribed system, and the fix is to free a
+> slot: suspend a filler (`kubectl ate suspend actor filler-1
+> --atespace=tenant-b`) and retry. v1.0.0 does not suspend idle actors for you;
+> whatever drives the actor has to.
+
+Wake `agent-1` by sending traffic to it. The router sees the suspended actor and resumes it before forwarding the request:
 
 ```bash
-kubectl ate get workers
-```
-
-Wake `agent-1` by sending traffic to it. The router's ext_proc filter sees the suspended actor and resumes it before forwarding the request:
-
-```bash
-curl -s -H "Host: agent-1.tenant-a.actors.resources.substrate.ate.dev" http://localhost:8000/
+curl -s http://localhost:8001/
 ```
 
 ```bash
-# hello from: <sandbox-ip> | preserved memory count: 1 | preserved file counter: 5
+# preserved memory count: 5 | preserved file counter: 5 | preserved rootfs counter: 5
 kubectl ate get actors --atespace=tenant-a
 ```
 
-Read the response and the `ATEOM POD` column together:
+Read the response and the `WORKER POD` column together:
 
-- **`ATEOM POD` shows a different worker pod** than the one you recorded
+- **`WORKER POD` shows a different worker pod** than the one you recorded
   before the suspend → the actor physically moved.
-- **`preserved file counter: 5`** → the actor's durable state survived the
+- **`preserved file counter: 5`** → the actor's durable volume survived the
   move (it was 4 before suspend; this request made it 5). Not re-initialized.
-  Restored from the bucket onto a different pod.
-- **`preserved memory count: 1`** → the in-RAM count reset. This is expected
-  with **this template's** snapshot tiering, and it's worth explaining on
-  stage rather than hiding:
+  Restored from the snapshot onto a different pod.
+- **`preserved memory count: 5`** → the in-RAM count survived too. The
+  process resumed where it left off, which is this **template's** snapshot
+  fidelity, and it's worth explaining on stage:
 
-> **Snapshot tiering (`onPause` / `onCommit`).** The stock counter template
-> sets `snapshotsConfig.onPause: Full` and `onCommit: Data`: a *pause* (kept
-> on the node) captures full RAM + disk, but a *suspend* (uploaded to storage)
-> captures only `Data` - the `durableDir` volume contents. So across a
-> suspend/resume teleport, the file counter survives and the RAM counter
-> restarts from the golden snapshot. If you want full RAM to survive suspend -
-> the agent-secret demo's whole story - use a template that omits
-> `onPause`/`onCommit` (the default captures everything, at the cost of a
-> bigger snapshot). For this lab the file counter is the state-survival proof,
-> and the cheaper `Data` tier is itself a good talking point: you choose per
-> template how much state is worth persisting.
+> **Snapshot fidelity (`preferredFidelity`).** v1.0.0 replaced the old
+> `onPause`/`onCommit` tiering with one per-template ceiling,
+> `snapshotConfig.preferredFidelity`: `SNAPSHOT_FIDELITY_VOLUMES` keeps only
+> durable volumes (the file counter survives; memory and rootfs counters
+> restart), `SNAPSHOT_FIDELITY_ROOTFS` adds root-filesystem writes, and
+> `SNAPSHOT_FIDELITY_MEMORY` (the default, and what the stock counter template
+> sets) adds process memory, so all three counters continue. It's a ceiling,
+> not a guarantee: Substrate may package less, for example under memory
+> pressure. Either way the file counter is the state-survival proof, and the
+> fidelity is a good talking point: you choose per template how much state is
+> worth persisting.
 
 ---
 
 ## Cleanup
 
 ```bash
-# Actors and atespaces. Deleting a RUNNING actor is refused
-# (FailedPrecondition), so suspend first - unless idle-suspension already did
-# it for you, in which case the suspend returns immediately.
-for i in 1 2 3; do
-  kubectl ate suspend actor filler-$i --atespace=tenant-b 2>/dev/null
-  kubectl ate delete actor filler-$i --atespace=tenant-b
-done
-kubectl ate suspend actor agent-1 --atespace=tenant-a 2>/dev/null
+# Actors, then atespaces. DeleteActor removes an actor in any state, and an
+# atespace can only be deleted once it's empty. Deleting it also deletes its
+# access policy.
+kubectl ate delete actor filler-1 --atespace=tenant-b
+kubectl ate delete actor filler-2 --atespace=tenant-b
 kubectl ate delete actor agent-1 --atespace=tenant-a
-kubectl ate suspend actor agent-1 --atespace=tenant-b 2>/dev/null
 kubectl ate delete actor agent-1 --atespace=tenant-b
 kubectl ate delete atespace tenant-a
 kubectl ate delete atespace tenant-b
-# Leave the system-managed `ate-golden` atespace alone - the control plane
-# uses it for golden-snapshot actors.
 
-# Stop the router port-forward
-kill %1 2>/dev/null
+# The tenant user
+kubectl delete namespace ate-users
+rm -f tenant-a-policy.yaml tenant-a-dev.token
+
+# Stop the actor proxies
+kill %1 %2 2>/dev/null
 ```
 
+> Pick new atespace names if you run the lab again. Grants are keyed by
+> atespace name, so v1.0.0 asks you not to recreate a deleted atespace under
+> the same name.
+
 The Substrate control plane, counter demo, and cluster are untouched - tear
-those down via the main [setup lab](../setup.md) if you're done with them.
+those down via the main [setup lab](../install-and-setup/setup-gke.md) if you're done with them.
 
 ---
 
@@ -245,8 +302,9 @@ those down via the main [setup lab](../setup.md) if you're done with them.
 
 | Beat | What was proven |
 |---|---|
-| Same actor ID, two Atespaces | Tenants can't collide: separate state, DNS, and snapshots - with zero coordination between them. |
-| Suspend → resume across workers | Durable state (the file counter) followed the actor onto a different worker pod. The RAM tier reset by template design (`onCommit: Data`) - snapshot tiering is a per-template cost/fidelity dial. |
+| Same actor name, two Atespaces | Tenants can't collide: separate state, identities, routing targets, and snapshots - with zero coordination between them. |
+| Access policy per Atespace | tenant-a's editor can manage tenant-a and is denied on tenant-b. The router itself is shared, so data-plane isolation between tenants is yours to add. |
+| Suspend → resume across workers | State followed the actor onto a different worker pod: durable volume, rootfs, and (with `MEMORY` fidelity) process memory. Snapshot fidelity is a per-template cost/fidelity dial. |
 
 The talk line: **"The pod died. The actor didn't. State follows the actor,
 not the worker."**

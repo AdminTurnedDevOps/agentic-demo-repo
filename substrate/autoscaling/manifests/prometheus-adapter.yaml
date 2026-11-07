@@ -1,7 +1,8 @@
 # prometheus-adapter serves ate_workerpool_workers on the Kubernetes External
 # Metrics API (external.metrics.k8s.io) so an HPA can scale a WorkerPool.
 #
-# Adapted from the upstream demo (demos/autoscaled-workerpool/prometheus-adapter.yaml):
+# Adapted from the pre-1.0 upstream demo (demos/autoscaled-workerpool/prometheus-adapter.yaml,
+# not shipped in v1.0.0):
 #   - runs in ate-lab-burst-monitoring
 #   - points at the lab's Prometheus (prometheus.yaml)
 #   - cluster-scoped RBAC names are prefixed ate-lab-burst- so they don't

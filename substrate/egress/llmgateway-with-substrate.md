@@ -1,5 +1,13 @@
 # LLM Gateway Behind Substrate Egress
 
+> This lab was written and run against kagent's Substrate fork `v0.7.0-alpha1`. For upstream v1.0.0, Step 3
+> now fetches the JWKS from `ate-idp-server`. v1.0.0 no longer maintains the
+> `jwks` key in the `actor-id-jwt-pool` Secret: it is missing on fresh installs
+> and stale after key rotation on upgraded ones. Upstream v1.0.0 pins its agentgateway
+> dataplane to `cr.agentgateway.dev/agentgateway:v1.7.0`, and `ate-setup` still
+> requires `--credential-provider` (for example `'{"name":"k8s.io"}'`). The rest
+> of the lab has not been re-run on v1.0.0.
+
 Tldr; Substrate's `atenet-egress` decides **where** an actor may connect. It
 does not do LLM work. This lab puts a second agentgateway, the **LLM gateway**,
 behind it. The actor calls the LLM gateway in plain HTTP with a placeholder
@@ -260,14 +268,15 @@ just leaves that field out of the log line.
 
 ## Step 3: Trust Substrate actor JWTs at the LLM gateway
 
-ate-api signs actor JWTs with the `actor-id-jwt-pool` key. The public keys are
-in the same Secret under `jwks`, and `ate-idp-server` also serves them at
-`https://idp.ate-system.svc/openid/v1/jwks`. That endpoint's certificate comes
-from Substrate's internal `servicedns` signer, so this lab copies the JWKS
-**inline** rather than teaching the LLM gateway that CA.
+ate-api signs actor JWTs with the `actor-id-jwt-pool` key. `ate-idp-server`
+serves the public keys at `https://idp.ate-system.svc/openid/v1/jwks`. (Before
+v1.0.0 they were also in the Secret under `jwks`. v1.0.0 no longer maintains that
+key, so read the endpoint.) That endpoint's certificate comes from Substrate's
+internal `servicedns` signer, so this lab copies the JWKS **inline** rather than
+teaching the LLM gateway that CA.
 
 What a Substrate actor JWT carries (from
-[egress-credential-injection.md](https://github.com/agent-substrate/substrate/blob/main/docs/egress-credential-injection.md#actor-jwts)):
+[actor-jwts.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/guides/actor-jwts.md)):
 
 | Claim | Value |
 |---|---|
@@ -279,8 +288,9 @@ What a Substrate actor JWT carries (from
 ```bash
 export ACTOR_JWT_ISSUER=$(kubectl -n ate-system get cm ate-api-server-envvars \
   -o jsonpath='{.data.ATE_API_ACTOR_JWT_ISSUER}')
-export ACTOR_JWKS=$(kubectl -n ate-system get secret actor-id-jwt-pool \
-  -o jsonpath='{.data.jwks}' | base64 -d | jq -c .)
+# Through the API server's service proxy to the idp Service (port 443).
+export ACTOR_JWKS=$(kubectl get --raw \
+  "/api/v1/namespaces/ate-system/services/https:idp:443/proxy/openid/v1/jwks" | jq -c .)
 
 echo "${ACTOR_JWT_ISSUER}"
 echo "${ACTOR_JWKS}" | jq '.keys[] | {kid, alg, kty, crv}'
@@ -432,9 +442,9 @@ with its policy in 4c, the next retry goes through. Wait for the golden tag:
 
 ```bash
 until kubectl ate get actor-template "${TEMPLATE}" -a "${ATESPACE}" -o json \
-  | jq -e '.actorTemplates[0].status.goldenSnapshotStatus.goldenTag.name' >/dev/null; do
+  | jq -e '(.actorTemplates[0] // .).status.goldenSnapshotStatus.goldenTag.name' >/dev/null; do
   err=$(kubectl ate get actor-template "${TEMPLATE}" -a "${ATESPACE}" -o json \
-    | jq -r '.actorTemplates[0].status.goldenSnapshotStatus.errorMessage // empty')
+    | jq -r '(.actorTemplates[0] // .).status.goldenSnapshotStatus.errorMessage // empty')
   if [ -n "${err}" ]; then echo "golden snapshot failed: ${err}"; break; fi
   echo "waiting for golden snapshot..."; sleep 5
 done
@@ -536,10 +546,11 @@ The line carries `substrate.actor=actor/llm-lab/caller`, `llm.model`,
 
 ## References
 
-- Substrate: [egress-credential-injection.md](https://github.com/agent-substrate/substrate/blob/main/docs/egress-credential-injection.md),
-  [egress-traffic.md](https://github.com/agent-substrate/substrate/blob/main/docs/egress-traffic.md),
-  [network-egress.md](https://github.com/agent-substrate/substrate/blob/main/docs/network-egress.md),
-  [ate-setup commands](https://github.com/agent-substrate/substrate/blob/main/cmd/ate-setup/commands.md)
+- Substrate (v1.0.0): [egress-credential-injection.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/guides/egress-credential-injection.md),
+  [actor-jwts.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/guides/actor-jwts.md),
+  [egress-traffic.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/guides/egress-traffic.md),
+  [network-egress.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/guides/network-egress.md),
+  [ate-setup commands](https://github.com/agent-substrate/substrate/blob/v1.0.0/cmd/ate-setup/commands.md)
 - agentgateway: [Kubernetes docs](https://agentgateway.dev/docs/kubernetes/latest/),
   [CEL reference](https://github.com/agentgateway/agentgateway/blob/v1.6.0/schema/cel.md)
 - Earlier lab: [agw-substrate-egress.md](agw-substrate-egress.md) (observing the egress hop with Grafana and Tempo)

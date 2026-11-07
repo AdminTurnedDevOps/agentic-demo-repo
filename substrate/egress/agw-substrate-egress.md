@@ -8,7 +8,7 @@ traffic source, not the plot.
 
 | Lab | What you look at | Which agentgateway |
 |---|---|---|
-| **agent** → `atenet-egress` → Anthropic | Embedded dataplane in `ate-system` (`--atenet-router=agentgateway`) |
+| **agent** → `atenet-egress` → Anthropic | Embedded dataplane in `ate-system` (`--atenet-dataplane=agentgateway`) |
 
 The workload is one Claude Code loop (same image as
 [More Agents Than Pods](../agents/agent-multiplex-demo.md)), on a **microVM**
@@ -20,12 +20,12 @@ pool, replica 1. Density is not the point. Outbound HTTPS is.
 
 | Beat | Proof |
 |---|---|
-| Egress is cluster-wide, not a demo flag | Standard ate-system already sets `--egress-gateway-address`. Any RUNNING actor's outbound TCP is tunneled. |
+| Egress is cluster-wide, not a demo flag | Standard ate-system already sets `--default-egress-gateway-address`. Any RUNNING actor's outbound TCP is tunneled, and denied unless the actor's egress policy allows it. |
 | The traffic is a real agent call | `kubectl ate logs` shows a Claude tick; seconds later agentgateway logs a CONNECT whose authority is Anthropic's `ip:443`. |
 | You can see it on agentgateway | Access log field `substrate.connect.authority` (stock overlay). |
 | Metrics in Grafana | Prometheus scrapes agentgateway `:15020`. Dashboard **atenet-egress (agentgateway)**. |
 | Traces in Grafana | Stock egress overlay has **no** tracing. Lab ConfigMap + `AGENTGATEWAY_OTLP_ADDRESS` send OTLP to **Tempo**. Explore → Tempo, `service.name="atenet-egress"`. |
-| Sandbox class does not change the tunnel | Same `atunnel` + gateway path on `sandboxClass: microvm` as on gVisor. |
+| Sandbox class does not change the tunnel | Same `atunnel` + gateway path on the `microvm` sandbox class as on gVisor. |
 
 ---
 
@@ -49,7 +49,7 @@ pool, replica 1. Density is not the point. Outbound HTTPS is.
 
 | Stream | Where | What it tells you |
 |---|---|---|
-| Agent | `kubectl ate logs actors claude -a egress-agent -f` | The model was actually called |
+| Agent | `kubectl ate logs actor claude -a egress-agent -f` | The model was actually called |
 | Egress proxy logs | `deploy/atenet-egress -c agentgateway` | CONNECT went through agentgateway |
 | Metrics | Grafana dashboard **atenet-egress (agentgateway)** | Request/connection rate and latency |
 | Traces | Grafana **Explore → Tempo** | Timing of that hop (`service.name=atenet-egress`) |
@@ -58,24 +58,20 @@ pool, replica 1. Density is not the point. Outbound HTTPS is.
 
 ## Prerequisites
 
-- **GKE + ate-system.** Upstream
-  [GKE Quickstart (Development)](https://github.com/agent-substrate/substrate/blob/main/README.md#gke-quickstart-development):
-  `.ate-dev-env.sh`, `go run ./tools/setup-gcp bootstrap`, then
-  `./hack/install-ate.sh --deploy-ate-system`. Bring-your-own cluster and
-  Pod Certificate APIs:
-  [tools/setup-gcp](https://github.com/agent-substrate/substrate/blob/main/tools/setup-gcp/README.md).
-  Standard, not Autopilot (`atelet` is privileged + `hostPath`).
-- **MicroVM runtime.** There is no separate GKE microVM chapter. Same
-  scripts the counter demo uses:
-  - [Counter demo — Micro-VM variant](https://github.com/agent-substrate/substrate/blob/main/demos/counter/README.md#micro-vm-variant)
-    (`./hack/run-microvm-demo.sh` on GKE, or
-    `hack/install-microvm-deps.sh --install` if ate-system is already up)
-  - [SandboxConfig / micro-VM](https://github.com/agent-substrate/substrate/blob/main/docs/api-guide.md#micro-vm-sandboxconfig)
-    — nodes need `/dev/kvm` + nested virt; atelet advertises the device and
-    that is what places workers. `ate.dev/sandboxClass=microvm` is optional
-    (taint/reserve), not the scheduler’s primary signal.
-  - Local/kind only:
-    [Running the microVM runtime locally](https://github.com/agent-substrate/substrate/blob/main/docs/dev/microvm-local.md)
+- **GKE + ate-system.** Cluster, buckets and IAM come from
+  [substrate-gke](https://github.com/ai-on-gke/substrate-gke)
+  (`go -C tools/setup-gcp run . bootstrap`). Substrate itself is installed
+  from a **v1.0.0** checkout with `go run ./cmd/ate-setup deploy ate-system`
+  (see [microVM on Substrate](../microvm/microvm-substrate-imp.md#prerequisites)
+  for the full settings). Standard, not Autopilot (`atelet` is privileged +
+  `hostPath`).
+- **MicroVM runtime.** A default v1.0.0 install
+  (`--sandbox-classes=gvisor,microvm`) already creates the cluster-wide
+  `SandboxConfig/microvm` and stages its guest assets.
+  - [Sandbox classes](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/reference/sandbox-classes.md)
+    — nodes need `/dev/kvm` + nested virt; atelet advertises the
+    `ate.dev/kvm` device and that is what places workers. A taint/label to
+    reserve microVM nodes is optional, not the scheduler’s primary signal.
 
   Confirm:
 
@@ -84,14 +80,15 @@ pool, replica 1. Density is not the point. Outbound HTTPS is.
   kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.capacity.ate\.dev/kvm}{"\n"}{end}'
   ```
 
-  If `SandboxConfig/microvm` is missing:
+  If `SandboxConfig/microvm` is missing (installed with
+  `--sandbox-classes=gvisor`):
 
   ```bash
-  ./hack/install-microvm-deps.sh --install
+  go run ./cmd/ate-setup deploy sandboxconfig --sandbox-classes=gvisor,microvm
   ```
 
 - `kubectl-ate` from the same Substrate checkout
-  (`go install ./cmd/kubectl-ate`). Confirm `--atespace` and `logs`.
+  (`go install ./cmd/kubectl-ate`). Confirm `--atespace` and `logs actor`.
 - `ko`, `docker`+`buildx`, `jq`, `curl`, **Helm ≥ 3.15**. Source `.ate-dev-env.sh`.
 - A **short-lived Anthropic API key**. It is written into the ActorTemplate
   as a literal env value and captured in the golden snapshot.
@@ -115,21 +112,28 @@ kubectl -n ate-system rollout status deploy/atenet-egress --timeout=120s
 Setup lab installs Envoy. This lab needs the agentgateway overlay:
 
 ```bash
-./hack/install-ate.sh --atenet-router=agentgateway --deploy-atenet
+go run ./cmd/ate-setup deploy atenet \
+  --atenet-dataplane=agentgateway \
+  --credential-provider='{"name":"k8s.io"}' \
+  --ingress-allowed-spiffe-ids=spiffe://cluster.local/ns/ate-system/sa/atenet-client
 ```
 ^ This does the following:
 
-• Pulls cr.agentgateway.dev/agentgateway:v1.5.0
+• Pulls cr.agentgateway.dev/agentgateway:v1.7.0
 • Puts it in ate-system as container agentgateway on deploy/atenet-router and deploy/atenet-egress
 • Mounts the Substrate ConfigMaps as /etc/agentgateway/config.yaml
 • Starts agentgateway -f /etc/agentgateway/config.yaml
+
+Pass the same `--credential-provider` and `--ingress-allowed-spiffe-ids` (and
+`--image-repo`/`--image-tag`, if you used them) as the `deploy ate-system`
+install. `--credential-provider` is required by `deploy atenet`.
 
 ```bash
 kubectl -n ate-system get deploy/atenet-egress \
   -o jsonpath='{.spec.template.spec.containers[0].name}{"\n"}'
 ```
 
-Must print `agentgateway`. `--deploy-atenet` does not rebuild ate-api or
+Must print `agentgateway`. `deploy atenet` does not rebuild ate-api or
 atelet. It does replace router + egress in `ate-system`. The MCP lab's
 `agentgateway-system` Gateway is untouched.
 
@@ -192,9 +196,33 @@ That applies:
 Stock overlay logs CONNECTs and does **not** trace. Router has OTLP; egress
 does not. Overlay + env:
 
-```bash
-kubectl apply -f "${LAB}/atenet-egress-agentgateway-config.yaml"
+> **TODO (v1.0.0):** Do not apply `${LAB}/atenet-egress-agentgateway-config.yaml`
+> as-is. It replaces the whole `config.yaml` and drops the v1.0.0 egress
+> settings (MITM `dynamicCa`, `substrateEgressActorResolution`, and
+> `gateways.egress` bound to `$POD_IP`), which breaks egress. Until that file
+> is rebuilt from the v1.0.0 ConfigMap, edit the live ConfigMap instead and
+> add only a tracing block under the existing `frontendPolicies`:
+>
+> ```bash
+> kubectl -n ate-system edit cm atenet-egress-agentgateway-substrate-config
+> ```
+>
+> ```yaml
+>     frontendPolicies:
+>       # ...keep everything already here...
+>       tracing:
+>         host: $AGENTGATEWAY_OTLP_ADDRESS
+>         protocol: grpc
+>         randomSampling: "1.0"
+>         resources:
+>           service.name: '"atenet-egress"'
+> ```
+>
+> This is the tracing block from the lab overlay. `host`/`protocol` match the
+> v1.0.0 router ConfigMap; the edited config has not been run against v1.0.0. Re-running
+> `ate-setup deploy atenet` or `deploy ate-system` overwrites the edit.
 
+```bash
 kubectl -n ate-system set env deploy/atenet-egress \
   AGENTGATEWAY_OTLP_ADDRESS=tempo.monitoring.svc.cluster.local:4317 \
   -c agentgateway
@@ -260,16 +288,22 @@ kubectl -n ate-demo-egress-agent rollout status deploy/claude-egress --timeout=5
 kubectl get workerpool,deploy,po -n ate-demo-egress-agent
 ```
 
-Worker pod must land on a `ate.dev/sandboxClass=microvm` node. If it
-Pending: node label, nested virt, `/dev/kvm`.
+Worker pod must land on a node that advertises `ate.dev/kvm`. If it
+Pending: nested virt, `/dev/kvm`, `ate.dev/kvm` capacity (Prerequisites).
+`kubectl get workerpool claude-egress -n ate-demo-egress-agent -o yaml`
+shows the `microvm` class's `Resolved` condition.
 
 ### 3c. Template + actor
+
+`${LAB}/agent-template.yaml.tmpl` uses the v1.0.0 ActorTemplate shape (same as
+upstream `demos/claude-code-multiplex/agent-*-template.yaml.tmpl`). The sandbox
+class comes from the WorkerPool the `workerSelector` picks, and snapshots go to
+the install's `SNAPSHOT_LOCATION`, so the template no longer takes `${BUCKET_NAME}`.
 
 ```bash
 kubectl ate create atespace egress-agent
 
 sed \
-  -e "s|\${BUCKET_NAME}|${BUCKET_NAME}|g" \
   -e "s|\${WORKLOAD_IMAGE}|${WORKLOAD_IMAGE}|g" \
   -e "s|\${ANTHROPIC_API_KEY}|${ANTHROPIC_API_KEY}|g" \
   "${LAB}/agent-template.yaml.tmpl" \
@@ -278,16 +312,29 @@ sed \
 kubectl ate get actor-template claude-microvm -a egress-agent
 ```
 
-Wait until `GOLDEN SNAPSHOT` is set (microVM golden is slower than gVisor;
-minutes is normal). Then:
+Wait until `GOLDEN TAG` is set (microVM golden is slower than gVisor;
+minutes is normal). Then create the actor and give it an egress policy.
+Egress is default-deny: an actor with no policy gets nothing out. A
+`tlsPassthrough` rule relays the TLS to Anthropic without interception, so
+Claude Code needs no trust bundle for the gateway's MITM CA (the upstream
+Claude multiplex demo uses the same rule):
 
 ```bash
-kubectl ate create actor claude -a egress-agent --template-ref claude-microvm
+kubectl ate create actor claude -a egress-agent --template claude-microvm
+
+kubectl ate create egress-policy claude -a egress-agent -f - <<'EOF'
+rules:
+- tlsPassthrough:
+    hostnames: ["api.anthropic.com"]
+    ports:
+      numbers: [443]
+EOF
+
 kubectl ate resume actor claude -a egress-agent
 kubectl ate get actor claude -a egress-agent
 ```
 
-You want `ACTOR_STATE_RUNNING` and an `ATEOM POD`. That is enough actor
+You want `ACTOR_STATE_RUNNING` and a `WORKER POD`. That is enough actor
 ceremony. Everything below is the gateway.
 
 ---
@@ -299,7 +346,7 @@ Split the terminal.
 **Agent (proof the model ran):**
 
 ```bash
-kubectl ate logs actors claude -a egress-agent -f
+kubectl ate logs actor claude -a egress-agent -f
 ```
 
 A completed tick looks like:
@@ -332,9 +379,12 @@ kubectl ate suspend actor claude -a egress-agent
 kubectl ate resume actor claude -a egress-agent
 ```
 
-If there is **no** CONNECT line while ticks succeed, interception is off:
-`ate-api-server` missing `--egress-gateway-address`, or this actor was
-Run/Restore'd before that flag was live.
+Egress is default-deny, so ticks cannot succeed without this hop. If ticks
+**fail** with connection errors, check the policy
+(`kubectl ate get egress-policy claude -a egress-agent -o yaml`). The gateway
+caches a missing policy as deny for about 10s, so a tick that ran before the
+policy existed can keep failing briefly. If there is no CONNECT line at all,
+check that `ate-api-server` has `--default-egress-gateway-address`.
 
 Raw metrics (optional; Grafana is the intended view):
 
@@ -402,7 +452,7 @@ Tempo in `monitoring`.
 
 ```bash
 kubectl ate suspend actor claude -a egress-agent 2>/dev/null || true
-kubectl ate delete actor claude -a egress-agent --any-state 2>/dev/null || true
+kubectl ate delete actor claude -a egress-agent 2>/dev/null || true
 kubectl ate delete actor-template claude-microvm -a egress-agent 2>/dev/null || true
 kubectl ate delete atespace egress-agent 2>/dev/null || true
 

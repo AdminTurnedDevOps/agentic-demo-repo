@@ -6,6 +6,9 @@ CHART_VERSION := 0.3.15
 # Run only on the cluster selected by your current kubectl context.
 setup:
 	kubectl apply -f namespace.yaml
+	helm repo add openfga https://openfga.github.io/helm-charts --force-update
+	helm upgrade --install openfga openfga/openfga --version $(CHART_VERSION) -n $(NAMESPACE) \
+		--set replicaCount=1 --set datastore.engine=memory --set playground.enabled=false
 	kubectl -n $(NAMESPACE) rollout status deployment/openfga
 
 # Supply IMAGE as a pullable registry reference. Never use an unpushed local image.
@@ -29,4 +32,5 @@ test:
 clean:
 	kubectl delete -f gateway.yaml --ignore-not-found
 	kubectl delete -f auth.yaml --ignore-not-found
+	helm uninstall openfga -n $(NAMESPACE) --ignore-not-found
 	kubectl delete -f namespace.yaml --ignore-not-found

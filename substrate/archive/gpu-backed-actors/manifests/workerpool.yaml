@@ -5,7 +5,7 @@ metadata:
   labels:
     gpu-backed-actors-demo: "true"
 ---
-apiVersion: ate.dev/v1alpha1
+apiVersion: ate.dev/v1
 kind: WorkerPool
 metadata:
   name: gpu-workers
@@ -14,9 +14,11 @@ metadata:
     workload: gpu
 spec:
   replicas: 1
-  sandboxClass: gvisor
-  # glibc ateom-gvisor image from the ko build below. Distroless cannot exec nvidia-ctk.
-  workerImage: ${ATEOM_GPU_IMAGE}
+  # Stock ateworker-gvisor from the ko build in the README. On v1.0.0 the
+  # nvidia.com/gpu limit below only places and reserves; no device reaches actors.
+  workerImage: ${WORKER_IMAGE}
+  sandboxClasses:
+  - name: gvisor
   template:
     tolerations:
     - key: nvidia.com/gpu
