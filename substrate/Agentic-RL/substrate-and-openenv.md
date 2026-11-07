@@ -6,7 +6,7 @@ are untrusted code, so the environment has to be a real sandbox. In this lab,
 [OpenEnv](https://github.com/huggingface/OpenEnv) defines the environment (a
 Python code executor with `reset` / `step`), **Agent Substrate** runs eight
 copies of it as gVisor actors with **no egress at all**, and TRL trains
-Qwen3-1.7B with GRPO on a single L4 GPU. Afterwards, vLLM serves the base model
+Qwen3-1.7B with Group Relative Policy Optimization (GRPO - reinforcement learning algo to train LLMs) on a single L4 GPU. Afterwards, vLLM serves the base model
 and the trained LoRA adapter behind **agentgateway**, and the same sandboxes
 score both.
 
@@ -171,23 +171,6 @@ export VLLM_IMAGE='vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f
 export PYTHON_IMAGE='python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704'
 export CURL_IMAGE='curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777'
 ```
-
----
-
-## Apply order
-
-| Step | What | Where |
-|---|---|---|
-| 0 | Confirm Substrate and the router dataplane | `ate-system` |
-| 1 | L4 node pool | GKE |
-| 2 | WorkerPool | `ate-rl-lab` |
-| 3 | Atespace and the `coding-env` ActorTemplate | atespace `rl-lab` |
-| 4 | Eight environment actors, smoke test | atespace `rl-lab` |
-| 5 | Probe actor: prove there is no way out | atespace `rl-lab` |
-| 6 | GRPO training Job | `rl-train` |
-| 7 | vLLM + agentgateway, base vs trained eval | `rl-train`, `agentgateway-system` |
-| 8 | Start the next run from the golden snapshot | atespace `rl-lab` |
-| 9 | Teardown | all |
 
 ---
 
