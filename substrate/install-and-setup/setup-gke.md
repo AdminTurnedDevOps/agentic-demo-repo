@@ -31,25 +31,6 @@ Snapshots are stored in a GCS bucket.
 
 ---
 
-## What changed from the pre-1.0 install
-
-| Before (May 2026) | v1.0.0 |
-|---|---|
-| `./hack/install-ate.sh --deploy-ate-system` | `go run ./cmd/ate-setup deploy ate-system ...` |
-| `go run ./tools/setup-gcp` and `hack/teardown.sh` in the Substrate repo | `go -C tools/setup-gcp run . ...` and `tools/setup-gcp/teardown.sh` in **substrate-gke** |
-| Every image built with `ko` and pushed to your registry | Prebuilt images: `--image-repo ghcr.io/agent-substrate/substrate --image-tag v1.0.0` |
-| valkey state store | PostgreSQL, either bundled or external/Cloud SQL |
-| atelet held the snapshot-bucket roles | ate-api-server's credential exchange issues per-actor tokens through a **snapshot transfer service account**. atelet only reads the asset bucket |
-| Enabled the Pod Certificate **beta** APIs with `--enable-kubernetes-unstable-apis` | GKE **1.37+** serves them as `v1` by default. 1.37 is the minimum |
-| `ActorTemplate` was a CRD (`kubectl get actortemplate`) | `ActorTemplate` is an API record (`kubectl ate get actor-templates`) |
-| `ate.dev/v1alpha1` | `ate.dev/v1` |
-| `ateom` in the worker pod | `ateworker-gvisor` / `ateworker-microvm` |
-| `Host: <actor>.actors.resources.substrate.ate.dev` through a port-forward | `kubectl ate proxy actor`, or the `ate-target-actor: <atespace>/<actor>` header over mTLS |
-| Router reachable by anyone | Only clients whose SPIFFE IDs are on `--ingress-allowed-spiffe-ids`. **If the list is empty, nothing gets in** |
-| No credential provider choice | `--credential-provider` is **required** |
-
----
-
 ## Prerequisites
 
 ### Cluster

@@ -58,12 +58,14 @@ and the [CSA research note](https://labs.cloudsecurityalliance.org/research/csa-
  │  TRL GRPOTrainer, vLLM colocated in the same process            │
  │  Qwen/Qwen3-1.7B + LoRA                                         │
  │  environment_factory=SandboxedPython (8 instances)              │
- │      │  ws://atenet-router.ate-system.svc.cluster.local/ws      │
+ │      │  ws://127.0.0.1:8080/ws  (router-client sidecar)         │
  │      │  ate-target-actor: rl-lab/coder-<0..7>                   │
+ │      │  sidecar ──▶ mTLS as ns/rl-train/sa/rl-client            │
  └──────┼──────────────────────────────────────────────────────────┘
         ▼
  ┌──────────── atenet-router (ate-system, agentgateway dataplane) ─┐
- │  plaintext :80, routes on the ate-target-actor header           │
+ │  HTTPS :443, admits allow-listed SPIFFE IDs only                │
+ │  routes on the ate-target-actor header                          │
  │  mTLS CONNECT to the worker's atunnel                           │
  └──────┬──────────────────────────────────────────────────────────┘
         ▼
@@ -76,18 +78,23 @@ and the [CSA research note](https://labs.cloudsecurityalliance.org/research/csa-
  After training (same GPU, one workload at a time):
 
  eval Job ──▶ agentgateway rl-llm ──▶ vLLM (base + LoRA "qwen3-1.7b-grpo")
-     └──────▶ atenet-router ──▶ coder-0 (runs and grades the code)
+     └──────▶ sidecar ──▶ atenet-router ──▶ coder-0 (runs and grades the code)
 ```
 
-Two reasons the training loop does not go through agentgateway:
+Two reasons the model calls in the training loop do not go through an LLM gateway:
 
 - With one GPU, TRL runs vLLM **inside the trainer process** (`vllm_mode="colocate"`).
   Generation never crosses the network, so there is no hop to proxy.
-- Substrate does not pass GPUs through to actors (`docs/api-guide.md`,
+- Substrate does not pass GPUs through to actors (`docs/reference/api-guide.md`,
   "Devices (GPUs) — temporarily unsupported"), so the trainer and vLLM are
   ordinary GPU pods next to Substrate, not inside it.
 
-agentgateway comes in at evaluation, where the model calls are real HTTP.
+agentgateway fronts the model at evaluation, where the model calls are real HTTP.
+
+The environment calls are a separate path. In training and in evaluation they
+go through `atenet-router`, which on Substrate v1.0.0 accepts only mTLS from
+allow-listed identities. Each client pod carries a small agentgateway sidecar
+that presents the pod's identity to the router (Step 6b).
 
 This is the **white-box** path in OpenEnv's terms: the trainer owns the agent
 loop and the environment only runs code and supplies a reward. The black-box
@@ -101,13 +108,15 @@ does not exist yet.
 
 ### Cluster
 
-- A **GKE Standard** cluster running Agent Substrate, installed as in
-  [setup-gke.md](../install-and-setup/setup-gke.md) and with the **agentgateway dataplane** for
-  `atenet-router` (`--atenet-dataplane=agentgateway`), the same install as
-  [llmgateway-with-substrate.md](../egress/llmgateway-with-substrate.md). This
-  matters: the Envoy dataplane serves only TLS and requires every ingress
-  client to present an allow-listed SPIFFE certificate, which this lab does
-  not set up. The agentgateway dataplane still serves plaintext on port 80.
+- A **GKE Standard** cluster running Agent Substrate **v1.0.0**, installed as in
+  [setup-gke.md](../install-and-setup/setup-gke.md) with the **agentgateway
+  dataplane** for `atenet-router` (`--atenet-dataplane=agentgateway`), which is
+  what this lab was written against.
+- On v1.0.0 the router serves **only TLS** and admits only clients whose SPIFFE
+  ID is on `--ingress-allowed-spiffe-ids`, on either dataplane. With
+  agentgateway the `atenet-router` Service still lists an `http` port, but
+  nothing listens behind it. Step 0 adds the trainer's identity to the
+  allowlist, and Step 6b gives the trainer a sidecar that presents it.
 - About **10 GiB of free memory** on the CPU node pool for ten Substrate
   workers (eight environments, one probe, one golden actor while templates
   build).
@@ -120,7 +129,9 @@ Versions this lab was written against:
 
 | Tool | Version | Notes |
 |---|---|---|
-| Agent Substrate, kagent's version | [`kagent-dev/substrate`](https://github.com/kagent-dev/substrate) `v0.7.0-alpha1` | `ate-system` healthy, `kubectl-ate` installed from the same checkout |
+| Agent Substrate | [`agent-substrate/substrate`](https://github.com/agent-substrate/substrate) `v1.0.0` | `ate-system` healthy. Keep a clean checkout of the tag: Step 0 runs `ate-setup` from it |
+| `kubectl-ate` | `v1.0.0` | From the same checkout or the release. Step 4 uses `kubectl ate proxy actor`, which pre-1.0 builds do not have |
+| Go | ≥ `1.27.3` | For `go run ./cmd/ate-setup` in Step 0 |
 | agentgateway Helm charts | `v1.6.0` | Already installed in `agentgateway-system` if you ran the LLM gateway lab |
 | Gateway API CRDs | `v1.6.0` standard channel | Same |
 | `gcloud` | `576.0.0` | `--accelerator ... gpu-driver-version=latest` installs the NVIDIA driver |
@@ -136,6 +147,7 @@ Versions this lab was written against:
 | Python packages in the trainer | `trl==1.16.0`, `peft==0.21.2`, `openenv==0.10.0`, `datasets==5.1.0` |
 | Eval image | `python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704` |
 | Probe image | `curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777` |
+| Router client sidecar | `cr.agentgateway.dev/agentgateway:v1.7.0@sha256:60216aafb03d37f94e952ff3d51d2f630a65b10ecaebdc0a864882f92610c45b`, the build Substrate v1.0.0 pins for its own dataplane |
 | Model | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B), public, no token needed |
 | Tasks | [`google-research-datasets/mbpp`](https://huggingface.co/datasets/google-research-datasets/mbpp), `sanitized` config |
 
@@ -147,21 +159,26 @@ shows how to re-resolve it if you want a newer build.
 Set these once. Every step uses them.
 
 ```bash
-export SUBSTRATE_DIR="${HOME}/gitrepos/substrate"   # checkout of the Substrate you installed
+export SUBSTRATE_DIR="${HOME}/gitrepos/substrate-v1.0.0"   # clean checkout of the tag you installed
 
 export PROJECT_ID=           # GCP project of the cluster
 export CLUSTER_NAME=substrate
 export CLUSTER_LOCATION=us-central1-a
 
+# The record ate-setup wrote when it installed Substrate.
+# Linux: ~/.cache/ate-setup/installs/<context>.yaml
+export INSTALL_RECORD="${HOME}/Library/Caches/ate-setup/installs/$(kubectl config current-context).yaml"
+
 export ATESPACE=rl-lab
 export POOL_NS=ate-rl-lab
 export TRAIN_NS=rl-train
+export ROUTER_CLIENT_SA=rl-client   # ServiceAccount the trainer and the eval run as
 export LLM_NS=agentgateway-system
 export LLM_GW=rl-llm
 export NUM_ACTORS=8          # one environment per GRPO rollout slot
 export MODEL=Qwen/Qwen3-1.7B
 
-export ROUTER_URL=http://atenet-router.ate-system.svc.cluster.local
+export ROUTER_URL=http://127.0.0.1:8080   # the router-client sidecar in each client pod (Step 6b)
 
 export KO_DOCKER_REPO=       # registry your cluster pulls from
 export KO_DEFAULTPLATFORMS="linux/amd64"
@@ -170,21 +187,50 @@ export CODING_ENV_IMAGE='ghcr.io/huggingface/openenv-coding-env@sha256:995ebc9b4
 export VLLM_IMAGE='vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3'
 export PYTHON_IMAGE='python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704'
 export CURL_IMAGE='curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777'
+export AGW_IMAGE='cr.agentgateway.dev/agentgateway:v1.7.0@sha256:60216aafb03d37f94e952ff3d51d2f630a65b10ecaebdc0a864882f92610c45b'
 ```
 
 ---
 
-## Step 0: Confirm Substrate and the router dataplane
+## Step 0: Confirm Substrate and admit the trainer
 
 ```bash
 kubectl -n ate-system get pods
-kubectl -n ate-system get svc atenet-router \
-  -o jsonpath='{range .spec.ports[*]}{.name}={.port}{"\n"}{end}'
+kubectl -n ate-system get deploy atenet-router \
+  -o jsonpath='{.spec.template.spec.containers[*].name}{"\n"}'
 ```
 
-Every `ate-system` pod is `Running` or `Completed`. The router Service lists
-`http=80` next to `https=443`. If there is no `http` port, the router runs the
-Envoy dataplane; see [Prerequisites](#cluster).
+Every `ate-system` pod is `Running` or `Completed`, and the router's only
+container is `agentgateway`.
+
+The router lets a client reach actors only if the client's SPIFFE ID is on its
+allowlist. Add the ServiceAccount the trainer and the eval will run as. Every
+`deploy atenet` **replaces** the list, so pass every ID you want admitted, and
+pass the install record so the rest of the install keeps its settings:
+
+```bash
+cd "${SUBSTRATE_DIR}"
+
+go run ./cmd/ate-setup deploy atenet \
+  --config "${INSTALL_RECORD}" \
+  --ingress-allowed-spiffe-ids="spiffe://cluster.local/ns/ate-system/sa/atenet-client,spiffe://cluster.local/ns/${TRAIN_NS}/sa/${ROUTER_CLIENT_SA}"
+```
+
+```bash
+kubectl -n ate-system get cm atenet-router-agentgateway-config \
+  -o jsonpath='{.data.config\.yaml}' | grep spiffeId
+```
+
+Both IDs are in the rule:
+
+- `ns/ate-system/sa/atenet-client` is the identity `kubectl ate proxy actor`
+  presents. Step 4 uses it from your workstation.
+- `ns/rl-train/sa/rl-client` is the trainer's and the eval's. The namespace and
+  the ServiceAccount do not have to exist yet; Step 6a creates them.
+
+The router pod is not restarted. agentgateway watches its config file and
+loads the new list once the kubelet syncs the ConfigMap into the pod, which
+takes a minute or two.
 
 ---
 
@@ -216,8 +262,9 @@ node joins, so `allocatable` can read empty for a few minutes.
 ## Step 2: WorkerPool
 
 Ten workers: eight environment actors, one probe actor, and one for the
-temporary golden actor each template boots. An actor occupies a whole worker.
-`ko` builds `ateworker-gvisor` from the Substrate checkout, so run it from the
+temporary golden actor each template boots. v1.0.0 workers are shared by
+capacity, but a 1Gi worker offers 960Mi to actors, which fits one 768Mi
+environment. `ko` builds `ateworker-gvisor` from the Substrate checkout, so run it from the
 Substrate root.
 
 ```bash
@@ -264,21 +311,7 @@ Ten workers, none assigned.
 
 ## Step 3: Atespace and the coding-env ActorTemplate
 
-### 3a. (Optional) re-resolve the image digest
-
-The digest in Lab variables is `latest` on 2026-10-25. To pin a newer build:
-
-```bash
-TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:huggingface/openenv-coding-env:pull" | jq -r .token)
-curl -sI -H "Authorization: Bearer ${TOKEN}" \
-  -H 'Accept: application/vnd.oci.image.index.v1+json' \
-  https://ghcr.io/v2/huggingface/openenv-coding-env/manifests/latest \
-  | grep -i docker-content-digest
-```
-
-Put the result into `CODING_ENV_IMAGE` as `ghcr.io/huggingface/openenv-coding-env@<digest>`.
-
-### 3b. Create the template
+### 3a. Create the template
 
 The image's own `CMD` serves on port 8000. The router delivers to the actor's
 port 80, so the template runs the same server on 80. Every container declares
@@ -358,146 +391,14 @@ kubectl ate get actors -a "${ATESPACE}"
 
 All eight reach `ACTOR_STATE_RUNNING`, each on its own worker.
 
-Notice what was **not** created: no `EgressPolicy`. Asking for one returns a
-not-found error:
-
-```bash
-kubectl ate get egress-policy coder-0 -a "${ATESPACE}"
-```
-
-### Smoke test through the router
-
-```bash
-kubectl -n ate-system port-forward svc/atenet-router 8080:80
-```
-
-In a second terminal:
-
-```bash
-curl -sS -H "ate-target-actor: ${ATESPACE}/coder-0" http://localhost:8080/health
-echo
-curl -sS -H "ate-target-actor: ${ATESPACE}/coder-0" \
-  -H 'Content-Type: application/json' \
-  -d '{"action": {"code": "print(sum(range(10)))"}}' \
-  http://localhost:8080/step | jq '.observation'
-```
-
-`/health` answers, and `/step` returns an observation with `stdout` `45` and
-`exit_code` `0`. HTTP `/step` is stateless (a new environment per request);
-the trainer uses the stateful WebSocket at `/ws` instead.
-
-Test that path too, with the same client the trainer uses, before Step 6
-pulls a 10 GB image. Over the same port-forward:
-
-```bash
-python3 -m venv /tmp/openenv-smoke
-/tmp/openenv-smoke/bin/pip install -q "openenv==0.10.0"
-/tmp/openenv-smoke/bin/python - <<EOF
-from openenv import GenericEnvClient
-env = GenericEnvClient(base_url="http://localhost:8080",
-                       headers={"ate-target-actor": "${ATESPACE}/coder-0"}).sync()
-env.connect()
-env.reset()
-env.step({"code": "x = 40"})
-print(env.step({"code": "print(x + 5)"}).observation)
-env.close()
-EOF
-```
-
-The observation shows `stdout` `45`. The second step saw `x` from the first,
-so the session is stateful over the WebSocket, as the trainer needs. If the
-connection fails here, it fails in the trainer too.
-
-The trainer reaches the router from another namespace without a port-forward.
-The agentgateway dataplane's NetworkPolicy for `atenet-router` admits the
-`http` port from any source, so no extra policy is needed.
-
-Two layers stand between model-written code and the world:
-
-1. **The interpreter.** The coding environment runs code in smolagents'
-   `LocalPythonExecutor`, which refuses imports outside a small allowlist, so
-   `import socket` fails before any packet exists. This is a policy inside the
-   process, and interpreter sandboxes have known escapes.
-2. **The actor.** gVisor plus Substrate's network contract. This is the layer
-   that holds when the first one is bypassed, and Step 5 tests it directly.
-
----
-
-## Step 5: Probe actor, proving there is no way out
-
-The probe runs what escaped code would try: raw `curl` from inside an actor in
-the same pool, with the same (absent) egress policy. Every 30 seconds it tries
-the GCE metadata token endpoint, the public internet, the Kubernetes API, and
-the vLLM Service you deploy in Step 7.
-
-```bash
-sed \
-  -e "s|@ATESPACE@|${ATESPACE}|g" \
-  -e "s|@CURL_IMAGE@|${CURL_IMAGE}|g" \
-  -e "s|@TRAIN_NS@|${TRAIN_NS}|g" \
-  <<'EOF' | kubectl ate create actor-template -f -
-metadata:
-  atespace: @ATESPACE@
-  name: redteam
-workerSelector:
-  matchLabels:
-    workload: rl-lab
-containers:
-- name: probe
-  image: @CURL_IMAGE@
-  command: ["/bin/sh", "-c"]
-  args:
-  - |
-    while true; do
-      echo "=== $(date -u +%H:%M:%SZ)"
-      for target in \
-        http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token \
-        https://huggingface.co/ \
-        https://kubernetes.default.svc.cluster.local/version \
-        http://vllm.@TRAIN_NS@.svc.cluster.local:8000/v1/models \
-        https://1.1.1.1/; do
-        out=$(curl -sS -k -o /dev/null -w 'HTTP %{http_code}' --connect-timeout 3 --max-time 5 \
-          -H 'Metadata-Flavor: Google' "${target}" 2>&1)
-        echo "${target} -> ${out}"
-      done
-      sleep 30
-    done
-resources:
-  limits:
-    cpuMillicores: 250
-    memoryBytes: 268435456 # 256Mi
-snapshotConfig:
-  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
-EOF
-```
-
-Wait for its golden tag (same loop as Step 3b with `redteam`), then:
-
-```bash
-kubectl ate create actor redteam -a "${ATESPACE}" --template redteam
-kubectl ate resume actor redteam -a "${ATESPACE}"
-kubectl ate logs actor redteam -a "${ATESPACE}" -f --source containers
-```
-
-What to look for in each round:
-
-| Target | Why it fails |
-|---|---|
-| `169.254.169.254` metadata | ateworker drops link-local destinations before traffic reaches any proxy |
-| `huggingface.co`, `kubernetes.default.svc...`, `vllm...` | The sandbox's DNS relay answers `NXDOMAIN` for any name no egress rule covers, and this actor has no rules: `Could not resolve host` |
-| `1.1.1.1` (no DNS needed) | An actor with no policy gets no egress tunnel |
-
-None of the lines should show an HTTP status from a real server. If one does,
-stop and check the actor's egress policy before training.
-
-Leave the probe running. It keeps showing the same result while the trainer
-and vLLM are up.
-
----
-
 ## Step 6: GRPO training Job
 
-### 6a. Namespace and storage
+### 6a. Namespace, identity and storage
+
+The ServiceAccount is the identity you put on the router's allowlist in
+Step 0. A pod that runs as it can be issued a certificate for
+`spiffe://cluster.local/ns/rl-train/sa/rl-client`. vLLM (Step 7) runs as the
+namespace's `default` ServiceAccount, which the router does not admit.
 
 The PVC holds the Hugging Face cache and the trained adapter. The training Job
 and the vLLM server use it one after the other, never together.
@@ -508,6 +409,12 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: ${TRAIN_NS}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${ROUTER_CLIENT_SA}
+  namespace: ${TRAIN_NS}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -523,7 +430,62 @@ spec:
 EOF
 ```
 
-### 6b. The environment class and trainer
+### 6b. The router client sidecar
+
+OpenEnv's client opens a plain WebSocket and has no option for a client
+certificate, and the router only accepts mTLS. So each pod that talks to the
+environments runs agentgateway next to it, as a sidecar:
+
+- It listens on `127.0.0.1:8080`, so only containers in the same pod can use it.
+- It forwards to `atenet-router.ate-system.svc:443`, presents the pod's client
+  certificate, and verifies the router's certificate against Substrate's
+  service CA.
+- It passes `ate-target-actor` through unchanged. The trainer sets that header,
+  and the trainer is the trusted side.
+
+Both PEM files come from one projected volume on the pod (Step 6d). Its
+`podCertificate` source has Substrate's pod identity signer issue a certificate
+for the pod's ServiceAccount, with the key in the same file. Its
+`clusterTrustBundle` source supplies the CA that signed the router's serving
+certificate.
+
+```bash
+cat <<'EOF' | kubectl -n "${TRAIN_NS}" apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: router-client
+data:
+  config.yaml: |
+    gateways:
+      local:
+        port: 8080
+        bindAddress: 127.0.0.1
+        protocol: HTTP
+    backends:
+    - name: atenet-router
+      host: atenet-router.ate-system.svc:443
+      policies:
+        http:
+          version: HTTP/1.1
+        backendTLS:
+          cert: /run/router-client/credential-bundle.pem
+          key: /run/router-client/credential-bundle.pem
+          root: /run/router-client/router-ca.pem
+    routes:
+    - name: to-router
+      gateways:
+      - local
+      backends:
+      - backend: /atenet-router
+EOF
+```
+
+`http.version: HTTP/1.1` is there because the trainer's session is a WebSocket,
+which upgrades an HTTP/1.1 connection. The training Job and the eval Job both
+mount this ConfigMap.
+
+### 6c. The environment class and trainer
 
 This is the one piece of code the lab needs. TRL's `environment_factory`
 builds one `SandboxedPython` per rollout slot:
@@ -685,7 +647,12 @@ EOF
 eight rollouts (two tasks, four attempts each) and TRL's pool needs exactly
 eight environments, one per actor. If you change one, change the other.
 
-### 6c. Run it
+### 6d. Run it
+
+The Job runs as the `rl-client` ServiceAccount and carries the sidecar from
+6b. The sidecar is an init container with `restartPolicy: Always`, which makes
+it a native sidecar: it starts first, the trainer waits for its startup probe,
+and it is stopped when the trainer exits, so the Job still completes.
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -699,12 +666,35 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      serviceAccountName: ${ROUTER_CLIENT_SA}
       nodeSelector:
         cloud.google.com/gke-accelerator: nvidia-l4
       tolerations:
       - key: nvidia.com/gpu
         operator: Exists
         effect: NoSchedule
+      initContainers:
+      - name: router-client
+        image: ${AGW_IMAGE}
+        restartPolicy: Always
+        args: ["-f", "/etc/agentgateway/config.yaml"]
+        startupProbe:
+          httpGet:
+            path: /healthz/ready
+            port: 15021
+          periodSeconds: 1
+          failureThreshold: 60
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        volumeMounts:
+        - name: router-client-config
+          mountPath: /etc/agentgateway
+          readOnly: true
+        - name: router-client
+          mountPath: /run/router-client
+          readOnly: true
       containers:
       - name: trainer
         image: ${VLLM_IMAGE}
@@ -754,14 +744,37 @@ spec:
         emptyDir:
           medium: Memory
           sizeLimit: 8Gi
+      - name: router-client-config
+        configMap:
+          name: router-client
+      - name: router-client
+        projected:
+          sources:
+          - podCertificate:
+              signerName: podidentity.podcert.ate.dev/identity
+              keyType: ECDSAP256
+              credentialBundlePath: credential-bundle.pem
+          - clusterTrustBundle:
+              signerName: servicedns.podcert.ate.dev/identity
+              labelSelector:
+                matchLabels:
+                  podcert.ate.dev/canarying: live
+              path: router-ca.pem
 EOF
 ```
 
 ```bash
-kubectl -n "${TRAIN_NS}" logs -f job/grpo-mbpp
+kubectl -n "${TRAIN_NS}" logs -f job/grpo-mbpp -c trainer
 ```
 
-What you see, in order: the pip install, the model download into `/data/hf`,
+The sidecar's own log has one line per environment connection, the `/ws`
+upgrades with `http.status=101`:
+
+```bash
+kubectl -n "${TRAIN_NS}" logs job/grpo-mbpp -c router-client | grep 'http.path=/ws'
+```
+
+What you see in the trainer log, in order: the pip install, the model download into `/data/hf`,
 vLLM starting inside the trainer, then one log line per step. Watch:
 
 | Log key | Meaning |
@@ -983,7 +996,8 @@ The Gateway is `Programmed` and the route shows `Accepted=True` and
 
 The eval runs the same loop TRL ran during training, now over HTTP: the model
 answers through agentgateway, and its code runs and is graded in `coder-0`,
-with the same nonce check. It scores 40 MBPP test-split tasks the model never
+with the same nonce check. The eval Job reaches `coder-0` the way the trainer
+did: as `rl-client`, through the same router client sidecar. It scores 40 MBPP test-split tasks the model never
 trained on, at temperature 0, once per model.
 
 ```bash
@@ -1088,6 +1102,29 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      serviceAccountName: ${ROUTER_CLIENT_SA}
+      initContainers:
+      - name: router-client
+        image: ${AGW_IMAGE}
+        restartPolicy: Always
+        args: ["-f", "/etc/agentgateway/config.yaml"]
+        startupProbe:
+          httpGet:
+            path: /healthz/ready
+            port: 15021
+          periodSeconds: 1
+          failureThreshold: 60
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        volumeMounts:
+        - name: router-client-config
+          mountPath: /etc/agentgateway
+          readOnly: true
+        - name: router-client
+          mountPath: /run/router-client
+          readOnly: true
       containers:
       - name: eval
         image: ${PYTHON_IMAGE}
@@ -1115,6 +1152,22 @@ spec:
       - name: scripts
         configMap:
           name: rl-eval
+      - name: router-client-config
+        configMap:
+          name: router-client
+      - name: router-client
+        projected:
+          sources:
+          - podCertificate:
+              signerName: podidentity.podcert.ate.dev/identity
+              keyType: ECDSAP256
+              credentialBundlePath: credential-bundle.pem
+          - clusterTrustBundle:
+              signerName: servicedns.podcert.ate.dev/identity
+              labelSelector:
+                matchLabels:
+                  podcert.ate.dev/canarying: live
+              path: router-ca.pem
 EOF
 ```
 
@@ -1123,7 +1176,7 @@ Use two terminals.
 **Eval result:**
 
 ```bash
-kubectl -n "${TRAIN_NS}" logs -f job/eval-mbpp
+kubectl -n "${TRAIN_NS}" logs -f job/eval-mbpp -c eval
 ```
 
 The last two lines are the scores, `qwen3-1.7b: N/40` and
@@ -1196,6 +1249,17 @@ kubectl -n "${LLM_NS}" delete agentgatewaybackend vllm
 kubectl -n "${LLM_NS}" delete gateway "${LLM_GW}"
 ```
 
+Take the trainer's identity off the router's allowlist. This is the Step 0
+command with only `atenet-client` left on the list:
+
+```bash
+cd "${SUBSTRATE_DIR}"
+
+go run ./cmd/ate-setup deploy atenet \
+  --config "${INSTALL_RECORD}" \
+  --ingress-allowed-spiffe-ids="spiffe://cluster.local/ns/ate-system/sa/atenet-client"
+```
+
 Substrate objects. Actors first, then templates (which also deletes their
 golden actor and golden snapshot), then the empty atespace, then the pool:
 
@@ -1219,8 +1283,11 @@ kubectl delete namespace "${POOL_NS}"
 - TRL: [OpenEnv integration](https://huggingface.co/docs/trl/openenv) (`environment_factory`, colocate vs server mode)
 - Substrate: [api-guide.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/reference/api-guide.md) (templates, golden snapshots, `RevertActor`, GPUs),
   [network-egress.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/guides/network-egress.md) (DNS relay, link-local drop),
-  [router README](https://github.com/agent-substrate/substrate/blob/v1.0.0/cmd/atenet/internal/router/README.md) (ingress client authentication)
+  [router README](https://github.com/agent-substrate/substrate/blob/v1.0.0/cmd/atenet/internal/router/README.md) (ingress client authentication, the `podCertificate` volume),
+  [ate-setup commands](https://github.com/agent-substrate/substrate/blob/v1.0.0/cmd/ate-setup/commands.md) (`deploy atenet`, `--ingress-allowed-spiffe-ids`),
+  [operator-install.md](https://github.com/agent-substrate/substrate/blob/v1.0.0/docs/guides/operator-install.md) (install records and `--config`)
 - agentgateway: [Kubernetes docs](https://agentgateway.dev/docs/kubernetes/latest/),
-  [CEL reference](https://github.com/agentgateway/agentgateway/blob/v1.6.0/schema/cel.md)
+  [CEL reference](https://github.com/agentgateway/agentgateway/blob/v1.6.0/schema/cel.md),
+  [standalone config reference](https://github.com/agentgateway/agentgateway/blob/v1.7.0/schema/config.md) (the sidecar's `gateways`, `backends`, `backendTLS`)
 - Earlier labs: [llmgateway-with-substrate.md](../egress/llmgateway-with-substrate.md),
   [setup-gke.md](../install-and-setup/setup-gke.md)
