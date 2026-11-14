@@ -1,5 +1,3 @@
-
-
 ## Binary
 
 Pull the latest `kubectl ate` binary
