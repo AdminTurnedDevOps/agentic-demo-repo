@@ -12,7 +12,18 @@ The lab compares the file content, in-memory task step, process session ID, and 
 
 ## Setup
 
-Follow the [workbench prerequisites and image build](../agentic-workbench-demo/README.md#prerequisites) to set `WORKER_IMAGE` and `WORKBENCH_IMAGE`. Run these commands from `substrate/recover`.
+```bash
+export WORKER_IMAGE=ghcr.io/kagent-dev/substrate/ateworker-gvisor:v1.0.0
+image_tag=REGISTRY/PROJECT/substrate-recovery:demo # your container registry
+build_metadata=$(mktemp)
+docker buildx build --platform linux/amd64 --push -t "$image_tag" \
+  --metadata-file "$build_metadata" ../agentic-workbench-demo &&
+  digest=$(jq -er '."containerimage.digest"' "$build_metadata") &&
+  export WORKBENCH_IMAGE="${image_tag%:*}@$digest"
+rm -f "$build_metadata"
+```
+
+Deploy the recovery pool and actor once both image references are set.
 
 ```bash
 kubectl config current-context

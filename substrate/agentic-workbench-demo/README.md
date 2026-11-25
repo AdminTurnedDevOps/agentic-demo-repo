@@ -20,11 +20,9 @@ The workbench is a single Go HTTP server with a deterministic three-step release
 
 ## Build and deploy
 
-Run from `substrate/agentic-workbench-demo`. Set `WORKBENCH_TAG` to an image tag you can push and `WORKER_IMAGE` to the gVisor worker image for your Substrate installation. To find that image, inspect an existing gVisor WorkerPool with `kubectl get workerpools -A -o yaml`.
-
 ```bash
-export WORKBENCH_TAG=REGISTRY/PROJECT/agentic-workbench:demo
-export WORKER_IMAGE=REGISTRY/PROJECT/ateworker-gvisor:SUBSTRATE_VERSION
+export WORKBENCH_TAG=REGISTRY/PROJECT/agentic-workbench:demo # your container registry
+export WORKER_IMAGE=ghcr.io/kagent-dev/substrate/ateworker-gvisor:v1.0.0
 build_metadata=$(mktemp)
 docker buildx build --platform linux/amd64 --push -t "$WORKBENCH_TAG" --metadata-file "$build_metadata" . &&
   digest=$(jq -er '."containerimage.digest"' "$build_metadata") &&
