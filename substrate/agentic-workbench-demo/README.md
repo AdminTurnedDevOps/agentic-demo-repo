@@ -45,6 +45,8 @@ Leave the proxy running throughout the demo.
 
 ## Walkthrough
 
+The "workbench" is a Go web server that runs a UI so you can see it in real time
+
 1. Open [the workbench](http://127.0.0.1:8080/). The request starts the actor. Note the **Process session** ID.
 2. Edit `task.md`, click **Save file**, and click **Advance task** twice to reach step 3. Wait for the app to acknowledge the changes.
 3. Close the tab and run the following in a second terminal. The first read shows a running actor and its worker. The synchronous suspend waits for the durable upload, then the second read shows a suspended actor with no worker assignment.
