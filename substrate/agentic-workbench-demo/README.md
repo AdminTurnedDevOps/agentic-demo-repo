@@ -21,6 +21,7 @@ The workbench is a single Go HTTP server with a deterministic three-step release
 ## Build and deploy
 
 ```bash
+# export WORKBENCH_TAG=substratedemob2e99c.azurecr.io/agentic-workbench:demo
 export WORKBENCH_TAG=REGISTRY/PROJECT/agentic-workbench:demo # your container registry
 export WORKER_IMAGE=ghcr.io/kagent-dev/substrate/ateworker-gvisor:v1.0.0
 build_metadata=$(mktemp)
