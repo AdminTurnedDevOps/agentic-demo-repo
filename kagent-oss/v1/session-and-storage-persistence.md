@@ -7,7 +7,7 @@ Every kagent chat is its own Agent Substrate actor, the kagent UI is the client,
 ## Prerequisites
 
 - kagent `1.0.0` and Agent Substrate `v1.0.0`, installed with `kagent install`. Installation guide: https://kagent.dev/docs/kagent/1.x/setup/installation/
-- `kubectl`, the `kubectl ate` plugin `v1.0.0` or newer (see [substrate-install.md](substrate-install.md)), and `jq`.
+- `kubectl ate` plugin `v1.0.0` or newer
 - In namespace `kagent`: WorkerPool `kagent-default`, ModelConfig `default-model-config`, and the snapshot location `s3://ate-snapshots/kagent/`. These are the defaults `kagent install` creates.
 
 Confirm the WorkerPool and ModelConfig exist. Each command exits non-zero if its object is missing.
