@@ -192,5 +192,3 @@ kubectl -n kagent delete agents.api.kagent.dev release-review
 kubectl -n kagent delete agenttemplates.api.kagent.dev release-review-template
 kubectl -n kagent delete harnesses.api.kagent.dev release-review-harness
 ```
-
-A session you don't delete is removed after seven days without activity, kagent's default idle TTL (`config.sessions.idleTtl` in the Helm values).
