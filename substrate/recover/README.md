@@ -78,7 +78,11 @@ for ((attempt=0; attempt<60; attempt++)); do
   [[ "$state" == ACTOR_STATE_CRASHED ]] && break
   sleep 2
 done
-[[ "$state" == ACTOR_STATE_CRASHED ]] && printf '%s\n' "$state"
+if [[ "$state" == ACTOR_STATE_CRASHED ]]; then
+  printf '%s\n' "$state"
+else
+  printf 'Timed out waiting for actor to reach CRASHED (last state: %s). Stop here.\n' "${state:-unknown}" >&2
+fi
 ```
 
 ## 3. Revert and verify recovery

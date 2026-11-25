@@ -1,4 +1,4 @@
-FROM golang:1.25.14 AS build
+FROM golang:1.27.4-alpine3.23@sha256:146e3b9c7c1e2ec3d3f5348c8a686151a75e1976e50efac9fc022ebe446a9a82 AS build
 WORKDIR /src
 COPY go.mod main.go ./
 COPY web ./web

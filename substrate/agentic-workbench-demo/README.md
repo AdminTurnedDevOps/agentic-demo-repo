@@ -41,11 +41,11 @@ Leave the proxy running throughout the demo.
 
 1. Open [the workbench](http://127.0.0.1:8080/). The request starts the actor. Note the **Process session** ID.
 2. Edit `task.md`, click **Save file**, and click **Advance task** twice to reach step 3. Wait for the app to acknowledge the changes.
-3. Close the tab and run the following in a second terminal. The first read shows a running actor and its worker. The second shows a suspended actor with no worker assignment.
+3. Close the tab and run the following in a second terminal. The first read shows a running actor and its worker. The synchronous suspend waits for the durable upload, then the second read shows a suspended actor with no worker assignment.
 
    ```bash
    kubectl ate get actor session -a ate-demo-workbench
-   kubectl ate suspend actor session -a ate-demo-workbench
+   kubectl ate suspend actor session -a ate-demo-workbench --mode=sync
    kubectl ate get actor session -a ate-demo-workbench
    ```
 
@@ -55,7 +55,7 @@ For a two-session variation, create a second actor from the same template and pr
 
 ## Local preview
 
-Run `WORKSPACE_DIR="$(mktemp -d)" go run .` with Go 1.25 or newer and open [the workbench](http://127.0.0.1:8080/). Restarting Go with the same workspace directory keeps the file and resets the process session and step. The cluster walkthrough demonstrates checkpoint and restore.
+Run `WORKSPACE_DIR="$(mktemp -d)" go run .` with Go 1.27.4 or newer and open [the workbench](http://127.0.0.1:8080/). Restarting Go with the same workspace directory keeps the file and resets the process session and step. The cluster walkthrough demonstrates checkpoint and restore.
 
 ## Cleanup
 
