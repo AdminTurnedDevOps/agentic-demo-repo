@@ -4,16 +4,6 @@ This is the kagent version of the [Agent Workbench demo](../../substrate/agentic
 
 Every kagent chat is its own Agent Substrate actor, the kagent UI is the client, and kagent suspends the actor on its own after every turn.
 
-| Workbench demo | kagent version |
-| --- | --- |
-| `kubectl ate proxy actor session 8080:80` | kagent UI. kagent routes each chat to its actor. |
-| Workbench UI: **Save file**, **Advance task** | Chat with an agent that edits `task.md` with its built-in file tools |
-| `task.md` in a `durableDir` at `/workspace` | `task.md` in kagent's `durableDir`, at `/data/workspace` |
-| `kubectl ate suspend ... --mode=sync` | Automatic. kagent suspends the actor when each turn ends. |
-| `MEMORY` snapshot: file and process memory | `VOLUMES` snapshot: files only. Chat history lives in kagent's PostgreSQL. |
-
-The last row is the one real difference. kagent doesn't keep the agent process alive across turns. The conversation is in PostgreSQL and the working files are in the snapshot, and that is enough to continue where you left off.
-
 ## Prerequisites
 
 - kagent `1.0.0` and Agent Substrate `v1.0.0`, installed with `kagent install`. Installation guide: https://kagent.dev/docs/kagent/1.x/setup/installation/
