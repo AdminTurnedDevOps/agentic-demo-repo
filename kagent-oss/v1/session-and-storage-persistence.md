@@ -173,16 +173,6 @@ kubectl -n kagent port-forward svc/kagent-ui 8081:8080
 
    Run the step 3 command again while the turn is running and the actor shows `ACTOR_STATE_RUNNING` on a worker. Run it after the turn ends and it's back to `ACTOR_STATE_SUSPENDED`.
 
-## What survived, and where
-
-| State | Where it lives | Survives suspend? |
-| --- | --- | --- |
-| `task.md`: step and notes | `/data/workspace`, the actor's `durableDir`, saved in the `VOLUMES` snapshot | Yes |
-| Chat history | kagent's PostgreSQL | Yes. It never lived in the actor. |
-| Agent process memory | The actor's sandbox | No. Each resume starts the runtime fresh. |
-
-The workbench demo shows that Substrate can keep a running process. This demo shows that kagent doesn't need to: with history in PostgreSQL and working files in the snapshot, a fresh process picks up exactly where the last one stopped.
-
 ## Cleanup
 
 In the kagent UI, open the chat's menu in the agent's chat list and select **Delete chat**. Deleting the session deletes its actor, and Substrate cleans up its snapshots. Stop the port-forward with Ctrl-C, then delete the resources:
