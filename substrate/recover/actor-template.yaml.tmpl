@@ -1,0 +1,27 @@
+metadata:
+  atespace: ate-demo-recover
+  name: recover
+workerSelector:
+  matchLabels:
+    workload: ate-demo-recover
+containers:
+- name: workbench
+  image: ${WORKBENCH_IMAGE}
+  wakeupProbe:
+    httpGet:
+      path: /readyz
+      port: 80
+  volumeMounts:
+  - name: workspace
+    mountPath: /workspace
+resources:
+  limits:
+    cpuMillicores: 500
+    memoryBytes: 805306368
+snapshotConfig:
+  preferredFidelity: SNAPSHOT_FIDELITY_MEMORY
+  goldenSnapshotConfig:
+    mode: GOLDEN_SNAPSHOT_MODE_DISABLED
+volumes:
+- name: workspace
+  durableDir: {}
