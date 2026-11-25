@@ -2,7 +2,7 @@
 
 This is the kagent version of the [Agent Workbench demo](../../substrate/agentic-workbench-demo/README.md). It tells the same story: a session frees its compute while idle, then comes back with its work intact.
 
-In the workbench demo you run the actor yourself: `kubectl ate proxy` to reach it, a custom web UI to change it, and `kubectl ate suspend` to stop it. Here kagent does all three. Every kagent chat is its own Agent Substrate actor, the kagent UI is the client, and kagent suspends the actor on its own after every turn.
+Every kagent chat is its own Agent Substrate actor, the kagent UI is the client, and kagent suspends the actor on its own after every turn.
 
 | Workbench demo | kagent version |
 | --- | --- |
