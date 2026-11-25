@@ -1,8 +1,16 @@
 # Agent Workbench
 
-Edit a file, advance a task, and suspend the actor. When you reopen the URL, Substrate restores the edits and the running process. The file lives in a durable volume. The session ID and task step live only in Go process memory. The browser fetches both from the actor on page load.
+The workbench shows that Agent Substrate can free a worker while a session is idle, then bring that session back where it left off.
 
-The workbench is a single Go HTTP server with a deterministic three-step release review. It needs no Jupyter, model, or API key.
+Goal:
+
+1. Edit a file
+2. Advance a task
+3. Suspend the actor.
+
+When you reopen the URL, Substrate restores the edits and the running process. The file lives in a durable volume and the session ID and task step live only in Go process memory. The browser fetches both from the actor on page load.
+
+The workbench is a single Go HTTP server with a deterministic three-step release review.
 
 ## Prerequisites
 

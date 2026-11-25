@@ -1,8 +1,14 @@
 # Recover from worker loss
 
-Take a durable checkpoint, make changes, remove the hosting worker, then restore the actor on its replacement. The lab compares the file content, in-memory task step, process session ID, and Kubernetes pod UID before and after recovery.
+This demo shows that an actor can recover from worker loss using its last durable checkpoint
 
-Use a disposable Substrate cluster. This lab deletes the worker pod in its dedicated `ate-demo-recover` pool. It uses the [Agent Workbench image](../agentic-workbench-demo/README.md#build-and-deploy) and deploys its own actor and one-replica gVisor WorkerPool.
+Goal:
+- Take a durable checkpoint
+- Make changes
+- Remove the hosting worker
+- Restore the actor on its replacement.
+
+The lab compares the file content, in-memory task step, process session ID, and Kubernetes pod UID before and after recovery.
 
 ## Setup
 
