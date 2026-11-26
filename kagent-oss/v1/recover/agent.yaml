@@ -1,0 +1,35 @@
+apiVersion: api.kagent.dev/v1alpha3
+kind: Harness
+metadata:
+  name: worker-loss-lab
+  namespace: kagent
+spec:
+  kagent: {}
+  substrate:
+    workerPoolRef:
+      name: worker-loss-lab
+    snapshotPolicy:
+      location: s3://ate-snapshots/kagent/worker-loss-lab/
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: AgentTemplate
+metadata:
+  name: worker-loss-lab
+  namespace: kagent
+spec:
+  description: Demonstrate recovery of a kagent Session after worker loss.
+  modelConfig:
+    name: default-model-config
+  systemPrompt: Follow the user's instructions. Use the current conversation to answer questions about earlier turns.
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: Agent
+metadata:
+  name: worker-loss-lab
+  namespace: kagent
+spec:
+  template:
+    ref:
+      name: worker-loss-lab
+  harnessRef:
+    name: worker-loss-lab
