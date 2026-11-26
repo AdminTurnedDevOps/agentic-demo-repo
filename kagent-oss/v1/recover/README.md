@@ -8,7 +8,27 @@ The lab checks the Session ID, Actor UID, durable snapshot UUID, and worker pod 
 
 - A **disposable cluster** installed with kagent OSS 1.0.x and its Agent Substrate 1.0.x runtime. This lab removes a pod from a dedicated WorkerPool.
 - Default install names `kagent/kagent-default`, `kagent/kagent-controller`, and `kagent/default-model-config`. The ModelConfig must be able to answer a prompt. The manifest assumes the bundled S3-compatible snapshot store. For an external store, set `spec.substrate.snapshotPolicy.location` in `agent.yaml` to a writable prefix.
-- `kubectl` with the `ate` plugin and permission to read Actors in the `kagent` atespace. You also need `kagent`, `grpcurl`, `jq`, and Bash. The `RevertSession` call uses the default lab authentication mode and requires `config.server.grpcReflection=true` in kagent's Helm values. [kagent setup](https://www.kagent.dev/docs/kagent/latest/setup/installation/)
+- `kubectl` with the `ate` plugin and permission to read Actors in the `kagent` atespace. You also need Bash, `jq`, `grpcurl`, and the `kagent` CLI at the same 1.0.x version as the cluster. Older CLIs have no `kagent agent` command. Check with `kagent version`. [kagent setup](https://www.kagent.dev/docs/kagent/latest/setup/installation/)
+- gRPC reflection enabled on the kagent controller. The `RevertSession` call in step 4 uses it with the default lab authentication mode. The chart turns it off by default. To turn it on in an existing kagent install, run the following. The controller restarts, so start the step 4 port-forward after the rollout finishes.
+
+  ```bash
+  helm upgrade kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+    --version "$(helm get metadata kagent -n kagent -o json | jq -r .version)" \
+    -n kagent --reuse-values --set config.server.grpcReflection=true
+  ```
+
+  The upgrade also re-applies the chart's `default-model-config`. If you changed its API key in the kagent UI, Helm 4 fails with `conflict with "app" ... .spec.apiKeySecret`. Helm 3 instead points the ModelConfig back at the chart's Secret. Either way, pass the current key to the chart. With Helm 4, also take the field back:
+
+  ```bash
+  helm upgrade kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
+    --version "$(helm get metadata kagent -n kagent -o json | jq -r .version)" \
+    -n kagent --reuse-values --set config.server.grpcReflection=true \
+    --set providers.openAI.apiKey="$OPENAI_API_KEY" --force-conflicts
+  ```
+
+  This assumes the default OpenAI provider. Use the `providers.<provider>` key that matches your install. Helm 3 has no `--force-conflicts` flag, so drop it there.
+
+  **PLEASE NOTE: gRPC reflection doesn't create a vulnerability on its own, but it hands anyone who can reach the server a full map of its API. In production, turn it off on publicly reachable endpoints, or restrict it to authenticated callers or an internal-only port.**
 
 ## 1. Set up an isolated Agent
 
